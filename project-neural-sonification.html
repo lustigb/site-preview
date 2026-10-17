@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hearing the hippocampus · Projects · Brian Lustig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,700&display=swap">
+<link rel="stylesheet" href="styles/base.css">
+<link id="theme" rel="stylesheet" href="styles/a-notebook.css">
+<style>.uc-float { position: fixed; top: 12px; left: 12px; z-index: 30; } .site-header .wordmark { margin-right: 0; } .uc-badge { font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6d0b; background: #fbeec2; border: 1px solid #e3c86a; border-radius: 999px; padding: 2px 9px; margin-left: 10px; margin-right: auto; align-self: center; }</style>
+</head>
+<body>
+<span class="uc-badge uc-float">Under construction</span>
+
+<div class="header-bar">
+<header class="site-header">
+  <a class="wordmark" href="index.html">Brian Sciences</a>
+  <nav>
+    <a href="research.html">Research</a>
+    <a href="projects.html">Projects</a>
+    <a href="about.html">About</a>
+  </nav>
+</header>
+</div>
+
+<main class="dc">
+  <section class="page-head">
+    <p class="meta"><a href="projects.html">← Projects</a></p>
+    <h1>Hearing the hippocampus</h1>
+    <p class="intro">Neural data turned into sound: decoded position becomes pitch, so running sounds like a scale and replay like a quick arpeggio.</p>
+    <p class="meta">neuro · sound · visualization</p>
+    <figure class="dc-figure" style="width:fit-content;max-width:100%"><img src="img/projects/large/neural-sonification.png" alt="" style="width:auto;max-width:100%;max-height:550px" onerror="this.parentElement.remove()"></figure>
+  </section>
+  <section class="dc-section">
+    <h2>What it is</h2>
+    <p>Sonification of hippocampal recordings from one session of the TADS task, synchronized with the behavior video.
+      Sonifying the decoded position (rather than individual spikes) gives clean, musical results: a run down an arm is
+      a smooth scale, and a replay event is a rapid arpeggio compressed into a fraction of a second. That makes replay
+      speed something you can hear.</p>
+  </section>
+  <section class="dc-section">
+    <h2>How it works</h2>
+    <p class="soon">Coming soon.</p>
+  </section>
+  <section class="dc-section">
+    <h2>Videos</h2>
+    <p class="video-controls"><button type="button" data-all="open">Expand all</button><button type="button" data-all="close">Collapse all</button></p>
+    <details class="vid" open>
+      <summary><b>Run and replay, as music</b> · 25 s<br><span>A run down the right arm (an ascending scale), a replay of that path while the rat waits (a quick arpeggio), then the replay again in slow motion.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_replay.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>Every neuron at once</b> · 2 min 16 s<br><span>All 315 recorded neurons as a grid of squares that light up and play a tone when they fire, next to the overhead video of the rat.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_all-neurons.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>Spikes as notes, slow-motion replay</b> · 14 s<br><span>An earlier, spike-based version: left- and right-arm place cells (the colored squares) play notes as a replay unfolds, slowed down.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_replay-slowmo.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>Spikes as notes, approach and replay</b> · 14 s<br><span>Right-arm place cells play notes as the rat approaches the choice point and a replay happens.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_replay-v2.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>The first version</b> · 1 min 4 s<br><span>Left- and right-arm place cells play notes as the rat runs the maze.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_spikes-18-neurons.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>First test of the neuron grid</b> · 7 s<br><span>A 32-neuron test of the grid display that became the all-neurons movie.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_grid-test-32.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>All 315 neurons, with a raster (5 s window)</b> · 2 min 16 s<br><span>Every neuron as a click, with a scrolling spike raster showing the last 5 seconds.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_raster-all315-5s.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>All 315 neurons, with a raster (10 s window)</b> · 2 min 16 s<br><span>The same, with a 10-second raster window.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_raster-all315-10s.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>All 315 neurons, with a raster (20 s window)</b> · 2 min 16 s<br><span>The same, with a 20-second raster window.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_raster-all315-20s.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>252 neurons, quieter (5 s window)</b> · 2 min 16 s<br><span>Interneurons and the noisiest high-firing cells muted, so the place cells stand out.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_raster-252-5s.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>252 neurons, quieter (10 s window)</b> · 2 min 16 s<br><span>The same, with a 10-second raster window.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_raster-252-10s.mp4" type="video/mp4"></video>
+    </details>
+    <details class="vid">
+      <summary><b>252 neurons, quieter (20 s window)</b> · 2 min 16 s<br><span>The same, with a 20-second raster window.</span></summary>
+      <video controls preload="none" playsinline><source src="media/hearing-the-hippocampus_raster-252-20s.mp4" type="video/mp4"></video>
+    </details>
+    <p class="meta">Turn the sound on.</p>
+  </section>
+  <section class="dc-section">
+    <h2>How it was made</h2>
+    <p class="soon">Coming soon.</p>
+  </section>
+  <section class="dc-section">
+    <h2>Links</h2>
+    <ul><li>Inspired by <a href="https://github.com/Smear-Lab/ViSoND">ViSoND</a> from the Smear Lab, University of Oregon</li></ul>
+  </section>
+</main>
+<script>
+  // Expand all / Collapse all; pause any video whose panel is closed
+  document.querySelectorAll(".video-controls button").forEach(b => b.onclick = () =>
+    document.querySelectorAll("details.vid").forEach(d => d.open = b.dataset.all === "open"));
+  document.querySelectorAll("details.vid").forEach(d => d.addEventListener("toggle", () => {
+    if (!d.open) d.querySelector("video")?.pause();
+  }));
+</script>
+
+<footer class="site-footer">
+  <p>© 2026 Brian Lustig</p>
+</footer>
+<script>
+  // Click any figure image to view it large; close with the x, a click outside, or Esc.
+  (function () {
+    const imgs = document.querySelectorAll(".dc-figure img, .person-figure img, .signature.photo img:not(#home-photo)");
+    if (!imgs.length) return;
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.innerHTML = '<button class="lightbox-close" aria-label="Close">&times;</button><div class="lightbox-body"><img alt=""><div class="lightbox-caption"></div></div>';
+    document.body.appendChild(box);
+    const big = box.querySelector("img");
+    const cap = box.querySelector(".lightbox-caption");
+    const close = () => box.classList.remove("open");
+    imgs.forEach(img => {
+      img.classList.add("zoomable");
+      img.addEventListener("click", () => {
+        big.src = img.dataset.full || img.currentSrc || img.src;          // data-full = higher-resolution file, if given
+        const fc = img.closest("figure")?.querySelector("figcaption");     // a figure's legend shows under the image
+        cap.innerHTML = fc ? fc.innerHTML : "";
+        cap.hidden = !fc;
+        box.classList.add("open");
+      });
+    });
+    box.addEventListener("click", e => { if (e.target === box || e.target.classList.contains("lightbox-close")) close(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+  })();
+</script>
+<script src="js/fontlab.js"></script>  
+</body>
+</html>

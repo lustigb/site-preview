@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Links · Brian Lustig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,700&display=swap">
+<link rel="stylesheet" href="styles/base.css">
+<link id="theme" rel="stylesheet" href="styles/a-notebook.css">
+<style>.uc-float { position: fixed; top: 12px; left: 12px; z-index: 30; } .site-header .wordmark { margin-right: 0; } .uc-badge { font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6d0b; background: #fbeec2; border: 1px solid #e3c86a; border-radius: 999px; padding: 2px 9px; margin-left: 10px; margin-right: auto; align-self: center; }</style>
+</head>
+<body>
+<span class="uc-badge uc-float">Under construction</span>
+
+<div class="header-bar">
+<header class="site-header">
+  <a class="wordmark" href="index.html">Brian Sciences</a>
+  <nav>
+    <a href="research.html">Research</a>
+    <a href="projects.html">Projects</a>
+    <a href="about.html">About</a>
+  </nav>
+</header>
+</div>
+
+<main>
+  <section class="page-head">
+    <h1>Links to things</h1>
+  </section>
+
+  <details class="fold" open>
+    <summary><h2>Books</h2></summary>
+    <ul class="collection">
+      <li>Gordon M. Shepherd, <i>Creating Modern Neuroscience: The Revolutionary 1950s</i></li>
+      <li>Valentino Braitenberg, <i>Vehicles: Experiments in Synthetic Psychology</i></li>
+      <li>David Macaulay, <i>The Way We Work</i></li>
+      <li><i>Introducing Consciousness: A Graphic Guide</i> (the Introducing series)</li>
+      <li>Greg Egan, <i>Axiomatic</i></li>
+    </ul>
+  </details>
+
+  <details class="fold" open>
+    <summary><h2>Science fiction short stories</h2></summary>
+    <ul class="collection">
+      <li>Greg Egan, <i>Axiomatic</i> (collection)</li>
+      <li>Terry Bisson, "They're Made Out of Meat"</li>
+    </ul>
+  </details>
+
+  <details class="fold" open>
+    <summary><h2>Websites</h2></summary>
+    <ul class="collection">
+      <li><a href="https://andybuilds.com">andybuilds.com</a></li>
+      <li><a href="https://ftomaska.github.io/">ftomaska.github.io</a></li>
+      <li><a href="http://web.archive.org/web/2019/http://hargreaves.swong.webfactional.com/">Eric L. Hargreaves' Hippocampus Page</a> (archived)</li>
+    </ul>
+  </details>
+
+  <details class="fold" open>
+    <summary><h2>YouTube &amp; film</h2></summary>
+    <ul class="collection">
+      <li>3Blue1Brown</li><li>Numberphile</li><li>Charles &amp; Ray Eames, <i>Powers of Ten</i></li>
+    </ul>
+  </details>
+
+  <details class="fold" open>
+    <summary><h2>Cycling</h2></summary>
+    <ul class="collection">
+      <li><a href="https://rusa.org/">Randonneurs USA (RUSA)</a>: long-distance, self-supported ultra-endurance cycling</li>
+      <li><a href="https://www.youtube.com/@dylanjohnsoncycling">Dylan Johnson</a> (YouTube): endurance cycling and training science</li>
+    </ul>
+  </details>
+
+  <details class="fold">
+    <summary><h2>Video games</h2></summary>
+    <ul class="collection">
+      <li>Death Stranding</li><li>Humanity</li><li>Big Walk</li><li>The Pedestrian</li><li>Alan Wake 2</li>
+      <li>The Remedy Connected Universe</li><li>The Last of Us Part II</li><li>Baldur's Gate 3</li><li>Sifu</li>
+      <li>Indiana Jones and the Great Circle</li>
+    </ul>
+  </details>
+
+  <details class="fold">
+    <summary><h2>TV</h2></summary>
+    <ul class="collection"><li>House</li><li>The Newsroom</li><li>Watchmen</li><li>New Girl</li></ul>
+  </details>
+</main>
+
+<footer class="site-footer">
+  <p>© 2026 Brian Lustig</p>
+</footer>
+<script>
+  // Click any figure image to view it large; close with the x, a click outside, or Esc.
+  (function () {
+    const imgs = document.querySelectorAll(".dc-figure img, .person-figure img, .signature.photo img:not(#home-photo)");
+    if (!imgs.length) return;
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.innerHTML = '<button class="lightbox-close" aria-label="Close">&times;</button><div class="lightbox-body"><img alt=""><div class="lightbox-caption"></div></div>';
+    document.body.appendChild(box);
+    const big = box.querySelector("img");
+    const cap = box.querySelector(".lightbox-caption");
+    const close = () => box.classList.remove("open");
+    imgs.forEach(img => {
+      img.classList.add("zoomable");
+      img.addEventListener("click", () => {
+        big.src = img.dataset.full || img.currentSrc || img.src;          // data-full = higher-resolution file, if given
+        const fc = img.closest("figure")?.querySelector("figcaption");     // a figure's legend shows under the image
+        cap.innerHTML = fc ? fc.innerHTML : "";
+        cap.hidden = !fc;
+        box.classList.add("open");
+      });
+    });
+    box.addEventListener("click", e => { if (e.target === box || e.target.classList.contains("lightbox-close")) close(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+  })();
+</script>
+<script src="js/fontlab.js"></script>  
+</body>
+</html>

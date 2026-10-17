@@ -1,0 +1,1966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Egg Lab</title>
+<style>
+  :root { --bg: #f4f4f2; --ink: #222; --panel: #fff; --line: #ccc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif;
+         display: flex; gap: 24px; justify-content: center; align-items: flex-start; padding: 16px; }
+
+  /* The stage is laid out in PHOTO pixels (750 x 1000) and scaled as a whole, so every layer,
+     frame and coordinate below lines up with the photo exactly.
+     Layers, bottom to top: (cat), photo, (fur), eggs that hide BEHIND shanks, shank cutout, (comb
+     spine, fur), shank glows, eggs IN FRONT. Bracketed layers are only shown during catComb. */
+  #viewport { position: relative; overflow: hidden; flex-shrink: 0; box-shadow: 0 2px 12px rgba(0,0,0,.15); background: #fff;
+              -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+              -webkit-touch-callout: none; }   /* phones: no blue tap flash, text-select, or save-image menu on the photo */
+  #viewport img { -webkit-user-drag: none; }
+  #stage    { position: absolute; left: 0; top: 0; width: 750px; height: 1000px; transform-origin: 0 0; }
+  #stage > img, .layer { position: absolute; left: 0; top: 0; width: 750px; height: 1000px; pointer-events: none;
+                        transform-origin: 0 0; }
+  svg.layer { overflow: visible; display: none; }
+  #shankSolo, #ropes { display: none; }
+  #backdrop { display: none; background: rgb(13, 2, 148); }   /* sheetFall: the blue under the paper */                      /* shankShuffle: one image per shank */
+  #shankSolo img { position: absolute; left: 0; top: -700px; width: 750px; height: 1700px; }   /* 700 px extension above */
+  #shankSolo img.ghost { opacity: 0; }   /* scene layers: drawn far off the photo, shown only in a scene */
+  body.xray #fg { filter: sepia(1) saturate(8) hue-rotate(-50deg); }   /* shank layer shown red */
+  body.xray .anchor, body.xray .free { outline: 1px dashed #e33; }
+  .secret { position: absolute; }
+  body.xray .secret { outline: 2px dashed #e33; background: rgba(230, 50, 50, .12); }
+  body.piano #viewport, body.touchlive #viewport { touch-action: none; }   /* finger drags play/pluck/blow, not scroll */
+  /* ?player=1: just the stage, filling the window (the home page shows it in an iframe over its photo). */
+  body.player { padding: 0; display: block; background: transparent; overflow: hidden; }
+  body.player #panel { display: none; }
+  body.player #viewport { box-shadow: none; }   /* finger drags play/pluck/blow, not scroll */
+
+  /* Peek eggs: pinned at a point on a shank's centre line and rotated to the shank's lean. The
+     .clip box only shows what lies on the egg's side of that line (the cartoon "behind the pole"
+     cut); the shank cutout on top then hides whatever is behind the shank itself. */
+  .anchor   { position: absolute; width: 0; height: 0; }
+  .clip     { position: absolute; top: -60px; left: 0; width: 120px; height: 140px; overflow: hidden; }
+  .actor    { position: absolute; top: 40px; left: 0; width: 50px; height: 70px; }
+  /* Free eggs: a 70 x 70 frame whose bottom centre is "his feet", moved anywhere on the photo. */
+  .free     { position: absolute; width: 70px; height: 70px; transform-origin: 35px 70px; visibility: hidden; }
+  .actor img, .free img { position: absolute; inset: 0; width: 100%; height: 100%; visibility: hidden; }
+  .actor img.on, .free.on, .free img.on { visibility: visible; }
+
+  /* Rainbow shanks: one pre-coloured overlay per shank, faded in when clicked. */
+  #glows img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .25s; }
+  #glows img.lit { opacity: 1; animation: pop .45s ease-out; }
+  @keyframes pop { 0% { filter: brightness(2.2); } 100% { filter: brightness(1); } }
+  #viewport.hot { cursor: pointer; }
+
+  #panel { width: 280px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px;
+           position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+  #panel h1 { font-size: 16px; margin: 0 0 4px; }
+  #panel p  { margin: 0 0 12px; color: #666; font-size: 12px; }
+  #panel label { display: block; margin: 12px 0 4px; font-size: 12px; color: #555; }
+  #panel button { font: inherit; padding: 6px 10px; margin: 2px 4px 2px 0; border: 1px solid var(--line);
+                  border-radius: 6px; background: #fafafa; cursor: pointer; }
+  #panel button.on { background: #222; color: #fff; }
+  .box  { border: 1px solid var(--line); border-radius: 6px; margin-top: 12px; }
+  .box summary { cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px; }
+  #eggFilter { width: calc(100% - 16px); margin: 0 8px 6px; padding: 5px 8px; font: inherit; font-size: 12px;
+               border: 1px solid var(--line); border-radius: 5px; }
+  #eggButtons { max-height: 300px; overflow-y: auto; padding: 0 8px 8px; }
+  #eggButtons h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #888; margin: 8px 0 3px; }
+  #eggButtons button { display: block; width: 100%; text-align: left; }
+  #eggButtons small { color: #888; }
+  #eggButtons button.playing { border-color: #2a7de1; background: #eaf3ff; box-shadow: 0 0 0 2px #2a7de1 inset; }
+  #eggButtons button.playing::after { content: 'playing: click to stop'; display: block; font-size: 11px; color: #2a7de1; }
+  #interCards { padding: 0 8px 8px; }
+  .card { border: 1px solid var(--line); border-radius: 6px; background: #fafafa; padding: 8px 10px; margin-top: 6px; }
+  .card b.title { display: block; font-weight: 600; }
+  .card small { display: block; color: #777; margin: 2px 0 6px; font-size: 12px; }
+  .card.active { border-color: #2a7de1; background: #eaf3ff; box-shadow: 0 0 0 2px #2a7de1 inset; }
+  #status { margin-top: 12px; font: 12px ui-monospace, monospace; color: #444; white-space: pre-line; }
+  @media (max-width: 700px) { body { flex-direction: column; align-items: center; } #panel { width: 100%; } }
+</style>
+</head>
+<body>
+
+<div id="viewport">
+  <div id="stage">
+    <svg class="layer" id="cat"></svg>
+    <svg class="layer" id="pastaBack"></svg>
+    <img id="photo" src="img/probe24_full.jpg" alt="Silicon probe shanks">
+    <div class="layer" id="backdrop"></div>
+    <svg class="layer" id="furBack"></svg>
+    <div class="layer" id="behind"></div>
+    <img id="fg" src="img/shanks_fg.png" alt="">
+    <div class="layer" id="shankSolo"></div>
+    <canvas class="layer" id="ropes" width="1500" height="2000"></canvas>
+    <svg class="layer" id="pastaFront"></svg>
+    <svg class="layer" id="spine"></svg>
+    <svg class="layer" id="furFront"></svg>
+    <div class="layer" id="glows"></div>
+    <div class="layer" id="front"></div>
+  </div>
+</div>
+
+<div id="panel">
+  <h1>Egg Lab</h1>
+  <p>Leave the mouse still and one of the eggs plays after the idle wait (a random one, never the same
+     twice in a row). Any movement resets the wait.</p>
+  <details id="eggBox" class="box" open>
+    <summary>Play now <span id="eggCount"></span></summary>
+    <input id="eggFilter" type="search" placeholder="Filter eggs...">
+    <div id="eggButtons"></div>
+  </details>
+  <details id="interBox" class="box" open>
+    <summary>Interaction tests (5)</summary>
+    <div id="interCards">
+      <div class="card" id="cardTouch">
+        <b class="title">Touch mode</b>
+        <small>What a click, tap or drag on the photo does (piano mode overrides it).</small>
+        <span id="touchModes"></span>
+        <small id="touchHelp"></small>
+        <button id="soundBtn" hidden>Pluck sound: on</button>
+      </div>
+      <div class="card" id="cardLights">
+        <b class="title">Rainbow shanks</b>
+        <small>In Lights mode: click a shank and it lights up in its colour, then fades. With Sustain on,
+               it stays lit until you click it again. Lit: <span id="litList">none</span></small>
+        <button id="sustainBtn">Sustain: off</button>
+        <button id="allOff">All off</button>
+      </div>
+      <div class="card" id="cardPiano">
+        <b class="title">Rainbow piano (secret)</b>
+        <small>Unlocked on the site by tapping the bottom-right corner of the photo (X-ray shows the
+               spot). Shanks play C to C; drag across for a glissando; keys 1-8 also play.
+               Idle eggs pause while it's on. Piano mode: <b id="pianoState">off</b></small>
+        <button id="pianoBtn">Turn on</button>
+      </div>
+    </div>
+  </details>
+  <label>Idle auto-play</label>
+  <button id="auto"></button>
+  <label>Idle wait: <span id="idleVal"></span> s</label>
+  <input id="idle" type="range" min="2" max="60" value="6">
+  <label>Speed</label>
+  <span id="speeds"></span>
+  <label>View</label>
+  <button id="zoom">Zoom + follow</button>
+  <button id="xray">X-ray layers</button>
+  <div id="status"></div>
+</div>
+
+<script>
+// ?player=1: the home page's egg player (see homeeggs.js in site/js). No panel, no idle eggs; it
+// plays one egg when the parent page asks and tells it when that egg is over.
+const PLAYER = new URLSearchParams(location.search).has('player');
+if (PLAYER) document.body.classList.add('player');
+
+// ---- Photo geometry, from tools/makeShankLayer.m (img/shanks.json) ----------------------------
+// Centre line of shank k: x = a*y + b, in photo pixels. tip = lowest shank pixel row.
+const SHANKS = [
+  { a: 0.0684, b: 41.7,  tip: 949 }, { a: 0.0687, b: 126.2, tip: 940 },
+  { a: 0.0698, b: 209.3, tip: 931 }, { a: 0.0700, b: 292.1, tip: 922 },
+  { a: 0.0705, b: 373.9, tip: 912 }, { a: 0.0711, b: 455.1, tip: 901 },
+  { a: 0.0711, b: 535.9, tip: 891 }, { a: 0.0711, b: 615.8, tip: 879 },
+];
+const SHANK_HALF_WIDTH = 9.5;
+const GROUND = 993;                                          // where feet rest at the photo's bottom
+const onShank = (k, y) => SHANKS[k - 1].a * y + SHANKS[k - 1].b;
+const lean = k => -Math.atan(SHANKS[k - 1].a) * 180 / Math.PI;  // degrees, to stand along a shank
+
+// Easing curves, u in 0..1.
+const EASE = {
+  linear: u => u,
+  in:     u => u * u,
+  out:    u => 1 - (1 - u) * (1 - u),
+  inout:  u => u < .5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2,
+};
+
+// ---- Egg definitions -----------------------------------------------------------------------------
+// An egg is a list of steps played in order. Each step shows a frame (or cycles through several,
+// one every `every` ms) for `ms`, while tweening his position to `to` with an easing curve.
+// Anything left out of `to` stays where the previous step left it.
+//   peek eggs: to.x = left edge of the art, px from the shank centre line (negative = hidden).
+//   free eggs: to.x, to.y = his feet in photo px; to.rot = degrees; to.flip = -1 mirrors him.
+const HIDDEN = -24, PEEK = -6;
+
+const EGGS = {
+  peekNwave: {
+    label: 'peekNwave', note: 'peeks out from behind shank 4 and waves',
+    mode: 'peek', shank: 4, y: 500, art: 'art/peeker/',
+    frames: { sneak: 'f0_sneak', up: 'f1_peek_up', look: 'f2_look', waveA: 'f3_wave_a',
+              waveB: 'f4_wave_b', blink: 'f5_blink' },
+    steps: [
+      { show: 'sneak', ms: 500, to: { x: HIDDEN } },            // nothing to see yet
+      { show: 'sneak', ms: 900, to: { x: PEEK - 4 } },          // slowly lean out
+      { show: 'up',    ms: 700, to: { x: PEEK - 2 } },          // glance up
+      { show: 'look',  ms: 500, to: { x: PEEK } },              // spot the viewer
+      { show: 'blink', ms: 120 },
+      { show: 'look',  ms: 300 },
+      { show: ['waveA', 'waveB'], every: 200, ms: 1600 },       // wave x4
+      { show: 'look',  ms: 700 },                               // hold the smile
+      { show: 'sneak', ms: 350, to: { x: HIDDEN } },            // duck back in
+      { show: 'sneak', ms: 200 },
+    ],
+  },
+
+  poleLand: {
+    label: 'poleLand', note: 'slides down shank 1, sticks the landing, walks off left',
+    mode: 'free', art: 'art/pole/',
+    steps: [
+      { show: 'slide_a', ms: 1, to: { x: onShank(1, -5), y: -5, rot: lean(1), flip: 1 } },  // above the photo
+      { show: ['slide_a', 'slide_b'], every: 90, ms: 2400, ease: 'in',
+        to: { x: onShank(1, SHANKS[0].tip), y: SHANKS[0].tip } },                          // wheee
+      { show: 'hop',    ms: 260, ease: 'in', to: { y: GROUND, rot: 0 } },                    // drop off the tip
+      { show: 'crouch', ms: 380 },                                                           // stick it
+      { show: 'tada',   ms: 1000 },
+      { show: ['walk_a', 'walk_b'], every: 170, ms: 2600, ease: 'linear', to: { x: -50 } },
+    ],
+  },
+
+  poleFall: {
+    label: 'poleFall', note: 'slides down shank 8, runs out of pole, falls, crawls off right',
+    mode: 'free', art: 'art/pole/',
+    steps: [
+      { show: 'slide_a', ms: 1, to: { x: onShank(8, -5), y: -5, rot: lean(8), flip: 1 } },
+      { show: ['slide_a', 'slide_b'], every: 90, ms: 2200, ease: 'in',
+        to: { x: onShank(8, SHANKS[7].tip), y: SHANKS[7].tip } },
+      { show: 'fall_a', ms: 450, to: { rot: 0 } },                       // hangs in mid-air: uh oh
+      { show: ['fall_a', 'fall_b'], every: 80, ms: 420, ease: 'in', to: { y: GROUND } },
+      { show: 'splat',  ms: 90,  ease: 'out', to: { y: GROUND - 6 } },  // little bounce
+      { show: 'splat',  ms: 90,  ease: 'in',  to: { y: GROUND } },
+      { show: 'splat',  ms: 600 },
+      { show: ['dazed_a', 'dazed_b', 'dazed_c'], every: 150, ms: 2700 },
+      { show: 'splat',  ms: 700 },                                       // stars gone, still down
+      { show: 'pushup', ms: 1000 },
+      { show: ['crawl_a', 'crawl_b'], every: 280, ms: 4200, ease: 'linear', to: { x: 810 } },
+    ],
+  },
+};
+
+// ---- Light-show eggs: no cartoon, they drive the rainbow shank overlays -------------------------
+// level(k, t) = how lit shank k is (0..1) at t ms. prepare() re-rolls any randomness on each play.
+const pulse = (t, centre, sigma) => Math.exp(-0.5 * ((t - centre) / sigma) ** 2);
+
+function wave(label, note, order) {
+  const START = 300, GAP = 170, SIGMA = 140;      // ms: lead-in, shank-to-shank delay, pulse width
+  return {
+    label, note, mode: 'lights',
+    duration: START + order.length * GAP + 600,
+    level: (k, t) => Math.max(0, ...order.map((sk, i) => sk === k ? pulse(t, START + i * GAP, SIGMA) : 0)),
+  };
+}
+const LR = [1, 2, 3, 4, 5, 6, 7, 8], RL = [...LR].reverse();
+
+Object.assign(EGGS, {
+  sparkle: {
+    label: 'sparkle', note: 'shanks flicker on and off at random',
+    mode: 'lights', duration: 7000,
+    prepare() {
+      this.flashes = Array.from({ length: 18 }, () => ({
+        k: 1 + Math.floor(Math.random() * 8), t0: Math.random() * 6000 }));
+    },
+    level(k, t) {
+      const RISE = 120, HOLD = 220, FALL = 500;
+      let lvl = 0;
+      this.flashes.filter(f => f.k === k).forEach(f => {
+        const u = t - f.t0;
+        if (u < 0 || u > RISE + HOLD + FALL) return;
+        lvl = Math.max(lvl, u < RISE ? u / RISE : u < RISE + HOLD ? 1 : 1 - (u - RISE - HOLD) / FALL);
+      });
+      return lvl;
+    },
+  },
+  waveLR:     wave('waveLR', 'a wave of light runs left to right', LR),
+  waveRL:     wave('waveRL', 'a wave of light runs right to left', RL),
+  waveBounce: wave('waveBounce', 'the wave runs there and back, twice',
+                   [...LR, ...RL.slice(1), ...LR.slice(1), ...RL.slice(1)]),
+});
+
+// ---- skiFree: a SkiFree-style slalom down the photo, weaving in front of and behind shanks ------
+// He swings on a sine wave around a gap between shanks. Whether he passes in front of or behind
+// each shank is re-rolled every run; he only switches layer while he's in a gap (never mid-shank),
+// so the swap is invisible. Swing widths are 1 or 2 shank spacings so every turn lands in a gap.
+const gapX = (g, y) => (onShank(g, y) + onShank(g + 1, y)) / 2;     // centre of the gap right of shank g
+
+function skiSteps() {
+  const SPACING = 82, STEP_Y = 10, STEP_MS = 32;     // fine steps, so a layer swap lands mid-gap
+  const wide = Math.random() < 0.6;
+  const amp = wide ? 2 * SPACING : SPACING;
+  const choices = wide ? [3, 4, 5] : [2, 3, 4, 5, 6];
+  const centreGap = choices[Math.floor(Math.random() * choices.length)];
+  const wavelength = 440 + Math.random() * 180, phase = Math.random() * 2 * Math.PI;
+  const layerOf = {};                                   // (swing, shank) -> 'front' | 'behind'
+  const xAt = y => gapX(centreGap, y) + amp * Math.sin(2 * Math.PI * y / wavelength + phase);
+  const nearestShank = (x, y) => SHANKS.reduce((best, s, i) =>
+    Math.abs(x - onShank(i + 1, y)) < Math.abs(x - onShank(best, y)) ? i + 1 : best, 1);
+
+  const y0 = -80;
+  const steps = [{ show: 'ski_down', ms: 1, to: { x: xAt(y0), y: y0, flip: 1, layer: 'front' } }];
+  let prevX = xAt(y0), prevSlope = 0;
+  for (let y = y0 + STEP_Y; y <= 1090; y += STEP_Y) {
+    const x = xAt(y), slope = (x - prevX) / STEP_Y;
+    // The step's layer applies from its start, so decide it at the step's midpoint: the swap then
+    // happens within half a step of the gap's centre.
+    const ym = y - STEP_Y / 2, xm = xAt(ym);
+    const swing = Math.floor((2 * Math.PI * ym / wavelength + phase + Math.PI / 2) / Math.PI);
+    const key = `${swing}:${nearestShank(xm, ym)}`;
+    if (!(key in layerOf)) layerOf[key] = Math.random() < 0.5 ? 'front' : 'behind';
+    const turning = Math.sign(slope) !== Math.sign(prevSlope);
+    const show = turning ? 'ski_turn' : Math.abs(slope) < 0.4 ? 'ski_down' : 'ski_side';
+    steps.push({ show, ms: STEP_MS, ease: 'linear',
+                 to: { x, y, flip: slope < 0 ? -1 : 1, layer: layerOf[key] } });
+    prevX = x;
+    prevSlope = slope;
+  }
+  return steps;
+}
+
+EGGS.skiFree = {
+  label: 'skiFree', note: 'SkiFree-style slalom top to bottom, in front of and behind shanks (re-rolled each run)',
+  mode: 'free', art: 'art/ski/', steps: skiSteps(),
+  frames: { ski_down: 'ski_down', ski_side: 'ski_side', ski_turn: 'ski_turn' },
+  prepare() { this.steps = skiSteps(); compile(this); },
+};
+
+// ---- catComb: the probe was a comb all along ----------------------------------------------------
+// The photo fades to just its shank cutout (identical pixels, so you can't see it happen), fur rises
+// around the tips, the comb strokes through it twice, then the camera pulls back to show a sleeping
+// cat being combed, and comes back. Everything is drawn in photo coordinates, way off the photo.
+const SVGNS = 'http://www.w3.org/2000/svg';
+const COMB_LAYERS = ['photo', 'behind', 'fg', 'spine', 'glows', 'front'];
+const FUR_LAYERS = ['cat', 'furBack', 'furFront'];
+const CAT = { cx: 400, cy: 1610, rx: 1700, ry: 830 };          // body ellipse; its top is the cat's back
+const catBack = x => CAT.cy - CAT.ry * Math.sqrt(Math.max(0, 1 - ((x - CAT.cx) / CAT.rx) ** 2));
+
+function track(keys, ease = EASE.inout) {   // keyframes [[t, value], ...] -> value at any t
+  return t => {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i += 1) {
+      const [t1, v1] = keys[i], [t0, v0] = keys[i - 1];
+      if (t <= t1) return v0 + (v1 - v0) * ease((t - t0) / (t1 - t0));
+    }
+    return keys[keys.length - 1][1];
+  };
+}
+
+function svgEl(parent, tag, attrs) {
+  const el = document.createElementNS(SVGNS, tag);
+  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  parent.appendChild(el);
+  return el;
+}
+
+function buildCatScene() {
+  const OUT = '#5a3310', FUR = '#e8913a', PINK = '#f4a6a6';
+  const cat = document.getElementById('cat');
+  const g = svgEl(cat, 'g', { 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+  svgEl(g, 'ellipse', { cx: 300, cy: 2470, rx: 2300, ry: 90, fill: 'rgba(0,0,0,.12)' });
+  const tail = 'M2050 1800 C2500 2200 2100 2560 1300 2520 L-300 2480';
+  svgEl(g, 'path', { d: tail, fill: 'none', stroke: OUT, 'stroke-width': 218 });
+  svgEl(g, 'path', { d: tail, fill: 'none', stroke: FUR, 'stroke-width': 190 });
+  const body = svgEl(g, 'g', {});
+  const outline = svgEl(body, 'ellipse', { cx: CAT.cx, cy: CAT.cy, rx: CAT.rx, ry: CAT.ry, fill: FUR, stroke: OUT, 'stroke-width': 16 });
+  [-700, 1050, 1450].forEach(x => svgEl(body, 'path', {
+    d: `M${x} ${catBack(x) + 20} q40 160 -10 320`, fill: 'none', stroke: '#c46a1c', 'stroke-width': 70 }));
+  [[-950, 2330], [-620, 2380]].forEach(([x, y]) =>
+    svgEl(g, 'ellipse', { cx: x, cy: y, rx: 230, ry: 110, fill: FUR, stroke: OUT, 'stroke-width': 16 }));
+  const head = svgEl(g, 'g', {});
+  [['-1950,1300 -1800,950 -1550,1180', '-1880,1250 -1790,1050 -1640,1190'],
+   ['-1300,1120 -1080,900 -980,1260', '-1230,1140 -1090,990 -1030,1210']].forEach(([outer, inner]) => {
+    svgEl(head, 'polygon', { points: outer, fill: FUR, stroke: OUT, 'stroke-width': 16 });
+    svgEl(head, 'polygon', { points: inner, fill: PINK });
+  });
+  svgEl(head, 'circle', { cx: -1450, cy: 1700, r: 620, fill: FUR, stroke: OUT, 'stroke-width': 16 });
+  ['M-1760 1690 q110 80 220 0', 'M-1360 1690 q110 80 220 0',                    // closed, sleeping eyes
+   'M-1450 1860 q-40 60 -90 20', 'M-1450 1860 q40 60 90 20',                    // mouth
+   'M-1580 1880 L-1920 1830', 'M-1580 1915 L-1920 1950', 'M-1320 1880 L-980 1830', 'M-1320 1915 L-980 1950']
+    .forEach(d => svgEl(head, 'path', { d, fill: 'none', stroke: OUT, 'stroke-width': 18 }));
+  svgEl(head, 'path', { d: 'M-1500 1810 h100 l-50 50 z', fill: PINK, stroke: OUT, 'stroke-width': 12 });
+  const zs = [0, 1, 2].map(() => svgEl(g, 'text', {
+    x: 0, y: 0, fill: '#557', 'font-family': 'Georgia, serif', 'font-weight': 700, 'font-size': 200 }));
+  zs.forEach(z => { z.textContent = 'z'; });
+
+  // The comb's spine, above the photo's top edge (only ever seen zoomed out).
+  const spine = document.getElementById('spine');
+  svgEl(spine, 'rect', { x: -30, y: -170, width: 810, height: 178, rx: 40,
+                         fill: '#2b1f9a', stroke: '#160f5a', 'stroke-width': 10 });
+  svgEl(spine, 'rect', { x: 10, y: -150, width: 730, height: 30, rx: 15, fill: 'rgba(255,255,255,.25)' });
+
+  // Fur strands, rooted inside the cat's back; about a third pass in front of the comb's teeth.
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;     // same fur every time
+  const colours = ['#e8913a', '#d97a26', '#f2b066', '#c96a1c'];
+  const strands = [];
+  for (let x = -1250; x <= 2050; x += 7) {
+    const layer = document.getElementById(rand() < 0.35 ? 'furFront' : 'furBack');
+    const top = catBack(x) - 10 - rand() * 40;
+    const el = svgEl(layer, 'path', { fill: 'none', stroke: colours[Math.floor(rand() * 4)],
+                                      'stroke-width': 4 + rand() * 3, 'stroke-linecap': 'round' });
+    strands.push({ el, x, base: catBack(x) + 70, len: catBack(x) + 70 - top, wob: rand() * 6 });
+  }
+  return { body, outline, head, zs, strands };
+}
+
+EGGS.catComb = {
+  label: 'catComb', note: 'camera pulls back: the probe is a comb, combing a sleeping cat',
+  mode: 'scene', duration: 15200,
+  tracks: {
+    photo: track([[0, 1], [300, 0], [14800, 0], [15200, 1]]),
+    rise:  track([[0, 0], [1600, 1], [13600, 1], [14800, 0]]),
+    combX: track([[0, 0], [2000, 0], [3200, 220], [3700, 220], [4300, 0], [4800, 0], [6000, 220],
+                  [8800, 220], [9500, 220], [9800, 0], [10200, 0], [11400, 220],
+                  [12000, 220], [13000, 0]]),
+    combY: track([[0, 0], [3200, 0], [3700, -140], [4300, -140], [4800, 0],
+                  [9300, 0], [9500, -140], [9800, -140], [10200, 0],
+                  [11600, 0], [12000, -140], [13000, -140], [13600, 0]]),
+    logZoom: track([[0, 0], [6000, 0], [8500, Math.log(0.148)], [11600, Math.log(0.148)], [13600, 0]]),
+    focusX: track([[6000, 375], [8500, 225], [11600, 225], [13600, 375]]),
+    focusY: track([[6000, 500], [8500, 1195], [11600, 1195], [13600, 500]]),
+    zzz:    track([[8000, 0], [8800, 1], [11600, 1], [12200, 0]]),
+    spine:  track([[6000, 0], [7000, 1], [12000, 1], [13000, 0]]),
+  },
+  enter() {
+    if (!this.scene) this.scene = buildCatScene();
+    [...FUR_LAYERS, 'spine'].forEach(id => { document.getElementById(id).style.display = 'block'; });
+  },
+  render(t) {
+    const T = this.tracks, sc = this.scene;
+    const s = Math.exp(T.logZoom(t));
+    const world = `translate(${375 - T.focusX(t) * s}px, ${500 - T.focusY(t) * s}px) scale(${s})`;
+    const cx = T.combX(t), cy = T.combY(t), vx = (cx - T.combX(t - 16)) / 16;   // comb speed, px/ms
+    COMB_LAYERS.forEach(id => { document.getElementById(id).style.transform = `${world} translate(${cx}px, ${cy}px)`; });
+    FUR_LAYERS.forEach(id => { document.getElementById(id).style.transform = `${world} translate(0px, ${(1 - T.rise(t)) * 420}px)`; });
+    document.getElementById('photo').style.opacity = T.photo(t);
+    document.getElementById('spine').style.opacity = T.spine(t);
+    sc.outline.setAttribute('stroke-opacity', Math.min(1, Math.max(0, (1 - s) / 0.5)));   // no outline up close
+
+    // Strands the teeth are in get dragged along with the comb; the rest just sway a little.
+    const inFur = cy > -60;
+    sc.strands.forEach(st => {
+      const dragged = inFur && st.x > cx - 10 && st.x < cx + 760;
+      const bend = dragged ? Math.max(-45, Math.min(45, vx * 140)) : 0;
+      const sway = 3 * Math.sin(t / 600 + st.x * 0.05) + st.wob;
+      st.el.setAttribute('d', `M${st.x} ${st.base} Q${st.x + bend * 0.4} ${st.base - st.len * 0.5} `
+                              + `${st.x + bend + sway} ${st.base - st.len}`);
+    });
+
+    // Sleeping: slow breathing, and z's drifting up from the head.
+    const breath = 1 + 0.015 * Math.sin(t / 700);
+    sc.body.setAttribute('transform', `translate(0 ${CAT.cy}) scale(1 ${breath}) translate(0 ${-CAT.cy})`);
+    sc.zs.forEach((z, i) => {
+      const p = (t / 2400 + i / 3) % 1;
+      z.setAttribute('x', -1300 + p * 260);
+      z.setAttribute('y', 1000 - p * 500);
+      z.setAttribute('font-size', 140 + p * 160);
+      z.setAttribute('opacity', T.zzz(t) * Math.sin(p * Math.PI));
+    });
+  },
+  exit() {
+    [...COMB_LAYERS, ...FUR_LAYERS].forEach(id => { document.getElementById(id).style.transform = ''; });
+    [...FUR_LAYERS, 'spine'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+    document.getElementById('photo').style.opacity = '';
+  },
+};
+
+// ---- shankShuffle: the shanks themselves move ----------------------------------------------------
+// One at a time, each shank snaps to a new random angle and spot (a quick 70 ms move with a flash,
+// leaving a fading ghost where it was), building a criss-cross. Then a faster re-shuffle, then they
+// snap home one by one. The photo and shank cutout hide while it runs; img/shank/shank_k.png are
+// the same pixels, so the swap is invisible. Orders, angles and timing are re-rolled every run.
+const SNAP_MS = 70, FLASH_MS = 180, GHOST_MS = 260, PIVOT_Y = 470;
+const shuffled = () => [1, 2, 3, 4, 5, 6, 7, 8].sort(() => Math.random() - 0.5);
+
+function randomPose(k) {
+  const tilt = 15 + Math.random() * 55;
+  const sign = (k % 2 ? 1 : -1) * (Math.random() < 0.3 ? -1 : 1);   // mostly alternating: criss-cross
+  return { rot: sign * tilt, dx: (Math.random() - 0.5) * 220, dy: (Math.random() - 0.5) * 160 };
+}
+
+EGGS.shankShuffle = {
+  label: 'shankShuffle', note: 'shanks snap one by one into a random criss-cross, re-shuffle, then snap home',
+  mode: 'scene', duration: 12500,
+  prepare() {
+    const ev = [];
+    let t = 500;
+    shuffled().forEach(k => { ev.push({ t: t + Math.random() * 120, k, pose: randomPose(k) }); t += 420; });
+    t += 1400;
+    shuffled().forEach(k => { ev.push({ t: t + Math.random() * 80, k, pose: randomPose(k) }); t += 300; });
+    t += 1800;
+    shuffled().forEach(k => { ev.push({ t, k, pose: { rot: 0, dx: 0, dy: 0 } }); t += 260; });
+    this.events = ev.sort((a, b) => a.t - b.t);
+    this.duration = t + 600;
+  },
+  enter() {
+    const layer = document.getElementById('shankSolo');
+    if (!this.imgs) {
+      const make = (k, cls) => {
+        const im = new Image();
+        im.src = `img/shank/shank_${k}.png`;
+        im.className = cls;
+        im.style.transformOrigin = `${onShank(k, PIVOT_Y)}px ${PIVOT_Y + 700}px`;   // image starts 700 px above
+        layer.appendChild(im);
+        return im;
+      };
+      this.ghosts = SHANKS.map((s, i) => make(i + 1, 'ghost'));
+      this.imgs = SHANKS.map((s, i) => make(i + 1, 'solo'));
+    }
+    layer.style.display = 'block';
+    document.getElementById('photo').style.opacity = 0;
+    document.getElementById('fg').style.opacity = 0;
+  },
+  render(t) {
+    const pose = p => `translate(${p.dx}px, ${p.dy}px) rotate(${p.rot}deg)`;
+    const HOME = { rot: 0, dx: 0, dy: 0 };
+    for (let k = 1; k <= 8; k += 1) {
+      const mine = this.events.filter(e => e.k === k && e.t <= t);
+      const last = mine[mine.length - 1], before = mine.length > 1 ? mine[mine.length - 2].pose : HOME;
+      const im = this.imgs[k - 1], ghost = this.ghosts[k - 1];
+      if (!last) { im.style.transform = ''; im.style.filter = ''; ghost.style.opacity = 0; continue; }
+      const age = t - last.t, u = EASE.out(Math.min(1, age / SNAP_MS));
+      const now = { rot: before.rot + (last.pose.rot - before.rot) * u,
+                    dx: before.dx + (last.pose.dx - before.dx) * u,
+                    dy: before.dy + (last.pose.dy - before.dy) * u };
+      im.style.transform = pose(now);
+      im.style.filter = `brightness(${1 + 2.2 * Math.max(0, 1 - age / FLASH_MS)})`;
+      ghost.style.transform = pose(before);
+      ghost.style.opacity = 0.45 * Math.max(0, 1 - age / GHOST_MS);
+    }
+  },
+  exit() {
+    document.getElementById('shankSolo').style.display = 'none';
+    document.getElementById('photo').style.opacity = '';
+    document.getElementById('fg').style.opacity = '';
+    (this.imgs || []).forEach(im => { im.style.transform = ''; im.style.filter = ''; });
+    (this.ghosts || []).forEach(g => { g.style.opacity = 0; });
+  },
+};
+
+// ---- Bendable shanks ------------------------------------------------------------------------------
+// Any shank can be redrawn along any curve from its own photo pixels: the solo cutout is read in
+// short horizontal strips (straightening the shank), and each strip is laid along the curve, rotated
+// to its local direction. Drawn on one canvas (#ropes), which can also apply a camera zoom.
+const SOLO_TOP = 700;                                     // solo images start 700 px above the photo
+const ropeCanvas = document.getElementById('ropes'), rctx = ropeCanvas.getContext('2d');
+const soloImgs = SHANKS.map((s, i) => { const im = new Image(); im.src = `img/shank/shank_${i + 1}.png`; return im; });
+
+function ropesOn(on) {
+  ropeCanvas.style.display = on ? 'block' : 'none';
+  if (!on) ropeCanvas.style.opacity = '';
+}
+// Cross-fade between the real photo (f = 0) and the canvas-drawn shanks (f = 1). They're the same
+// pixels, so the hand-over is invisible.
+function photoToRopes(f) {
+  ropeCanvas.style.opacity = f;
+  document.getElementById('photo').style.opacity = 1 - f;
+  document.getElementById('fg').style.opacity = 1 - f;
+}
+function restorePhoto() {
+  ['photo', 'fg'].forEach(id => { document.getElementById(id).style.opacity = ''; });
+  ropesOn(false);
+}
+function ropeFrame(s = 1, fx = 375, fy = 500) {           // clear, then set the camera (zoom s at focus)
+  rctx.setTransform(1, 0, 0, 1, 0, 0);
+  rctx.clearRect(0, 0, ropeCanvas.width, ropeCanvas.height);
+  rctx.setTransform(2 * s, 0, 0, 2 * s, 2 * (375 - fx * s), 2 * (500 - fy * s));
+}
+
+// pts = [x0, y0, x1, y1, ...]: the curve, one point every h px of shank length, starting at the
+// shank's photo row yStart (so strip i comes from photo row yStart + i*h).
+function drawShankAlong(k, pts, yStart, h) {
+  const img = soloImgs[k - 1], n = pts.length / 2;
+  for (let i = 0; i < n - 1; i += 1) {
+    const x = pts[2 * i], y = pts[2 * i + 1], dx = pts[2 * i + 2] - x, dy = pts[2 * i + 3] - y;
+    const len = Math.hypot(dx, dy) || h, row = yStart + i * h;
+    if (len > 5 * h) continue;                            // a jump in the curve (e.g. the coil wrapping): no strip
+    rctx.save();
+    rctx.translate(x, y);
+    rctx.rotate(Math.atan2(-dx, dy));
+    rctx.drawImage(img, onShank(k, row) - 15, row + SOLO_TOP, 30, h, -15, 0, 30, len + 0.6);
+    rctx.restore();
+  }
+}
+// The shank's rest curve from photo row yStart to its tip, optionally pushed sideways by dx(y).
+function shankCurve(k, yStart, h, dx = () => 0) {
+  const pts = [];
+  for (let y = yStart; y <= SHANKS[k - 1].tip + 2; y += h) pts.push(onShank(k, y) + dx(y), y);
+  return pts;
+}
+// Rope physics (Verlet): each noodle is a chain of points; gravity, a floor, a little bending
+// stiffness, its top end pinned until its release time, and noodles bump into each other (and
+// themselves) so they pile and coil instead of lying flat. start/prev = positions now and one step
+// ago (so the jelly wobble's motion carries over). Run once per play; returns one snapshot of every
+// rope every 1/60 s from T0, so playback, freeze-frames and rewind just look up.
+const NOODLE_H = 8, NOODLE_TOP = -10;
+// opts.friction: share of sideways speed kept on the floor; opts.bowl: pull toward the middle on the
+// floor (a plate's dip), px/s^2 per px from centre.
+function* simulateNoodles(start, prev, releaseAt, T0, T1, opts = {}, frames = []) {
+  const DT = 1 / 120, G = 3000, FLOOR = GROUND - 7, BEND = 0.06, R = 12, CELL = 12;
+  const FRICTION = opts.friction ?? 0.3, BOWL = opts.bowl ?? 0;
+  const ropes = start.map((p, i) => ({ P: Float32Array.from(p), Q: Float32Array.from(prev[i]), pin: [p[0], p[1]] }));
+  const link = (P, i, j, rest, k) => {
+    const dx = P[2 * j] - P[2 * i], dy = P[2 * j + 1] - P[2 * i + 1];
+    const d = Math.hypot(dx, dy) || 1e-6, f = (d - rest) / d * 0.5 * k;
+    P[2 * i] += dx * f; P[2 * i + 1] += dy * f; P[2 * j] -= dx * f; P[2 * j + 1] -= dy * f;
+  };
+  const collide = () => {                                  // spatial hash, one pass per step
+    const grid = new Map();
+    ropes.forEach((r, ri) => {
+      for (let i = 0; i < r.P.length / 2; i += 1) {
+        const key = Math.floor(r.P[2 * i] / CELL) * 4096 + Math.floor(r.P[2 * i + 1] / CELL);
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key).push(ri, i);
+      }
+    });
+    ropes.forEach((r, ri) => {
+      const P = r.P;
+      for (let i = 0; i < P.length / 2; i += 1) {
+        const cx = Math.floor(P[2 * i] / CELL), cy = Math.floor(P[2 * i + 1] / CELL);
+        for (let gx = cx - 1; gx <= cx + 1; gx += 1) for (let gy = cy - 1; gy <= cy + 1; gy += 1) {
+          const cell = grid.get(gx * 4096 + gy);
+          if (!cell) continue;
+          for (let c = 0; c < cell.length; c += 2) {
+            const rj = cell[c], j = cell[c + 1];
+            if (rj < ri || (rj === ri && j <= i + 3)) continue;   // each pair once; skip close neighbours
+            const O = ropes[rj].P, dx = O[2 * j] - P[2 * i], dy = O[2 * j + 1] - P[2 * i + 1];
+            const d = Math.hypot(dx, dy);
+            if (d >= R || d < 1e-6) continue;
+            const f = (R - d) / d * 0.5;
+            P[2 * i] -= dx * f; P[2 * i + 1] -= dy * f; O[2 * j] += dx * f; O[2 * j + 1] += dy * f;
+          }
+        }
+      }
+    });
+  };
+  for (let step = 0, t = T0; t <= T1; step += 1, t += DT * 1000) {
+    if (step % 2 === 0) frames.push(ropes.map(r => r.P.slice()));
+    ropes.forEach((r, ri) => {
+      const { P, Q } = r, n = P.length / 2, pinned = t < releaseAt[ri];
+      for (let i = 0; i < n; i += 1) {
+        const x = P[2 * i], y = P[2 * i + 1];
+        let vx = (x - Q[2 * i]) * 0.995;
+        const vy = (y - Q[2 * i + 1]) * 0.995;
+        const onFloor = y >= FLOOR - 0.5;
+        if (onFloor) vx *= FRICTION;                       // friction on the floor
+        Q[2 * i] = x; Q[2 * i + 1] = y;
+        P[2 * i] = x + vx + (onFloor ? -BOWL * (x - 375) * DT * DT : 0);
+        P[2 * i + 1] = y + vy + G * DT * DT;
+      }
+      for (let it = 0; it < 10; it += 1) {
+        for (let i = 0; i < n - 1; i += 1) link(P, i, i + 1, NOODLE_H, 1);
+        for (let i = 0; i < n - 2; i += 1) link(P, i, i + 2, 2 * NOODLE_H, BEND);
+        for (let i = 0; i < n; i += 1) if (P[2 * i + 1] > FLOOR) P[2 * i + 1] = FLOOR;
+        if (pinned) { P[0] = r.pin[0]; P[1] = r.pin[1]; }
+      }
+    });
+    collide();
+    ropes.forEach(r => { for (let i = 1; i < r.P.length; i += 2) if (r.P[i] > FLOOR) r.P[i] = FLOOR; });
+    yield step;
+  }
+}
+// Runs the simulation a slice at a time (advance(ms) works for about that long), so it can be spread
+// over the frames before the drop instead of freezing the page (phones!). Infinity = finish now.
+function lazySim(start, prev, releaseAt, T0, T1, opts = {}) {
+  const sim = { frames: [], done: false };
+  const gen = simulateNoodles(start, prev, releaseAt, T0, T1, opts, sim.frames);
+  sim.advance = ms => {
+    const end = performance.now() + ms;
+    while (!sim.done) {
+      if (gen.next().done) sim.done = true;
+      else if (performance.now() > end) return;
+    }
+  };
+  return sim;
+}
+// Starting state for a drop at T0: the wobble pose, its motion one step earlier, plus a sideways flop.
+function noodleStart(T0) {
+  const start = SHANKS.map((s, i) => shankCurve(i + 1, NOODLE_TOP, NOODLE_H, wobbleDx(i + 1, 26, T0)));
+  const prev = SHANKS.map((s, i) => {
+    const kick = (Math.random() - 0.5) * 2 * 160 / 120;            // up to 160 px/s sideways
+    return shankCurve(i + 1, NOODLE_TOP, NOODLE_H, wobbleDx(i + 1, 26, T0 - 1000 / 120)).map((v, j) => (j % 2 ? v : v - kick));
+  });
+  return { start, prev };
+}
+const simFrame = (frames, T0, t) => frames[Math.max(0, Math.min(frames.length - 1, Math.round((t - T0) * 0.06)))];
+
+// Jelly wobble, used before the noodles drop: sideways wave, growing toward the tip.
+function wobbleDx(k, W, t) {
+  const tip = SHANKS[k - 1].tip;
+  return y => W * ((y - NOODLE_TOP) / (tip - NOODLE_TOP)) * Math.sin(2 * Math.PI * y / 260 - t / 110 + 1.3 * k);
+}
+
+// ---- shankPluck: the guy plucks shank 1 and the ripple runs across like a curtain ---------------
+const PLUCK_REL = 3400;                                   // ms: he lets go
+EGGS.pluckGuy = {                                          // the guy's part (played inside shankPluck)
+  hidden: true, label: 'pluckGuy', note: '', mode: 'free', art: 'art/pole/',
+  steps: [
+    { show: 'walk_a', ms: 400, to: { x: -40, y: GROUND, rot: 0, flip: -1, layer: 'front' } },
+    { show: ['walk_a', 'walk_b'], every: 170, ms: 1800, ease: 'linear', to: { x: 88 } },   // walk on
+    { show: 'pluck_reach', ms: 400 },                                                       // grab the tip
+    { show: 'pluck_pull',  ms: 800, to: { x: 18 } },                                        // pull it back
+    { show: 'pluck_sit',   ms: 250, ease: 'out', to: { x: 8 } },                           // let go: whump
+    { show: 'pluck_sit',   ms: 700 },
+    { show: 'crouch',      ms: 200 },
+    { show: 'pluck_watch', ms: 1700 },                                                      // whoa
+    { show: 'tada',        ms: 800 },
+    { show: ['walk_a', 'walk_b'], every: 170, ms: 1500, ease: 'linear', to: { x: -50, flip: 1 } },
+  ],
+};
+
+EGGS.shankPluck = {
+  label: 'shankPluck', note: 'the guy walks on, plucks shank 1, and the shanks ripple like a curtain',
+  mode: 'scene', duration: 9200,
+  enter() { ropesOn(true); },
+  hand(t) {                                               // where his hand is while he holds the tip
+    const st = stateAt(EGGS.pluckGuy, t);
+    if (st.frame === 'pluck_reach') return st.x + 15;
+    if (st.frame === 'pluck_pull') return st.x + 11;
+    return null;
+  },
+  render(t) {
+    const guy = EGGS.pluckGuy;
+    photoToRopes(Math.min(1, t / 300, (this.duration - t) / 300));
+    ropeFrame();
+    const restTip = k => onShank(k, SHANKS[k - 1].tip);
+    const shape = (k, y) => ((y + SOLO_TOP) / (SHANKS[k - 1].tip + SOLO_TOP)) ** 2;   // fixed far above
+    const held = this.hand(t);
+    const D0 = this.hand(PLUCK_REL - 1) - restTip(1);
+    for (let k = 1; k <= 8; k += 1) {
+      let amp = 0;
+      if (held !== null && k === 1) amp = Math.min(0, held - restTip(1));
+      else if (t >= PLUCK_REL) {
+        const u = t - PLUCK_REL - (k - 1) * 90;             // the ripple reaches shank k a bit later
+        if (k === 1) amp = D0 * Math.exp(-u / 700) * Math.cos(2 * Math.PI * u / 300);
+        else if (u > 0) amp = 0.9 * D0 * Math.exp(-u / 900) * Math.sin(2 * Math.PI * u / 340);
+      }
+      drawShankAlong(k, shankCurve(k, -60, 4, y => amp * shape(k, y)), -60, 4);
+    }
+    draw(guy, t >= 0 && t < guy.duration ? stateAt(guy, t) : null);
+  },
+  exit() { draw(EGGS.pluckGuy, null); restorePhoto(); },
+};
+
+// ---- noodleDrop: jelly wobble, go limp, drop in a heap, then rewind like a tape ----------------
+EGGS.noodleDrop = {
+  label: 'noodleDrop', note: 'shanks wobble, go limp, drop in a heap on the floor, then rewind',
+  mode: 'scene', duration: 11900,
+  T0: 2400, T1: 6500, REW: 7500, REW_END: 9550,
+  prepare() {
+    const order = shuffled();
+    this.release = SHANKS.map((s, i) => this.T0 + order.indexOf(i + 1) * 170 + Math.random() * 60);
+    const { start, prev } = noodleStart(this.T0);
+    this.sim = lazySim(start, prev, this.release, this.T0, this.T1);
+  },
+  enter() { ropesOn(true); },
+  render(t) {
+    this.sim.advance(t >= this.T0 ? Infinity : 4);        // a few ms per frame until the drop
+    photoToRopes(Math.min(1, t / 300, (this.duration - t) / 300));
+    ropeFrame();
+    let simT = null, wobT = t;
+    if (t >= this.T0 && t < this.REW) simT = Math.min(t, this.T1);
+    else if (t >= this.REW && t < this.REW_END) simT = this.T1 - (t - this.REW) * 2;  // rewind at 2x
+    else if (t >= this.REW_END) wobT = this.T0 - (t - this.REW_END);                  // wobble, backwards
+    if (simT !== null) {
+      simFrame(this.sim.frames, this.T0, simT).forEach((pts, i) => drawShankAlong(i + 1, Array.from(pts), NOODLE_TOP, NOODLE_H));
+    } else {
+      const W = 26 * Math.max(0, Math.min(1, (wobT - 600) / (this.T0 - 600)));
+      for (let k = 1; k <= 8; k += 1) {
+        drawShankAlong(k, shankCurve(k, -60, 4, y => (y < NOODLE_TOP ? 0 : wobbleDx(k, W, wobT)(y))), -60, 4);
+      }
+    }
+    if (t >= this.REW && t < this.REW_END && Math.floor(t / 400) % 2 === 0) {         // VHS rewind
+      rctx.font = 'bold 54px ui-monospace, monospace';
+      rctx.fillStyle = 'rgba(40, 40, 40, .75)';
+      rctx.fillText('◀◀', 40, 90);
+    }
+  },
+  exit() { restorePhoto(); },
+};
+
+// ---- pasta: limp silicon-probe noodles, a giant fork twirls them up, and the camera pulls back --
+// to the guy at a table eating it. The photo's white background turns out to be his plate.
+const MOUTH = { x: 375, y: -1730 }, SHOULDER = { x: 720, y: -1350 }, GRIP = 900;
+function forkPoint(F, rot, lx, ly) {                      // fork-local (tip at 0,0; handle up) -> world
+  return { x: F.x + lx * Math.cos(rot) - ly * Math.sin(rot), y: F.y + lx * Math.sin(rot) + ly * Math.cos(rot) };
+}
+
+function buildPastaScene() {
+  const SKIN2 = '#ffd9b3', SHIRT2 = '#6fa8dc', OUT2 = '#222';
+  const back = document.getElementById('pastaBack'), front = document.getElementById('pastaFront');
+  // Behind the table: the guy (head + torso), then the table top, then the plate.
+  svgEl(back, 'ellipse', { cx: 375, cy: -900, rx: 520, ry: 650, fill: SHIRT2, stroke: OUT2, 'stroke-width': 18 });
+  svgEl(back, 'path', { d: 'M215 -1400 L375 -1020 L535 -1400 Z', fill: '#fff', stroke: OUT2, 'stroke-width': 12 });  // napkin
+  svgEl(back, 'circle', { cx: 375, cy: -1900, r: 420, fill: SKIN2, stroke: OUT2, 'stroke-width': 18 });
+  const eyes = [235, 515].map(x => svgEl(back, 'path', { d: `M${x - 60} -1990 q60 -70 120 0`, fill: 'none',
+                                                          stroke: OUT2, 'stroke-width': 22, 'stroke-linecap': 'round' }));
+  const cheeks = [180, 570].map(x => svgEl(back, 'circle', { cx: x, cy: -1760, r: 70, fill: '#f6a5a0', opacity: 0 }));
+  const mouth = svgEl(back, 'ellipse', { cx: MOUTH.x, cy: MOUTH.y, rx: 90, ry: 30, fill: '#933', stroke: OUT2, 'stroke-width': 14 });
+  const mmm = svgEl(back, 'text', { x: 860, y: -2250, fill: '#557', 'font-family': 'Georgia, serif',
+                                    'font-weight': 700, 'font-size': 300, opacity: 0 });
+  mmm.textContent = 'mmm!';
+  svgEl(back, 'rect', { x: -4000, y: -480, width: 8800, height: 5000, fill: '#c58b5a', stroke: '#7a4f2a', 'stroke-width': 16 });
+  svgEl(back, 'ellipse', { cx: -200, cy: -420, rx: 260, ry: 90, fill: SHIRT2, stroke: OUT2, 'stroke-width': 16 });  // other arm
+  svgEl(back, 'circle', { cx: 375, cy: 500, r: 860, fill: '#fff', stroke: '#cfcfcf', 'stroke-width': 30 });     // plate
+  svgEl(back, 'circle', { cx: 375, cy: 500, r: 720, fill: 'none', stroke: '#eeeeee', 'stroke-width': 14 });
+  // In front: his arm, the fork, his hand on the handle.
+  const armOut = svgEl(front, 'path', { fill: 'none', stroke: OUT2, 'stroke-width': 168, 'stroke-linecap': 'round' });
+  const arm = svgEl(front, 'path', { fill: 'none', stroke: SHIRT2, 'stroke-width': 140, 'stroke-linecap': 'round' });
+  const fork = svgEl(front, 'g', {});
+  const STEEL = { fill: '#d5d8de', stroke: '#80858e', 'stroke-width': 10 };
+  svgEl(fork, 'path', { d: 'M-30 -1700 L30 -1700 L34 -420 Q40 -340 110 -300 L110 -270 L-110 -270 L-110 -300 Q-40 -340 -34 -420 Z', ...STEEL });
+  [-95, -32, 32, 95].forEach(x => svgEl(fork, 'rect', { x: x - 14, y: -290, width: 28, height: 290, rx: 14, ...STEEL }));
+  const hand = svgEl(front, 'circle', { r: 80, fill: SKIN2, stroke: OUT2, 'stroke-width': 16 });
+  return { eyes, cheeks, mouth, mmm, armOut, arm, fork, hand };
+}
+
+EGGS.pasta = {
+  label: 'pasta', note: 'shanks go limp like noodles, a giant fork twirls them, camera pulls back to the guy eating',
+  mode: 'scene', duration: 18400,
+  T0: 1800, T1: 4600,
+  tracks: {
+    wobble:  track([[500, 0], [1800, 26]]),
+    forkY:   track([[4400, -1500], [5600, 990], [8200, 990], [9000, 250]]),
+    zoom:    track([[0, 0], [9000, 0], [11500, Math.log(0.242)], [13800, Math.log(0.242)], [15800, 0]]),
+    focusX:  track([[9000, 375], [11500, 400], [13800, 400], [15800, 375]]),
+    focusY:  track([[9000, 500], [11500, -500], [13800, -500], [15800, 500]]),
+    toMouth: track([[9000, 0], [11300, 1]]),                               // fork travels to his mouth
+    away:    track([[12100, 0], [13000, 1]]),                              // ...then back down
+    eaten:   track([[11500, 0], [12100, 1]]),
+    happy:   track([[11400, 0], [11700, 1], [13700, 1], [14200, 0]]),
+  },
+  prepare() {
+    const order = shuffled();
+    this.release = SHANKS.map((s, i) => this.T0 + order.indexOf(i + 1) * 150 + Math.random() * 60);
+    const { start, prev } = noodleStart(this.T0);
+    this.sim = lazySim(start, prev, this.release, this.T0, this.T1, { friction: 0.6, bowl: 60 });
+    this.coil = null;
+    this.reinsert = shuffled().map((k, i) => ({ k, t: 15900 + i * 260 }));
+  },
+  // Where each bit of pasta sits once it's twirled onto the fork (fork-local coordinates).
+  makeCoil() {
+    const heap = this.sim.frames[this.sim.frames.length - 1];
+    this.coil = heap.map((pts, k) => {
+      const n = pts.length / 2, out = new Float32Array(pts.length);
+      for (let j = 0; j < n; j += 1) {
+        const u = j * NOODLE_H + k * 137, th = u / 24 + k;
+        const r = 40 + 30 * Math.sin(u / 180 + k * 1.7);
+        const yc = -60 - 170 * ((j / n + k * 0.37) % 1);
+        out[2 * j] = r * Math.cos(th);
+        out[2 * j + 1] = yc + 0.38 * r * Math.sin(th);
+      }
+      return out;
+    });
+  },
+  enter() {
+    if (!this.scene) this.scene = buildPastaScene();
+    ropesOn(true);
+    ['pastaBack', 'pastaFront'].forEach(id => { document.getElementById(id).style.display = 'block'; });
+  },
+  fork(t) {                                               // fork tip position + rotation at time t
+    const T = this.tracks, twirl = t > 5600 && t < 8200;
+    let F = { x: 375 + (twirl ? 10 * Math.cos(t / 90) : 0), y: T.forkY(t) + (twirl ? 6 * Math.sin(t / 90) : 0) };
+    let rot = twirl ? 0.05 * Math.sin(t / 90) : 0;
+    const m = T.toMouth(t), a = T.away(t);
+    const EAT_ROT = Math.PI - Math.atan2(0.6, 0.8), REST = { x: 1150, y: -250 };
+    F = { x: F.x + (MOUTH.x - F.x) * m, y: F.y + (MOUTH.y - F.y) * m };
+    rot += EAT_ROT * m;
+    F = { x: F.x + (REST.x - F.x) * a, y: F.y + (REST.y - F.y) * a };
+    rot += (2.75 - rot) * a;
+    return { F, rot };
+  },
+  render(t) {
+    const T = this.tracks, sc = this.scene;
+    const s = Math.exp(T.zoom(t)), fx = T.focusX(t), fy = T.focusY(t);
+    photoToRopes(Math.min(1, t / 300, (this.duration - t) / 300));
+    ['pastaBack', 'pastaFront'].forEach(id => {
+      document.getElementById(id).style.transform = `translate(${375 - fx * s}px, ${500 - fy * s}px) scale(${s})`;
+    });
+    ropeFrame(s, fx, fy);
+    this.sim.advance(t >= this.T0 ? Infinity : 4);        // a few ms per frame until the drop
+    if (this.sim.done && !this.coil) this.makeCoil();
+
+    // 1. probe shanks wobble like jelly; 2. they flop into a heap; 3. the fork twirls them up.
+    const { F, rot } = this.fork(t);
+    if (t < this.T0) {
+      const W = T.wobble(t);
+      for (let k = 1; k <= 8; k += 1) {
+        drawShankAlong(k, shankCurve(k, -60, 4, y => (y < NOODLE_TOP ? 0 : wobbleDx(k, W, t)(y))), -60, 4);
+      }
+    } else if (t < 15800) {
+      const heap = simFrame(this.sim.frames, this.T0, Math.min(t, this.T1));
+      const twirl = Math.max(0, Math.min(1, (t - 5600) / 2400));
+      const eaten = T.eaten(t);
+      if (eaten < 1) {
+        heap.forEach((pts, k) => {
+          const out = new Array(pts.length);
+          for (let j = 0; j < pts.length; j += 2) {
+            const hx = pts[j], hy = pts[j + 1];
+            const delay = 0.55 * Math.min(1, Math.hypot(hx - 375, hy - 990) / 900);   // near the fork first
+            const p = EASE.inout(Math.max(0, Math.min(1, (twirl - delay) / 0.45)));
+            let { x, y } = forkPoint(F, rot, this.coil[k][j], this.coil[k][j + 1]);
+            x = MOUTH.x + (x - MOUTH.x) * (1 - eaten);                                // into his mouth
+            y = MOUTH.y + (y - MOUTH.y) * (1 - eaten);
+            out[j] = hx + (x - hx) * p;
+            out[j + 1] = hy + (y - hy) * p;
+          }
+          rctx.globalAlpha = 1 - eaten;
+          drawShankAlong(k + 1, out, NOODLE_TOP, NOODLE_H);   // silicon-probe noodles
+          rctx.globalAlpha = 1;
+        });
+      }
+    } else {
+      // 4. a fresh set of shanks drops back into place, one at a time, with a flash.
+      this.reinsert.forEach(({ k, t: t0 }) => {
+        if (t < t0) return;
+        const u = EASE.out(Math.min(1, (t - t0) / 220));
+        drawShankAlong(k, shankCurve(k, -60, 4).map((v, i) => (i % 2 ? v - 1100 * (1 - u) : v)), -60, 4);
+      });
+    }
+
+    // The fork, his arm and hand follow the fork's pose; his face reacts.
+    const grip = forkPoint(F, rot, 0, -GRIP);
+    sc.fork.setAttribute('transform', `translate(${F.x} ${F.y}) rotate(${rot * 180 / Math.PI})`);
+    const armD = `M${SHOULDER.x} ${SHOULDER.y} L${grip.x} ${grip.y}`;
+    sc.arm.setAttribute('d', armD);
+    sc.armOut.setAttribute('d', armD);
+    sc.hand.setAttribute('cx', grip.x);
+    sc.hand.setAttribute('cy', grip.y);
+    const happy = T.happy(t), chewing = t > 12100 && t < 13600;
+    sc.mouth.setAttribute('ry', t > 11300 && t < 12100 ? 110 : chewing ? (Math.floor(t / 180) % 2 ? 20 : 55) : 30);
+    sc.cheeks.forEach(c => c.setAttribute('opacity', chewing ? 0.9 : 0.3 * happy));
+    sc.mmm.setAttribute('opacity', t > 12300 && t < 13700 ? 1 : 0);
+  },
+  exit() {
+    ['pastaBack', 'pastaFront'].forEach(id => {
+      const el = document.getElementById(id);
+      el.style.display = 'none';
+      el.style.transform = '';
+    });
+    restorePhoto();
+  },
+};
+
+// ---- Shared: an offscreen canvas, and masking anything to the shank shapes -----------------------
+const fgImg = document.getElementById('fg');
+const scratch = document.createElement('canvas');
+scratch.width = 1500; scratch.height = 2000;
+const sctx = scratch.getContext('2d');
+// paint(ctx) draws in photo px; the result is kept only where there is shank, then laid on #ropes.
+function drawMaskedToShanks(paint) {
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.globalCompositeOperation = 'source-over';
+  sctx.clearRect(0, 0, 1500, 2000);
+  sctx.setTransform(2, 0, 0, 2, 0, 0);
+  paint(sctx);
+  sctx.globalCompositeOperation = 'destination-in';
+  sctx.drawImage(fgImg, 0, 0, 750, 1000);
+  sctx.globalCompositeOperation = 'source-over';
+  rctx.drawImage(scratch, 0, 0, 750, 1000);
+}
+
+// ---- sheetFall: the white was a paper sheet over a blue board all along -------------------------
+// img/sheet.png is the photo with the shanks cut out as holes (tools/makeSheet.m); behind it, the
+// shank cutout on a blue board. At rest that is the photo. The sheet is a little cloth simulation
+// (a 16 x 21 grid of points), drawn by mapping the image onto its triangles. Its top folds down
+// over itself like a peeling poster (revealing the blue), then it crumples into a ball and rolls away.
+// Then a fresh sheet slides down.
+const sheetImg = new Image();
+sheetImg.src = 'img/sheet.png';
+const sheetBack = document.createElement('canvas');       // the paper's back: blank grey, same holes
+sheetBack.width = 750; sheetBack.height = 1000;
+sheetImg.addEventListener('load', () => {
+  const b = sheetBack.getContext('2d');
+  b.drawImage(sheetImg, 0, 0);
+  b.globalCompositeOperation = 'source-in';
+  b.fillStyle = '#e4e4e4';
+  b.fillRect(0, 0, 750, 1000);
+});
+const SHEET_COLS = 16, SHEET_ROWS = 21, SHEET_DX = 750 / (SHEET_COLS - 1), SHEET_DY = 1000 / (SHEET_ROWS - 1);
+
+// The sheet's flat grid of points.
+function flatSheet() {
+  const P = new Float32Array(2 * SHEET_COLS * SHEET_ROWS);
+  for (let r = 0; r < SHEET_ROWS; r += 1) for (let c = 0; c < SHEET_COLS; c += 1) {
+    const i = r * SHEET_COLS + c;
+    P[2 * i] = c * SHEET_DX;
+    P[2 * i + 1] = r * SHEET_DY;
+  }
+  return P;
+}
+// Peeling: the top folds down over the sheet along a (slightly tilted) fold line at height yf; the
+// folded flap is mirrored below the line, so its triangles flip and show the paper's back.
+function foldSheet(yf, tilt) {
+  const P = flatSheet();
+  for (let i = 0; i < P.length; i += 2) {
+    const x = P[i], y = P[i + 1], line = yf + tilt * (x - 375);
+    if (y < line) {
+      const lift = line - y;
+      P[i + 1] = line + lift * 0.92;                       // a little foreshortened: lifted toward us
+      P[i] = x + 5 * Math.sin(y / 70 + x / 110) * Math.min(1, lift / 200);
+    }
+  }
+  return P;
+}
+// Crumpling (Verlet cloth): starts from the folded sheet; its links shrink by random amounts (the
+// wrinkles), everything is pulled to the middle and jiggled, under gravity on the photo's floor.
+function* simulateSheet(start, T0, T1, crumple, frames) {
+  const DT = 1 / 120, G = 2200, FLOOR = 1000, n = SHEET_COLS * SHEET_ROWS;
+  const P = Float32Array.from(start), Q = Float32Array.from(start), flat = flatSheet();
+  const links = [];                                       // [i, j, rest, wrinkle factor]
+  const add = (i, j) => links.push([i, j, Math.hypot(flat[2 * j] - flat[2 * i], flat[2 * j + 1] - flat[2 * i + 1]),
+                                    0.55 + Math.random() * 0.9]);
+  for (let r = 0; r < SHEET_ROWS; r += 1) for (let c = 0; c < SHEET_COLS; c += 1) {
+    const i = r * SHEET_COLS + c;
+    if (c < SHEET_COLS - 1) add(i, i + 1);
+    if (r < SHEET_ROWS - 1) add(i, i + SHEET_COLS);
+    if (c < SHEET_COLS - 1 && r < SHEET_ROWS - 1) { add(i, i + SHEET_COLS + 1); add(i + 1, i + SHEET_COLS); }
+  }
+  for (let step = 0, t = T0; t <= T1; step += 1, t += DT * 1000) {
+    if (step % 2 === 0) frames.push(P.slice());
+    const squash = crumple(t);                            // 0 = as folded ... 1 = balled up
+    let cx = 0, cy = 0;
+    for (let i = 0; i < n; i += 1) { cx += P[2 * i]; cy += P[2 * i + 1]; }
+    cx /= n; cy /= n;
+    for (let i = 0; i < n; i += 1) {
+      const x = P[2 * i], y = P[2 * i + 1];
+      let vx = (x - Q[2 * i]) * 0.99;
+      const vy = (y - Q[2 * i + 1]) * 0.99;
+      if (y >= FLOOR - 0.5) vx *= 0.5;
+      Q[2 * i] = x; Q[2 * i + 1] = y;
+      const pull = squash * 6;
+      P[2 * i] = x + vx + (cx - x) * pull * DT * DT + (Math.random() - 0.5) * squash * 3;
+      P[2 * i + 1] = y + vy + G * DT * DT * squash + (cy - y) * pull * DT * DT + (Math.random() - 0.5) * squash * 3;
+    }
+    for (let it = 0; it < 4; it += 1) {
+      links.forEach(([i, j, rest, wrinkle]) => {
+        const target = rest * (1 - squash * 0.85 * wrinkle);
+        const dx = P[2 * j] - P[2 * i], dy = P[2 * j + 1] - P[2 * i + 1];
+        const d = Math.hypot(dx, dy) || 1e-6, f = (d - target) / d * 0.5 * Math.max(0.15, squash);
+        P[2 * i] += dx * f; P[2 * i + 1] += dy * f; P[2 * j] -= dx * f; P[2 * j + 1] -= dy * f;
+      });
+      for (let i = 0; i < n; i += 1) if (P[2 * i + 1] > FLOOR) P[2 * i + 1] = FLOOR;
+    }
+    yield step;
+  }
+}
+
+// Map the source triangle (u, v) of img onto the destination triangle (x, y), with a shade on top.
+function drawImageTriangle(img, u, v, x, y, shade, back) {
+  const den = (u[1] - u[0]) * (v[2] - v[0]) - (u[2] - u[0]) * (v[1] - v[0]);
+  const a = ((x[1] - x[0]) * (v[2] - v[0]) - (x[2] - x[0]) * (v[1] - v[0])) / den;
+  const c = ((x[2] - x[0]) * (u[1] - u[0]) - (x[1] - x[0]) * (u[2] - u[0])) / den;
+  const b = ((y[1] - y[0]) * (v[2] - v[0]) - (y[2] - y[0]) * (v[1] - v[0])) / den;
+  const d = ((y[2] - y[0]) * (u[1] - u[0]) - (y[1] - y[0]) * (u[2] - u[0])) / den;
+  const mx = (x[0] + x[1] + x[2]) / 3, my = (y[0] + y[1] + y[2]) / 3;
+  rctx.save();
+  rctx.beginPath();                                       // clip, grown 0.7 px so no seams show
+  for (let k = 0; k < 3; k += 1) {
+    const ex = x[k] - mx, ey = y[k] - my, L = Math.hypot(ex, ey) || 1;
+    const px = x[k] + ex / L * 0.7, py = y[k] + ey / L * 0.7;
+    if (k) rctx.lineTo(px, py); else rctx.moveTo(px, py);
+  }
+  rctx.closePath();
+  rctx.clip();
+  {
+    rctx.save();
+    rctx.transform(a, b, c, d, x[0] - a * u[0] - c * v[0], y[0] - b * u[0] - d * v[0]);
+    const sx = Math.max(0, Math.min(...u) - 2), sy = Math.max(0, Math.min(...v) - 2);
+    const sw = Math.min(750, Math.max(...u) + 2) - sx, sh = Math.min(1000, Math.max(...v) + 2) - sy;
+    rctx.drawImage(back ? sheetBack : img, sx, sy, sw, sh, sx, sy, sw, sh);   // the back is blank paper
+    rctx.restore();
+  }
+  if (shade > 0.01) { rctx.fillStyle = `rgba(0, 0, 0, ${shade})`; rctx.fill(); }
+  rctx.restore();
+}
+
+function drawSheet(P, dx = 0, roll = 0, cx = 0, cy = 0) {
+  rctx.save();
+  rctx.translate(cx + dx, cy);
+  rctx.rotate(roll);
+  rctx.translate(-cx, -cy);
+  const restArea = SHEET_DX * SHEET_DY / 2;
+  for (let r = 0; r < SHEET_ROWS - 1; r += 1) for (let c = 0; c < SHEET_COLS - 1; c += 1) {
+    const i00 = r * SHEET_COLS + c, i10 = i00 + 1, i01 = i00 + SHEET_COLS, i11 = i01 + 1;
+    [[i00, i10, i11], [i00, i11, i01]].forEach(tri => {
+      const x = tri.map(i => P[2 * i]), y = tri.map(i => P[2 * i + 1]);
+      const u = tri.map(i => (i % SHEET_COLS) * SHEET_DX), v = tri.map(i => Math.floor(i / SHEET_COLS) * SHEET_DY);
+      const area = ((x[1] - x[0]) * (y[2] - y[0]) - (x[2] - x[0]) * (y[1] - y[0])) / 2;
+      const shade = Math.min(0.35, Math.max(0, (1 - Math.abs(area) / restArea) * 0.45));
+      drawImageTriangle(sheetImg, u, v, x, y, shade, area < 0);
+    });
+  }
+  rctx.restore();
+}
+
+EGGS.sheetFall = {
+  label: 'sheetFall', note: 'the white was a paper sheet over blue: it peels down, crumples, rolls away',
+  mode: 'scene', duration: 7600,
+  FOLD: [600, 2000], T1: 3400, ROLL: [3400, 4700], NEW: [5900, 6900], YF: 540,
+  prepare() {
+    this.tilt = (Math.random() - 0.5) * 0.3;               // the fold line's slant, re-rolled each run
+    const crumple = t => EASE.inout(Math.max(0, Math.min(1, (t - this.FOLD[1]) / 1100)));
+    this.sim = { frames: [], done: false };
+    const gen = simulateSheet(foldSheet(this.YF, this.tilt), this.FOLD[1], this.T1, crumple, this.sim.frames);
+    while (!gen.next().done) { /* cheap: ~170 steps of 336 points */ }
+    this.sim.done = true;
+    const last = this.sim.frames[this.sim.frames.length - 1];
+    let cx = 0, cy = 0;
+    for (let i = 0; i < last.length; i += 2) { cx += last[i]; cy += last[i + 1]; }
+    this.ball = { cx: cx / (last.length / 2), cy: cy / (last.length / 2) };
+  },
+  enter() {
+    ropesOn(true);
+    document.getElementById('backdrop').style.display = 'block';
+  },
+  render(t) {
+    const fade = Math.min(1, t / 250, (this.duration - t) / 250);
+    document.getElementById('photo').style.opacity = 1 - fade;
+    ropeFrame();
+    if (t < this.FOLD[1]) {
+      const u = Math.max(0, Math.min(1, (t - this.FOLD[0]) / (this.FOLD[1] - this.FOLD[0])));
+      drawSheet(foldSheet(this.YF * EASE.inout(u) - 40 * (1 - u), this.tilt));
+    } else if (t < this.ROLL[1]) {
+      const P = simFrame(this.sim.frames, this.FOLD[1], Math.min(t, this.T1));
+      const u = Math.max(0, Math.min(1, (t - this.ROLL[0]) / (this.ROLL[1] - this.ROLL[0])));
+      const dx = 1000 * EASE.in(u);
+      drawSheet(P, dx, dx / 110, this.ball.cx, this.ball.cy);
+    } else if (t >= this.NEW[0]) {
+      const u = Math.min(1, (t - this.NEW[0]) / (this.NEW[1] - this.NEW[0]));
+      rctx.drawImage(sheetImg, 0, -1000 * (1 - EASE.out(u)));               // a fresh sheet slides down
+    }
+  },
+  exit() {
+    document.getElementById('backdrop').style.display = 'none';
+    restorePhoto();
+  },
+};
+
+// ---- fillUp: the shanks are tiny glass tubes, and water fills them --------------------------------
+// Minimal on purpose: just water rising inside each shank's own shape, a meniscus that wobbles a
+// little, then it drains. The photo stays as it is underneath.
+EGGS.fillUp = {
+  label: 'fillUp', note: 'the shanks are tiny tubes: water fills each one, then drains',
+  mode: 'scene', duration: 7600,
+  prepare() {
+    this.fills = shuffled().map((k, i) => ({ k, t0: 300 + i * 330 + Math.random() * 120, ms: 2000 + Math.random() * 600 }));
+    this.drain = { t0: 5800, ms: 1500 };
+  },
+  enter() { ropesOn(true); },
+  level(f, t) {                                           // 0 = empty ... 1 = full to the photo's top
+    const up = Math.max(0, Math.min(1, (t - f.t0) / f.ms));
+    const down = Math.max(0, Math.min(1, (t - this.drain.t0 - (8 - f.k) * 60) / this.drain.ms));
+    return EASE.inout(up) * (1 - EASE.in(down));
+  },
+  render(t) {
+    ropeFrame();
+    drawMaskedToShanks(ctx => {
+      this.fills.forEach(f => {
+        const L = this.level(f, t);
+        if (L <= 0) return;
+        const k = f.k, tip = SHANKS[k - 1].tip + 8, top = tip - L * (tip + 10);
+        ctx.beginPath();
+        for (let dx = -16; dx <= 16; dx += 2) {
+          const menisc = 3 * (1 - (dx / 16) ** 2) + 1.5 * Math.sin(t / 140 + dx / 5 + k);  // dips in the middle
+          const y = top + menisc;
+          if (dx === -16) ctx.moveTo(onShank(k, y) + dx, y); else ctx.lineTo(onShank(k, y) + dx, y);
+        }
+        ctx.lineTo(onShank(k, tip) + 16, tip);
+        ctx.lineTo(onShank(k, tip) - 16, tip);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(110, 205, 255, 0.85)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(225, 248, 255, 0.95)';     // bright water line
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let dx = -16; dx <= 16; dx += 2) {
+          const y = top + 3 * (1 - (dx / 16) ** 2) + 1.5 * Math.sin(t / 140 + dx / 5 + k);
+          if (dx === -16) ctx.moveTo(onShank(k, y) + dx, y); else ctx.lineTo(onShank(k, y) + dx, y);
+        }
+        ctx.stroke();
+      });
+    });
+  },
+  exit() { ropesOn(false); },
+};
+
+// ---- galton: a bean machine ----------------------------------------------------------------------
+// The shanks' upper parts fade out (painted over in the photo's white), leaving their lower parts as the bin walls; 8 rows of pegs pop
+// in above; ~180 steel beads drop from the top centre, go left or right at random at each peg, and
+// stack in the 9 bins (between shanks, plus one each side). The stacks come out as a bell curve
+// (binomial, n = 8) by themselves; a dashed line of the expected shape is drawn over at the end.
+const GALTON = { rows: 8, pegY0: 90, pegDY: 58, sp: 82, centre: (SHANKS[3].b + SHANKS[4].b) / 2,
+                 wallTop: 560, beadR: 8.5, floor: 992, beads: 180, every: 34 };
+// x in "lean" coordinates (x' = x - a*y) so the whole board follows the shanks' 4° slant.
+const leanX = (xp, y) => xp + 0.07 * y;
+const binCentres = [SHANKS[0].b - 42, ...SHANKS.slice(0, 7).map((s, i) => (s.b + SHANKS[i + 1].b) / 2), SHANKS[7].b + 42];
+
+EGGS.galton = {
+  label: 'galton', note: 'shanks become a bean machine: beads bounce through pegs into a bell curve',
+  mode: 'scene', duration: 12600,
+  RELEASE: 900, BELL: 8400, DRAIN: 11000,
+  prepare() {
+    const G = GALTON, perBin = Array(9).fill(0);
+    this.beads = [];
+    for (let n = 0; n < G.beads; n += 1) {
+      const turns = Array.from({ length: G.rows }, () => (Math.random() < 0.5 ? 0 : 1));
+      const bin = turns.reduce((s, v) => s + v, 0);
+      const slot = perBin[bin]++;
+      const restY = G.floor - G.beadR - Math.floor(slot / 3) * 15.5;
+      const restXp = binCentres[bin] + ((slot % 3) - 1) * 17;
+      this.beads.push({ t0: this.RELEASE + n * G.every + Math.random() * 10, turns, restXp, restY,
+                        fall: Math.sqrt(2 * (restY - (G.pegY0 + (G.rows - 1) * G.pegDY)) / 2500) * 1000 });
+    }
+    this.counts = perBin;
+  },
+  enter() { ropesOn(true); },
+  beadAt(b, t) {                                          // position of one bead at time t (or null)
+    const G = GALTON, u = t - b.t0;
+    if (u < 0) return null;
+    const DROP = 260, HOP = 120;
+    let xp = G.centre;
+    if (u < DROP) return { x: leanX(xp, -20), y: -20 + (G.pegY0 - 12 + 20) * (u / DROP) ** 2 };
+    const hops = (u - DROP) / HOP;
+    if (hops < G.rows - 1) {
+      const r = Math.floor(hops), f = hops - r;
+      let rights = 0;
+      for (let i = 0; i < r; i += 1) rights += b.turns[i];
+      const x0 = G.centre + (rights - r / 2) * G.sp;
+      const x1 = x0 + (b.turns[r] ? G.sp / 2 : -G.sp / 2);
+      const y = G.pegY0 - 12 + (r + f) * G.pegDY - 16 * Math.sin(Math.PI * f);    // a little bounce
+      return { x: leanX(x0 + (x1 - x0) * f, y), y };
+    }
+    let rights = 0;
+    for (let i = 0; i < G.rows - 1; i += 1) rights += b.turns[i];
+    const xLast = G.centre + (rights - (G.rows - 1) / 2) * G.sp + (b.turns[G.rows - 1] ? G.sp / 2 : -G.sp / 2);
+    const yLast = G.pegY0 - 12 + (G.rows - 1) * G.pegDY;
+    const fu = Math.min(1, (u - DROP - (G.rows - 1) * HOP) / b.fall);
+    let y = yLast + (b.restY - yLast) * fu * fu;
+    let xpNow = xLast + (b.restXp - xLast) * Math.min(1, fu * 2.5);
+    if (t > this.DRAIN) {                                  // the floor opens
+      const d = (t - this.DRAIN) / 1000;
+      y += 0.5 * 2500 * d * d;
+    }
+    return { x: leanX(xpNow, y), y };
+  },
+  render(t) {
+    const G = GALTON;
+    ropeFrame();
+    // The shanks' upper parts fade out (and come back at the end), leaving bin walls below.
+    const gone = Math.min(1, t / 600, (this.duration - t) / 600);
+    if (gone > 0) {                                       // the photo's background is pure white
+      const grad = rctx.createLinearGradient(0, G.wallTop - 80, 0, G.wallTop);
+      grad.addColorStop(0, `rgba(255, 255, 255, ${gone})`);
+      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      rctx.fillStyle = `rgba(255, 255, 255, ${gone})`;
+      rctx.fillRect(0, 0, 750, G.wallTop - 80);
+      rctx.fillStyle = grad;
+      rctx.fillRect(0, G.wallTop - 80, 750, 80);
+    }
+    // Pegs pop in one by one, and out at the end.
+    for (let r = 0; r < G.rows; r += 1) for (let i = 0; i <= r; i += 1) {
+      const idx = r * (r + 1) / 2 + i;
+      const pop = Math.min(1, Math.max(0, (t - 250 - idx * 14) / 120), Math.max(0, (this.duration - 300 - t) / 300));
+      if (pop <= 0) continue;
+      const y = G.pegY0 + r * G.pegDY;
+      rctx.beginPath();
+      rctx.arc(leanX(G.centre + (i - r / 2) * G.sp, y), y, 4.5 * pop, 0, 2 * Math.PI);
+      rctx.fillStyle = '#3a3f47';
+      rctx.fill();
+    }
+    // The beads.
+    this.beads.forEach(b => {
+      const p = this.beadAt(b, t);
+      if (!p || p.y > 1030) return;
+      rctx.beginPath();
+      rctx.arc(p.x, p.y, G.beadR, 0, 2 * Math.PI);
+      rctx.fillStyle = '#c5cad3';
+      rctx.fill();
+      rctx.lineWidth = 1.5;
+      rctx.strokeStyle = '#5d6470';
+      rctx.stroke();
+      rctx.beginPath();
+      rctx.arc(p.x - 3, p.y - 3, 2.4, 0, 2 * Math.PI);
+      rctx.fillStyle = '#fff';
+      rctx.fill();
+    });
+    // The bell curve they should make: expected count per bin = N * C(8, j) / 2^8.
+    const bell = Math.min(1, Math.max(0, (t - this.BELL) / 500), Math.max(0, (this.DRAIN - t) / 300));
+    if (bell > 0) {
+      const choose = j => [1, 8, 28, 56, 70, 56, 28, 8, 1][j];
+      rctx.save();
+      rctx.globalAlpha = bell;
+      rctx.setLineDash([10, 7]);
+      rctx.lineWidth = 3.5;
+      rctx.strokeStyle = 'rgb(220, 50, 50)';
+      rctx.beginPath();
+      for (let s = 0; s <= 8 * 20; s += 1) {                // smooth curve through the bins
+        const j = s / 20, xp = binCentres[0] + (binCentres[8] - binCentres[0]) * j / 8;
+        const expected = G.beads * Math.exp(-((j - 4) ** 2) / 4) / Math.sqrt(4 * Math.PI);  // normal, var 2
+        const y = G.floor - G.beadR - (expected / 3 - 0.5) * 15.5;
+        if (s === 0) rctx.moveTo(leanX(xp, y), y); else rctx.lineTo(leanX(xp, y), y);
+      }
+      rctx.stroke();
+      rctx.restore();
+    }
+  },
+  exit() { ropesOn(false); },
+};
+
+// ---- Timeline maths: where is he, and which frame, at time t (ms) into an egg ------------------
+
+function compile(egg) {
+  let t0 = 0, pose = { x: 0, y: 0, rot: 0, flip: 1, layer: 'front' };
+  egg.plan = egg.steps.map(step => {
+    const from = pose;
+    pose = { ...pose, ...(step.to || {}) };
+    const shows = [].concat(step.show);
+    const out = { ...step, t0, from, pose, shows, ease: EASE[step.ease || 'inout'] };
+    t0 += step.ms;
+    return out;
+  });
+  egg.duration = t0;
+}
+
+function stateAt(egg, t) {
+  const plan = egg.plan;
+  let i = 0;
+  while (i < plan.length - 1 && t >= plan[i].t0 + plan[i].ms) i += 1;
+  const s = plan[i];
+  const local = Math.min(Math.max(t - s.t0, 0), s.ms);
+  const u = s.ease(local / s.ms);
+  const lerp = key => s.from[key] + (s.pose[key] - s.from[key]) * u;
+  const frame = s.shows[Math.floor(local / (s.every || Infinity)) % s.shows.length || 0];
+  return { frame, x: lerp('x'), y: lerp('y'), rot: lerp('rot'), flip: s.pose.flip, layer: s.pose.layer };
+}
+
+// ---- Putting an egg on the stage, and drawing a state ------------------------------------------
+function build(name) {
+  const egg = EGGS[name];
+  egg.name = name;
+  if (egg.mode === 'lights' || egg.mode === 'scene') return egg;   // no actor; see renderAt()
+  if (!egg.frames) {
+    egg.frames = {};
+    egg.steps.forEach(st => [].concat(st.show).forEach(f => { egg.frames[f] = f; }));
+  }
+  compile(egg);
+
+  const holder = document.createElement('div');
+  egg.imgs = {};
+  Object.entries(egg.frames).forEach(([key, file]) => {
+    const im = new Image();
+    im.src = `${egg.art}${file}.svg`;
+    holder.appendChild(im);
+    egg.imgs[key] = im;
+  });
+
+  if (egg.mode === 'peek') {
+    const s = SHANKS[egg.shank - 1];
+    const anchor = document.createElement('div');
+    anchor.className = 'anchor';
+    anchor.style.left = `${onShank(egg.shank, egg.y)}px`;
+    anchor.style.top = `${egg.y}px`;
+    anchor.style.transform = `rotate(${lean(egg.shank)}deg)`;
+    const clip = document.createElement('div');
+    clip.className = 'clip';
+    holder.className = 'actor';
+    clip.appendChild(holder);
+    anchor.appendChild(clip);
+    document.getElementById('behind').appendChild(anchor);
+  } else {
+    holder.className = 'free';
+    document.getElementById('front').appendChild(holder);
+  }
+  egg.el = holder;
+  return egg;
+}
+
+function draw(egg, st) {
+  Object.entries(egg.imgs).forEach(([key, im]) => im.classList.toggle('on', !!(st && key === st.frame)));
+  if (!st) { egg.el.classList.remove('on'); return; }
+  if (egg.mode === 'peek') {
+    egg.el.style.left = `${st.x}px`;
+    egg.focus = { x: onShank(egg.shank, egg.y) + 10, y: egg.y };
+  } else {
+    egg.el.classList.add('on');
+    if (egg.el.parentNode.id !== st.layer) document.getElementById(st.layer).appendChild(egg.el);   // weave
+    egg.el.style.left = `${st.x - 35}px`;
+    egg.el.style.top = `${st.y - 70}px`;
+    egg.el.style.transform = `rotate(${st.rot}deg) scaleX(${st.flip})`;
+    egg.focus = { x: st.x, y: st.y - 35 };
+  }
+  camera(egg.focus);
+}
+
+// ---- Playback -----------------------------------------------------------------------------------
+let speed = 1, current = null, lastName = null, plays = 0;
+
+function play(egg, reason) {
+  if (current) return;
+  if (LIVE.on) liveStop();                  // an egg takes the stage from live shanks
+  current = egg;
+  lastName = egg.name;
+  plays += 1;
+  if (egg.prepare) egg.prepare();
+  if (egg.enter) egg.enter();
+  if (egg.btn) egg.btn.classList.add('playing');
+  const run = egg.run = (egg.run || 0) + 1;  // a stop() bumps this, which ends the old loop
+  let t = 0, prev = performance.now();
+  function tick(now) {
+    if (egg.run !== run) return;            // stopped
+    t += (now - prev) * speed;              // speed can change mid-play
+    prev = now;
+    if (t >= egg.duration) return stop(egg);
+    try {
+      renderAt(egg, t);
+    } catch (err) {                          // a broken egg must never leave the photo hidden
+      console.error(`egg ${egg.name} failed at t=${t.toFixed(0)} ms`, err);
+      return stop(egg);
+    }
+    status(`${egg.name} (${reason})  ${(t / 1000).toFixed(1)} / ${(egg.duration / 1000).toFixed(1)} s`);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+// One way to draw any kind of egg at time t, and one way to clear it.
+function renderAt(egg, t) {
+  if (egg.mode === 'lights') drawLights(egg, t);
+  else if (egg.mode === 'scene') egg.render(t);
+  else draw(egg, stateAt(egg, t));
+}
+function clearEgg(egg) {
+  if (egg.mode === 'lights') clearLights();
+  else if (egg.mode === 'scene') egg.exit();
+  else draw(egg, null);
+}
+
+// Ends an egg now (finished, or cut short from its card): clear it off the stage.
+function stop(egg) {
+  egg.run = (egg.run || 0) + 1;
+  try { clearEgg(egg); } catch (err) { console.error(err); restorePhoto(); }
+  if (egg.btn) egg.btn.classList.remove('playing');
+  if (current === egg) current = null;
+  lastActivity = performance.now();         // the idle wait starts over after each egg
+  if (PLAYER) parent.postMessage({ type: 'egglab-done', name: egg.name }, '*');
+}
+
+// ---- Idle trigger (placeholder for the real scheduler, step 3) ---------------------------------
+Object.keys(EGGS).forEach(build);
+// Build the big scene drawings once the page has settled, so their first play doesn't stutter.
+setTimeout(() => {
+  EGGS.catComb.scene = EGGS.catComb.scene || buildCatScene();
+  EGGS.pasta.scene = EGGS.pasta.scene || buildPastaScene();
+}, 1500);
+let idleMs = 6000, lastActivity = performance.now(), frozen = false;
+['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'wheel'].forEach(ev =>
+  window.addEventListener(ev, () => { lastActivity = performance.now(); }, { passive: true }));
+
+setInterval(() => {
+  if (current || frozen || PLAYER) return;
+  if (piano) { status('piano mode: idle eggs paused'); return; }
+  if (LIVE.on) { status('shanks moving: idle eggs wait'); lastActivity = performance.now(); return; }
+  if (!autoPlay) { status('idle auto-play paused: use the Play buttons'); return; }
+  const idle = performance.now() - lastActivity;
+  if (idle >= idleMs) {
+    const pool = Object.keys(EGGS).filter(n => n !== lastName && !EGGS[n].hidden);
+    play(EGGS[pool[Math.floor(Math.random() * pool.length)]], 'idle');
+  } else {
+    status(`idle ${(idle / 1000).toFixed(1)} / ${idleMs / 1000} s`);
+  }
+}, 100);
+
+let clickNote = '';
+function status(msg) {
+  document.getElementById('status').textContent = `${msg}\neggs played: ${plays}${clickNote}`;
+}
+
+// ---- Layout + camera ------------------------------------------------------------------------------
+let zoomed = false, view = { w: 0, h: 0 };
+function layout() {
+  const vp = document.getElementById('viewport');
+  const narrow = innerWidth <= 700;
+  const h = PLAYER ? innerHeight : Math.min(innerHeight - 32, narrow ? (innerWidth - 32) * 4 / 3 : 1e9);
+  view = { w: h * 0.75, h };
+  vp.style.width = `${view.w}px`;
+  vp.style.height = `${view.h}px`;
+  camera(current ? current.focus : null);
+}
+function camera(focus) {
+  const base = view.h / 1000, stage = document.getElementById('stage');
+  if (!zoomed || !focus) {
+    if (!zoomed) stage.style.transform = `scale(${base})`;
+    return;
+  }
+  const z = base * 3;
+  const clamp = (v, lo) => Math.min(0, Math.max(lo, v));
+  const tx = clamp(view.w / 2 - focus.x * z, view.w - 750 * z);
+  const ty = clamp(view.h / 2 - focus.y * z, view.h - 1000 * z);
+  stage.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`;
+}
+addEventListener('resize', layout);
+layout();
+
+// ---- Dev panel -------------------------------------------------------------------------------------
+// Play cards, grouped by kind, in a collapsible scrolling box with a filter.
+const eggButtons = document.getElementById('eggButtons');
+const GROUPS = [['Cartoons', e => e.mode === 'peek' || e.mode === 'free'], ['Light shows', e => e.mode === 'lights'],
+                ['Whole-photo scenes', e => e.mode === 'scene']];
+GROUPS.forEach(([title, inGroup]) => {
+  const eggs = Object.values(EGGS).filter(e => !e.hidden && inGroup(e));
+  if (!eggs.length) return;
+  const h = document.createElement('h2');
+  h.textContent = title;
+  eggButtons.appendChild(h);
+  eggs.forEach(egg => {
+    const b = document.createElement('button');
+    b.innerHTML = `${egg.label}<br><small>${egg.note}</small>`;
+    b.dataset.search = `${egg.label} ${egg.note} ${title}`.toLowerCase();
+    // Click a card: play it. Click the playing card again: stop it. Click another card: switch.
+    b.onclick = () => {
+      if (current === egg) return stop(egg);
+      if (current) stop(current);
+      play(egg, 'button');
+    };
+    egg.btn = b;
+    eggButtons.appendChild(b);
+  });
+});
+document.getElementById('eggCount').textContent = `(${Object.values(EGGS).filter(e => !e.hidden).length})`;
+document.getElementById('eggFilter').oninput = ev => {
+  const q = ev.target.value.trim().toLowerCase();
+  eggButtons.querySelectorAll('button').forEach(b => { b.hidden = !b.dataset.search.includes(q); });
+  eggButtons.querySelectorAll('h2').forEach(h => {      // hide a group header with no matches
+    let n = h.nextElementSibling, any = false;
+    while (n && n.tagName === 'BUTTON') { any = any || !n.hidden; n = n.nextElementSibling; }
+    h.hidden = !any;
+  });
+};
+
+// Idle auto-play on/off; remembered per browser (falls back to on if storage is unavailable).
+let autoPlay = true;
+try { autoPlay = localStorage.getItem('egglab.autoPlay') !== 'off'; } catch (e) { /* storage blocked */ }
+const autoBtn = document.getElementById('auto');
+function showAuto() {
+  autoBtn.textContent = autoPlay ? 'On (click to pause)' : 'Paused (click to resume)';
+  autoBtn.classList.toggle('on', autoPlay);
+}
+autoBtn.onclick = () => {
+  autoPlay = !autoPlay;
+  lastActivity = performance.now();   // resuming starts a fresh wait
+  try { localStorage.setItem('egglab.autoPlay', autoPlay ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
+  showAuto();
+};
+showAuto();
+const idle = document.getElementById('idle'), idleVal = document.getElementById('idleVal');
+idle.oninput = () => { idleMs = idle.value * 1000; idleVal.textContent = idle.value; };
+idle.oninput();
+const speedBox = document.getElementById('speeds');
+[0.25, 0.5, 1].forEach(v => {
+  const b = document.createElement('button');
+  b.textContent = `${v}x`;
+  b.classList.toggle('on', v === speed);
+  b.onclick = () => { speed = v; [...speedBox.children].forEach(c => c.classList.toggle('on', c === b)); };
+  speedBox.appendChild(b);
+});
+document.getElementById('zoom').onclick = e => {
+  zoomed = !zoomed;
+  e.target.classList.toggle('on', zoomed);
+  camera(current ? current.focus : EGGS.peekNwave.focus || { x: 340, y: 500 });
+};
+document.getElementById('xray').onclick = e => e.target.classList.toggle('on', document.body.classList.toggle('xray'));
+
+// ---- Interaction test: click a shank to light it up in its rainbow colour ------------------------
+// Overlays from tools/makeShankGlows.m. Hit test is geometric: distance from the click to each
+// shank's centre line, with a few px of slack so thin shanks are easy to hit (and tap).
+const HIT_SLACK = 6;
+const glowImgs = SHANKS.map((s, i) => {
+  const im = new Image();
+  im.src = `img/glow/glow_${i + 1}.png`;
+  document.getElementById('glows').appendChild(im);
+  return im;
+});
+
+function toPhoto(ev) {
+  const r = document.getElementById('stage').getBoundingClientRect();
+  return { x: (ev.clientX - r.left) / r.width * 750, y: (ev.clientY - r.top) / r.height * 1000 };
+}
+function shankAt(p) {
+  for (let k = 1; k <= SHANKS.length; k += 1) {
+    const s = SHANKS[k - 1];
+    const dist = Math.abs(p.x - onShank(k, p.y)) / Math.hypot(1, s.a);   // perpendicular distance
+    if (p.y >= 0 && p.y <= s.tip + 4 && dist <= SHANK_HALF_WIDTH + HIT_SLACK) return k;
+  }
+  return 0;
+}
+const vp = document.getElementById('viewport');
+
+// ---- Secret: rainbow piano mode ----------------------------------------------------------------
+// Tap the secret spot (a corner of the photo) to switch piano mode on or off. In piano mode each
+// shank flashes and plays a note, red to violet = one C-major octave; drag across them like a harp.
+// Keys 1-8 play them too. Idle eggs are paused while it's on.
+const SECRET = { x: 700, y: 950, w: 50, h: 50 };            // photo px: the bottom-right corner
+const NOTES = [0, 2, 4, 5, 7, 9, 11, 12].map(semi => 261.63 * 2 ** (semi / 12));   // C4 ... C5
+let piano = false, audio = null, dragging = false, lastKey = 0;
+
+const secretBox = document.createElement('div');
+secretBox.className = 'secret';
+Object.assign(secretBox.style, { left: `${SECRET.x}px`, top: `${SECRET.y}px`,
+                                 width: `${SECRET.w}px`, height: `${SECRET.h}px` });
+document.getElementById('front').appendChild(secretBox);
+
+const inSecret = p => p.x >= SECRET.x && p.x <= SECRET.x + SECRET.w && p.y >= SECRET.y && p.y <= SECRET.y + SECRET.h;
+
+function tone(freq) {
+  // Browsers only allow sound after a user gesture, so the audio engine starts on the first tap.
+  audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+  const now = audio.currentTime, out = audio.createGain();
+  out.gain.setValueAtTime(0.0001, now);
+  out.gain.exponentialRampToValueAtTime(0.25, now + 0.006);          // quick strike
+  out.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);          // bell-like ring-out
+  out.connect(audio.destination);
+  [[freq, 'sine', 1], [freq * 2, 'triangle', 0.25], [freq * 3, 'sine', 0.08]].forEach(([f, type, amp]) => {
+    const osc = audio.createOscillator(), g = audio.createGain();
+    osc.type = type;
+    osc.frequency.value = f;
+    g.gain.value = amp;
+    osc.connect(g).connect(out);
+    osc.start(now);
+    osc.stop(now + 1.5);
+  });
+}
+
+// Light a shank briefly: a bright pop, then it fades back (to lit, if it's sustained-lit).
+function flashShank(k, ms = 700) {
+  const im = glowImgs[k - 1], rest = im.classList.contains('lit') ? 1 : 0;
+  im.animate([{ opacity: 1, filter: 'brightness(1.9)' }, { opacity: 1, offset: 0.25 }, { opacity: rest }],
+             { duration: ms, easing: 'ease-out' });
+}
+
+function strike(k, isCue = false) {
+  flashShank(k);
+  tone(NOTES[k - 1]);
+  if (!isCue) clickNote = `\npiano: shank ${k}`;
+}
+
+function setPiano(on) {
+  piano = on;
+  document.body.classList.toggle('piano', on);
+  document.getElementById('pianoState').textContent = on ? 'ON: tap the shanks (or keys 1-8)' : 'off';
+  document.getElementById('pianoBtn').textContent = on ? 'Turn off' : 'Turn on';
+  document.getElementById('cardPiano').classList.toggle('active', on);
+  showLit();
+  const run = on ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1];   // a quick glissando as the cue
+  run.forEach((k, i) => setTimeout(() => strike(k, true), i * 60));
+  clickNote = `\npiano mode ${on ? 'unlocked' : 'off'}`;
+  lastActivity = performance.now();
+}
+
+vp.addEventListener('pointerdown', ev => {
+  const p = toPhoto(ev);
+  if (inSecret(p)) { setPiano(!piano); return; }
+  if (!piano && touchMode !== 'lights') { liveDown(p); return; }
+  const k = shankAt(p);
+  if (!k) return;
+  if (piano) {
+    strike(k);
+    dragging = true;
+    lastKey = k;
+    return;
+  }
+  if (!lightSustain) {                      // default: a brief light-up that fades away
+    flashShank(k, 1100);
+    clickNote = `\nflashed shank ${k}`;
+    return;
+  }
+  const im = glowImgs[k - 1];               // sustain: click on, click again off
+  im.classList.toggle('lit');
+  if (im.classList.contains('lit')) { im.style.animation = 'none'; void im.offsetWidth; im.style.animation = ''; }
+  const lit = glowImgs.map((g, i) => g.classList.contains('lit') ? i + 1 : null).filter(Boolean);
+  clickNote = `\nclicked shank ${k}; lit: ${lit.join(', ') || 'none'}`;
+  showLit();
+});
+vp.addEventListener('pointermove', ev => {
+  if (!piano && touchMode !== 'lights') liveMove(toPhoto(ev));
+  const k = shankAt(toPhoto(ev));
+  vp.classList.toggle('hot', k > 0);
+  if (piano && dragging && k && k !== lastKey) { strike(k); lastKey = k; }   // harp glissando
+  if (!k) lastKey = 0;                                                        // gap between shanks: re-arm
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => vp.addEventListener(ev, () => { dragging = false; liveUp(); }));
+// ---- Live shanks: pluck, ripple, wind -----------------------------------------------------------
+// Each shank is a damped spring (one bending mode, anchored far above the photo) coupled to its
+// neighbours, so a disturbance leaks along the row like a curtain. Ripple taps also send water
+// rings out that push the shanks as they pass. While anything moves, the shanks are drawn on #ropes
+// from their own pixels; once all is still, the real photo comes back.
+const LIVE = { on: false, osc: SHANKS.map(() => ({ a: 0, v: 0, yg: null })), ripples: [], trail: [],
+               held: null, last: 0, still: 0, prev: null };
+const LIVE_OMEGA = 2 * Math.PI / 0.33;                    // one twang every 0.33 s
+const LIVE_COUPLE = 0.25 * LIVE_OMEGA ** 2;               // how strongly neighbours pull on each other
+const RIPPLE = { speed: 520, wavelength: 55, width: 45, life: 1.1, amp: 14 };
+let touchMode = 'lights', pluckSound = true;
+const TOUCH_HELP = {
+  lights: 'Click a shank: it lights up in its colour and fades (turn Sustain on in the card below to keep it lit).',
+  pluck: 'Grab a shank and drag it sideways, then let go: it twangs (with sound), and the wobble leaks into its neighbours.',
+  ripple: 'Tap or click anywhere: a water ripple spreads out and wobbles the shanks as it passes.',
+  wind: 'Move or swipe across the photo: the shanks sway away from your motion, like grass.',
+};
+
+// How a shank bends when held at height yg (or by its tip): quadratic up to the grab point, then straight.
+function bendShape(k, y, yg) {
+  const L = (yg ?? SHANKS[k - 1].tip) + SOLO_TOP, q = (y + SOLO_TOP) / L;
+  return q <= 1 ? q * q : 1 + 2 * (q - 1);
+}
+function rippleOffset(x, y, now) {                        // water rings push the picture outward
+  let dx = 0, dy = 0;
+  LIVE.ripples.forEach(r => {
+    const age = (now - r.t0) / 1000, dist = Math.hypot(x - r.x, y - r.y) || 1;
+    const u = dist - RIPPLE.speed * age;
+    const s = RIPPLE.amp * Math.exp(-((u / RIPPLE.width) ** 2)) * Math.exp(-age / RIPPLE.life)
+            / Math.sqrt(1 + dist / 150) * Math.sin(2 * Math.PI * u / RIPPLE.wavelength);
+    dx += s * (x - r.x) / dist;
+    dy += s * (y - r.y) / dist;
+  });
+  return [dx, dy];
+}
+
+function liveStart() {
+  if (current) return false;                              // an egg owns the stage right now
+  if (!LIVE.on) {
+    LIVE.on = true;
+    LIVE.last = performance.now();
+    ropesOn(true);
+    photoToRopes(1);
+    requestAnimationFrame(liveTick);
+  }
+  LIVE.still = 0;
+  return true;
+}
+function liveStop() {
+  LIVE.on = false;
+  LIVE.osc.forEach(o => { o.a = 0; o.v = 0; o.yg = null; });
+  LIVE.ripples = [];
+  LIVE.trail = [];
+  LIVE.held = null;
+  restorePhoto();
+}
+
+function liveTick(now) {
+  if (!LIVE.on) return;
+  const dt = Math.min(0.033, (now - LIVE.last) / 1000);
+  LIVE.last = now;
+  const zeta = touchMode === 'wind' ? 0.12 : 0.07;        // grass settles faster than a twanged string
+  for (let sub = 0; sub < 4; sub += 1) {
+    const h = dt / 4, a = LIVE.osc.map(o => o.a);
+    LIVE.osc.forEach((o, i) => {
+      if (LIVE.held && LIVE.held.k === i + 1) return;     // the one in your hand doesn't move by itself
+      let pull = 0;
+      if (i > 0) pull += a[i - 1] - a[i];
+      if (i < 7) pull += a[i + 1] - a[i];
+      const acc = -(LIVE_OMEGA ** 2) * o.a - 2 * zeta * LIVE_OMEGA * o.v + LIVE_COUPLE * pull;
+      o.v += acc * h;
+      o.a += o.v * h;
+    });
+  }
+  LIVE.ripples = LIVE.ripples.filter(r => now - r.t0 < 3000);
+  LIVE.trail = LIVE.trail.filter(p => now - p.t < 300);
+
+  ropeFrame();
+  for (let k = 1; k <= 8; k += 1) {
+    const o = LIVE.osc[k - 1], pts = [];
+    for (let y = -60; y <= SHANKS[k - 1].tip + 2; y += 4) {
+      const x = onShank(k, y) + o.a * bendShape(k, y, o.yg);
+      const [dx, dy] = LIVE.ripples.length ? rippleOffset(x, y, now) : [0, 0];
+      pts.push(x + dx, y + dy);
+    }
+    drawShankAlong(k, pts, -60, 4);
+  }
+  LIVE.ripples.forEach(r => {                              // the rings themselves, faint
+    const age = (now - r.t0) / 1000, fade = Math.exp(-age / RIPPLE.life);
+    [0, RIPPLE.wavelength].forEach(back => {
+      const R = RIPPLE.speed * age - back;
+      if (R <= 0) return;
+      rctx.beginPath();
+      rctx.arc(r.x, r.y, R, 0, 2 * Math.PI);
+      rctx.strokeStyle = `rgba(120, 170, 215, ${0.4 * fade})`;
+      rctx.lineWidth = 2;
+      rctx.stroke();
+    });
+  });
+  if (LIVE.trail.length > 1) {                             // wind streaks behind the pointer
+    rctx.lineCap = 'round';
+    for (let i = 1; i < LIVE.trail.length; i += 1) {
+      const p = LIVE.trail[i], q = LIVE.trail[i - 1], fade = 1 - (now - p.t) / 300;
+      rctx.strokeStyle = `rgba(140, 160, 185, ${0.45 * fade})`;
+      rctx.lineWidth = 3 * fade;
+      [-14, 0, 14].forEach(off => {
+        rctx.beginPath();
+        rctx.moveTo(q.x, q.y + off);
+        rctx.lineTo(p.x, p.y + off);
+        rctx.stroke();
+      });
+    }
+  }
+
+  // Everything still for a moment? Hand back to the real photo.
+  const moving = LIVE.held || LIVE.ripples.length || LIVE.trail.length
+               || LIVE.osc.some(o => Math.abs(o.a) > 0.15 || Math.abs(o.v) > 1);
+  LIVE.still = moving ? 0 : LIVE.still + dt;
+  if (LIVE.still > 0.3) { liveStop(); return; }
+  requestAnimationFrame(liveTick);
+}
+
+// A plucked-string sound (Karplus-Strong: a burst of noise fed back through a short delay).
+function twang(k, strength) {
+  audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+  const sr = audio.sampleRate, N = Math.round(sr / (NOTES[k - 1] / 2)), len = Math.floor(sr * 1.8);
+  const buf = audio.createBuffer(1, len, sr), d = buf.getChannelData(0);
+  for (let i = 0; i < N; i += 1) d[i] = Math.random() * 2 - 1;
+  d[N] = d[0] * 0.5;
+  for (let i = N + 1; i < len; i += 1) d[i] = 0.996 * 0.5 * (d[i - N] + d[i - N - 1]);
+  const src = audio.createBufferSource(), g = audio.createGain();
+  src.buffer = buf;
+  g.gain.value = 0.3 * strength;
+  src.connect(g).connect(audio.destination);
+  src.start();
+}
+
+function nearestShank(p, slack) {                         // like shankAt, but more forgiving for grabbing
+  let best = 0, bestD = SHANK_HALF_WIDTH + slack;
+  SHANKS.forEach((s, i) => {
+    const d = Math.abs(p.x - onShank(i + 1, p.y)) / Math.hypot(1, s.a);
+    if (p.y >= -10 && p.y <= s.tip + 6 && d < bestD) { best = i + 1; bestD = d; }
+  });
+  return best;
+}
+function liveDown(p) {
+  if (touchMode === 'ripple') {
+    if (liveStart()) LIVE.ripples.push({ x: p.x, y: p.y, t0: performance.now() });
+  } else if (touchMode === 'pluck') {
+    const k = nearestShank(p, 16);
+    if (!k || !liveStart()) return;
+    LIVE.held = { k, x0: onShank(k, p.y) };
+    Object.assign(LIVE.osc[k - 1], { yg: p.y, v: 0 });
+  }
+  LIVE.prev = { ...p, t: performance.now() };
+}
+function liveMove(p) {
+  const now = performance.now();
+  if (touchMode === 'pluck' && LIVE.held) {
+    LIVE.osc[LIVE.held.k - 1].a = Math.max(-110, Math.min(110, p.x - LIVE.held.x0));
+    LIVE.still = 0;
+  } else if (touchMode === 'wind' && LIVE.prev) {
+    const dts = Math.max(0.008, (now - LIVE.prev.t) / 1000);
+    const vx = Math.max(-4000, Math.min(4000, (p.x - LIVE.prev.x) / dts));
+    if (Math.abs(vx) > 60 && liveStart()) {
+      LIVE.trail.push({ x: p.x, y: p.y, t: now });
+      LIVE.osc.forEach((o, i) => {
+        const k = i + 1, tip = SHANKS[i].tip;
+        const near = Math.exp(-(((p.x - onShank(k, p.y)) / 70) ** 2));
+        const leverage = Math.max(0, (p.y + SOLO_TOP) / (tip + SOLO_TOP));
+        o.v += vx * 0.2 * near * leverage;
+        o.a = Math.max(-90, Math.min(90, o.a));
+      });
+    }
+  }
+  LIVE.prev = { ...p, t: now };
+}
+function liveUp() {
+  if (!LIVE.held) return;
+  const k = LIVE.held.k, pulled = Math.abs(LIVE.osc[k - 1].a);
+  LIVE.held = null;                                       // let go: it twangs
+  if (pluckSound && pulled > 4) twang(k, Math.min(1, pulled / 80));
+}
+
+function setTouchMode(mode) {
+  touchMode = mode;
+  document.body.classList.toggle('touchlive', mode === 'pluck' || mode === 'wind');
+  document.querySelectorAll('#touchModes button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  document.getElementById('touchHelp').textContent = TOUCH_HELP[mode];
+  document.getElementById('soundBtn').hidden = mode !== 'pluck';
+}
+const touchModes = document.getElementById('touchModes');
+Object.keys(TOUCH_HELP).forEach(mode => {
+  const b = document.createElement('button');
+  b.dataset.mode = mode;
+  b.textContent = mode[0].toUpperCase() + mode.slice(1);
+  b.onclick = () => setTouchMode(mode);
+  touchModes.appendChild(b);
+});
+document.getElementById('soundBtn').onclick = e => {
+  pluckSound = !pluckSound;
+  e.target.textContent = `Pluck sound: ${pluckSound ? 'on' : 'off'}`;
+};
+setTouchMode('lights');
+
+
+window.addEventListener('keydown', ev => {
+  if (piano && ev.key >= '1' && ev.key <= '8' && !ev.repeat) strike(+ev.key);
+});
+
+// Light-show eggs set each overlay's opacity directly (never dimmer than a shank you clicked on).
+function drawLights(egg, t) {
+  glowImgs.forEach((im, i) => {
+    im.style.transition = 'none';
+    im.style.opacity = Math.max(egg.level(i + 1, t), im.classList.contains('lit') ? 1 : 0);
+  });
+}
+function clearLights() {
+  glowImgs.forEach(im => { im.style.transition = ''; im.style.opacity = ''; });
+}
+document.getElementById('allOff').onclick = () => { glowImgs.forEach(g => g.classList.remove('lit')); showLit(); };
+document.getElementById('pianoBtn').onclick = () => setPiano(!piano);
+let lightSustain = false;
+document.getElementById('sustainBtn').onclick = e => {
+  lightSustain = !lightSustain;
+  e.target.textContent = `Sustain: ${lightSustain ? 'on' : 'off'}`;
+  e.target.classList.toggle('on', lightSustain);
+};
+function showLit() {
+  const lit = glowImgs.map((g, i) => g.classList.contains('lit') ? i + 1 : null).filter(Boolean);
+  document.getElementById('litList').textContent = lit.join(', ') || 'none';
+  document.getElementById('cardLights').classList.toggle('active', lit.length > 0 && !piano);
+}
+// Remember whether each box is open (per browser; ignored if storage is blocked).
+document.querySelectorAll('details.box').forEach(box => {
+  try { if (localStorage.getItem(`egglab.${box.id}`) === 'closed') box.open = false; } catch (e) { /* blocked */ }
+  box.addEventListener('toggle', () => {
+    try { localStorage.setItem(`egglab.${box.id}`, box.open ? 'open' : 'closed'); } catch (e) { /* blocked */ }
+  });
+});
+
+// Debug URL options for checking stills: ?egg=poleFall&t=4200 (freeze that egg at t ms)
+// plus &zoom=1, &xray=1, and &lit=1,4,8 (shanks lit up).
+const params = new URLSearchParams(location.search);
+if (params.has('xray')) document.getElementById('xray').click();
+if (params.has('zoom')) document.getElementById('zoom').click();
+if (params.has('lit')) { params.get('lit').split(',').forEach(k => glowImgs[k - 1].classList.add('lit')); showLit(); }
+if (params.has('egg')) {
+  const egg = EGGS[params.get('egg')];
+  frozen = true;
+  if (egg.prepare) egg.prepare();
+  if (egg.enter) egg.enter();
+  renderAt(egg, +params.get('t') || 0);
+  addEventListener('load', () => renderAt(egg, +params.get('t') || 0));   // again once images are in
+  status(`frozen: ${egg.name} at t = ${params.get('t')} ms`);
+}
+
+// Player: once every image is in and the big scenes are built, say "ready"; on "play", play one
+// random egg (animations only; never the same one as &avoid=NAME, the parent's last egg).
+if (PLAYER) {
+  addEventListener('load', () => {
+    EGGS.catComb.scene = EGGS.catComb.scene || buildCatScene();
+    EGGS.pasta.scene = EGGS.pasta.scene || buildPastaScene();
+    parent.postMessage({ type: 'egglab-ready' }, '*');
+  });
+  addEventListener('message', ev => {
+    if (ev.data?.type !== 'egglab-play' || current) return;
+    const pool = Object.keys(EGGS).filter(n => !EGGS[n].hidden && n !== params.get('avoid'));
+    const name = EGGS[ev.data.name] && !EGGS[ev.data.name].hidden ? ev.data.name
+               : pool[Math.floor(Math.random() * pool.length)];
+    play(EGGS[name], 'home');
+    parent.postMessage({ type: 'egglab-playing', name, ms: EGGS[name].duration }, '*');
+  });
+}
+</script>
+</body>
+</html>
