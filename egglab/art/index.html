@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><title>Drawing Kit</title>
+<style>
+  body { margin: 0 auto; max-width: 1000px; padding: 16px; font: 15px/1.45 system-ui, sans-serif; color: #222; background: #f4f4f2; }
+  h1 { margin: 8px 0 4px; } h2 { margin: 28px 0 4px; } h2 small { font-weight: normal; color: #777; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  figure { margin: 0; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 8px; }
+  .box { width: 100%; outline: 1px dashed #c9c9c9;
+          background: repeating-conic-gradient(#f2f2f2 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
+  .box img { width: 100%; height: 100%; display: block; }
+  figcaption { margin-top: 6px; font-size: 13px; } small { color: #666; }
+  .rules { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 4px 16px; }
+</style></head><body>
+<h1>Drawing kit</h1>
+<p>29 frames. Each one is a simple stand-in that can be swapped for a real drawing. The dashed box is
+the frame's edge; the checkerboard is transparent.</p>
+<div class="rules"><p><b>To redraw one:</b> same box shape (peeker 5:7, others square), transparent PNG,
+4x size or more, same facing and framing as the stand-in (trace it). Save it next to the stand-in with the same
+name (<code>pole/walk_a.png</code>) and list it in <code>custom.js</code>. Frames ending in _a/_b alternate
+quickly, so draw them as a pair. Full rules: README.md.</p></div>
+<h2>peeker/ <small>6 frames, box 50 x 70</small></h2>
+<p>The peeking guy: hides behind a shank and peeks out. Only the part on the near side of the shank shows, so draw him whole, in the same pose and on the same side of the box as the stand-in.</p>
+<div class="grid">
+<figure><div class="box" style="aspect-ratio:50/70"><img src="peeker/f0_sneak.svg" alt=""></div><figcaption><b>peeker/f0_sneak</b><br><small>peekNwave</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:50/70"><img src="peeker/f1_peek_up.svg" alt=""></div><figcaption><b>peeker/f1_peek_up</b><br><small>peekNwave</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:50/70"><img src="peeker/f2_look.svg" alt=""></div><figcaption><b>peeker/f2_look</b><br><small>peekNwave</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:50/70"><img src="peeker/f3_wave_a.svg" alt=""></div><figcaption><b>peeker/f3_wave_a</b><br><small>peekNwave (swaps with f4 every 0.2 s)</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:50/70"><img src="peeker/f4_wave_b.svg" alt=""></div><figcaption><b>peeker/f4_wave_b</b><br><small>peekNwave</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:50/70"><img src="peeker/f5_blink.svg" alt=""></div><figcaption><b>peeker/f5_blink</b><br><small>peekNwave</small></figcaption></figure>
+</div><h2>pole/ <small>20 frames, box 70 x 70</small></h2>
+<p>The fireman guy: slides down a shank, lands or falls, walks, crawls, plucks a shank.</p>
+<div class="grid">
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/crawl_a.svg" alt=""></div><figcaption><b>pole/crawl_a</b><br><small>poleFall (swaps with crawl_b)</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/crawl_b.svg" alt=""></div><figcaption><b>pole/crawl_b</b><br><small>poleFall</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/crouch.svg" alt=""></div><figcaption><b>pole/crouch</b><br><small>poleLand</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/dazed_a.svg" alt=""></div><figcaption><b>pole/dazed_a</b><br><small>poleFall (cycles a-b-c)</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/dazed_b.svg" alt=""></div><figcaption><b>pole/dazed_b</b><br><small>poleFall</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/dazed_c.svg" alt=""></div><figcaption><b>pole/dazed_c</b><br><small>poleFall</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/fall_a.svg" alt=""></div><figcaption><b>pole/fall_a</b><br><small>poleFall (swaps with fall_b)</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/fall_b.svg" alt=""></div><figcaption><b>pole/fall_b</b><br><small>poleFall</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/hop.svg" alt=""></div><figcaption><b>pole/hop</b><br><small>poleLand</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/pluck_pull.svg" alt=""></div><figcaption><b>pole/pluck_pull</b><br><small>shankPluck</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/pluck_reach.svg" alt=""></div><figcaption><b>pole/pluck_reach</b><br><small>shankPluck</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/pluck_sit.svg" alt=""></div><figcaption><b>pole/pluck_sit</b><br><small>shankPluck</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/pluck_watch.svg" alt=""></div><figcaption><b>pole/pluck_watch</b><br><small>shankPluck</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/pushup.svg" alt=""></div><figcaption><b>pole/pushup</b><br><small>poleFall</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/slide_a.svg" alt=""></div><figcaption><b>pole/slide_a</b><br><small>poleLand, poleFall (swaps with slide_b every 0.09 s)</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/slide_b.svg" alt=""></div><figcaption><b>pole/slide_b</b><br><small>poleLand, poleFall</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/splat.svg" alt=""></div><figcaption><b>pole/splat</b><br><small>poleFall</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/tada.svg" alt=""></div><figcaption><b>pole/tada</b><br><small>poleLand</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/walk_a.svg" alt=""></div><figcaption><b>pole/walk_a</b><br><small>poleLand, shankPluck (swaps with walk_b every 0.17 s; mirrored when walking the other way)</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="pole/walk_b.svg" alt=""></div><figcaption><b>pole/walk_b</b><br><small>poleLand, shankPluck</small></figcaption></figure>
+</div><h2>ski/ <small>3 frames, box 70 x 70</small></h2>
+<p>The skier: SkiFree-style slalom down the photo.</p>
+<div class="grid">
+<figure><div class="box" style="aspect-ratio:70/70"><img src="ski/ski_down.svg" alt=""></div><figcaption><b>ski/ski_down</b><br><small>skiFree</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="ski/ski_side.svg" alt=""></div><figcaption><b>ski/ski_side</b><br><small>skiFree (mirrored for the other direction)</small></figcaption></figure>
+<figure><div class="box" style="aspect-ratio:70/70"><img src="ski/ski_turn.svg" alt=""></div><figcaption><b>ski/ski_turn</b><br><small>skiFree</small></figcaption></figure>
+</div>
+<h2>Drawn by code for now</h2>
+<ul><li><b>catComb</b>: the sleeping cat, its fur, the comb&#x27;s spine</li>
+<li><b>pasta</b>: the giant fork, the guy eating, his hand</li>
+<li><b>galton</b>: the pegs, beads and slots</li>
+<li><b>fillUp</b>: the water</li>
+<li><b>sheetFall</b>: nothing: the paper is the photo itself</li>
+<li><b>light shows, shankShuffle, noodleDrop</b>: nothing: they move the photo&#x27;s own shanks</li></ul>
+</body></html>

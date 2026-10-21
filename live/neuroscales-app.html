@@ -1,0 +1,2414 @@
+<title>Neuroscales</title>
+<meta name="description" content="Zoom from a whole nervous system down to a single ion, and see which methods can look at each scale.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&display=swap">
+<style>
+/* Layout: two linked instruments on one shared scale: the dive (left) and the methods map (right). */
+:root{
+  --bg:#eef1f3; --panel:#fafbfb; --ink:#13171b; --ink2:#46515b; --ink3:#87929b; --rule:#d5dbe0;
+  --accent:#6a43e0; --accent-soft:rgba(106,67,224,.13);
+  --tissue:#e6eaed; --protein:#e3cfa8; --lipid:#9db2c2;
+  --c-ephys:#2a78d6; --c-struct:#eb6834; --c-optical:#1baf7a; --c-macro:#eda100; --c-perturb:#e87ba4;
+  --f-display:"Newsreader", Georgia, "Times New Roman", serif;
+  --f-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1013; --panel:#12171b; --ink:#e2e7eb; --ink2:#a3adb6; --ink3:#66717a; --rule:#252d33;
+    --accent:#a08aff; --accent-soft:rgba(160,138,255,.16);
+    --tissue:#1a2126; --protein:#6b5a40; --lipid:#4c6172;
+    --c-ephys:#3987e5; --c-struct:#d95926; --c-optical:#199e70; --c-macro:#c98500; --c-perturb:#d55181;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1013; --panel:#12171b; --ink:#e2e7eb; --ink2:#a3adb6; --ink3:#66717a; --rule:#252d33;
+  --accent:#a08aff; --accent-soft:rgba(160,138,255,.16);
+  --tissue:#1a2126; --protein:#6b5a40; --lipid:#4c6172;
+  --c-ephys:#3987e5; --c-struct:#d95926; --c-optical:#199e70; --c-macro:#c98500; --c-perturb:#d55181;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:14px;line-height:1.5;margin:0;padding-inline:clamp(16px,2.5vw,32px);padding-block:20px 28px}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:16px}
+.brand h1{font-family:var(--f-display);font-weight:400;font-style:italic;font-size:clamp(30px,4vw,44px);line-height:1;margin:0;letter-spacing:-.01em}
+.brand h1 span{font-style:normal;font-family:var(--f-mono);font-size:.32em;letter-spacing:.08em;color:var(--ink3);vertical-align:middle;margin-left:.6em}
+.brand p{margin:6px 0 0;color:var(--ink2);max-width:62ch;text-wrap:pretty}
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--rule);background:var(--panel);border-radius:6px;padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-size:13px}
+.btn:hover{border-color:var(--ink3)}
+.btn.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.btn.primary:hover{opacity:.9}
+.btn svg{width:12px;height:12px}
+.pathsel{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3);font-family:var(--f-mono);letter-spacing:.04em}
+.pathsel select{font:inherit;font-family:var(--f-body);font-size:13px;letter-spacing:0;color:var(--ink);background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:6px 8px;cursor:pointer}
+
+.stage{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){.stage{grid-template-columns:minmax(0,1fr)}}
+.pane{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:14px 16px 16px;min-width:0}
+
+.dive-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.lvl{display:flex;align-items:baseline;gap:12px;min-width:0}
+.lvl-idx{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.lvl h2{font-family:var(--f-display);font-style:italic;font-weight:400;font-size:28px;line-height:1.1;margin:0}
+.fov{font-family:var(--f-mono);font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.fov b{font-weight:500;color:var(--ink)}
+
+.dive-body{display:grid;grid-template-columns:92px minmax(0,1fr);gap:10px}
+@media (max-width:560px){.dive-body{grid-template-columns:minmax(0,1fr)}.ladder{display:none}}
+.ladder{position:relative;user-select:none;touch-action:none;cursor:ns-resize}
+.ladder::before{content:"";position:absolute;right:6px;top:0;bottom:0;width:1px;background:var(--rule)}
+.lad-item{position:absolute;right:0;transform:translateY(-50%);display:flex;align-items:center;gap:6px;background:none;border:0;padding:2px 0;cursor:pointer;text-align:right;color:var(--ink2)}
+.lad-item .nm{font-size:12px;line-height:1.1}
+.lad-item .sz{display:block;font-family:var(--f-mono);font-size:10px;color:var(--ink3)}
+.lad-item .tick{width:13px;height:1px;background:var(--ink3);flex:none}
+.lad-item:hover .nm,.lad-item.on .nm{color:var(--ink)}
+.lad-item.on .tick{background:var(--accent);height:2px}
+.lad-thumb{position:absolute;right:0;width:24px;height:0;border-top:2px solid var(--accent);pointer-events:none}
+.lad-thumb::after{content:"";position:absolute;right:3px;top:-6px;width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--panel)}
+
+.canvas-wrap{position:relative;min-width:0}
+#cv{display:block;width:100%;aspect-ratio:1/1;border-radius:6px;touch-action:none;cursor:zoom-in;background:var(--panel)}
+.footprint{position:absolute;left:8px;right:8px;bottom:8px;font-size:12px;line-height:1.4;padding:7px 10px;border-radius:6px;background:color-mix(in srgb,var(--panel) 88%,transparent);border:1px solid var(--rule);color:var(--ink2);backdrop-filter:blur(4px)}
+.footprint b{color:var(--ink);font-weight:600}
+.hint{position:absolute;top:8px;right:8px;font-size:11px;color:var(--ink3);background:color-mix(in srgb,var(--panel) 85%,transparent);padding:3px 7px;border-radius:4px;pointer-events:none}
+
+.caption{margin:12px 0 0;max-width:68ch;text-wrap:pretty}
+.process{margin:8px 0 0;font-size:12.5px;color:var(--ink2);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.process .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;align-self:center}
+.process .slow{font-family:var(--f-mono);font-size:11px;color:var(--ink3)}
+
+.m-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px 16px;flex-wrap:wrap;margin-bottom:6px}
+.m-head h2{font-family:var(--f-display);font-weight:400;font-size:24px;margin:0;line-height:1.15}
+.m-head h2 em{font-style:italic}
+.legend{display:flex;flex-wrap:wrap;gap:4px 6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:none;border-radius:999px;padding:2px 9px 2px 7px;font-size:12px;cursor:pointer;color:var(--ink2)}
+.chip i{width:9px;height:9px;border-radius:3px;flex:none}
+.chip[aria-pressed="false"]{opacity:.45}
+.chip[aria-pressed="false"] i{background:transparent!important;outline:1.5px solid var(--ink3)}
+.chart-wrap{position:relative;overflow-x:auto}
+#chart{display:block;width:100%;height:auto;min-width:440px;user-select:none;touch-action:none}
+#chart text{font-family:var(--f-body)}
+#chart .ax{font-family:var(--f-mono);font-size:10px;fill:var(--ink3)}
+#chart .axn{font-size:11px;fill:var(--ink2)}
+#chart .lvln{font-size:11.5px;fill:var(--ink2);cursor:pointer}
+#chart .lvln:hover,#chart .lvln.on{fill:var(--ink);font-weight:600}
+#chart .grid{stroke:var(--rule);stroke-width:1}
+#chart .mbox rect{cursor:pointer;transition:opacity .2s}
+#chart .mlab{font-size:10.5px;fill:var(--ink);pointer-events:none;paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;transition:opacity .2s}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--panel);font-size:12px;line-height:1.35;padding:6px 9px;border-radius:5px;max-width:240px;z-index:3}
+.tip b{display:block;font-weight:600}
+.tip span{opacity:.8;font-family:var(--f-mono);font-size:10.5px}
+
+.detail{margin-top:10px;min-height:120px}
+.detail h3{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);font-weight:500;margin:0 0 8px;font-family:var(--f-mono)}
+.mlist{display:flex;flex-wrap:wrap;gap:6px}
+.mlist .chip{color:var(--ink)}
+.card{border:1px solid var(--rule);border-radius:8px;padding:12px 14px;display:grid;gap:8px}
+.card-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;justify-content:space-between}
+.card h4{margin:0;font-family:var(--f-display);font-size:22px;font-weight:500;line-height:1.1}
+.fam{font-size:11px;font-family:var(--f-mono);letter-spacing:.05em;text-transform:uppercase;display:inline-flex;gap:6px;align-items:center;color:var(--ink2)}
+.fam i{width:9px;height:9px;border-radius:3px}
+.card p{margin:0;max-width:62ch;text-wrap:pretty}
+.ranges{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:12.5px}
+.ranges dt{color:var(--ink3)}
+.ranges dd{margin:0;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.card-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+footer{margin-top:16px;color:var(--ink3);font-size:12px;max-width:110ch}
+footer p{margin:0}
+@media (prefers-reduced-motion: reduce){#chart .mbox rect,#chart .mlab{transition:none}}
+</style>
+
+<header class="top">
+  <div class="brand">
+    <h1>Neuroscales<span>1 m → 0.1 nm</span></h1>
+    <p>Zoom from a whole nervous system down to a single potassium ion. The map on the right shows which methods can see the scale you're looking at. Hover over a brain region to choose a path, and click a method to jump to the scales it covers.</p>
+  </div>
+  <div class="controls">
+    <label class="pathsel" for="species">Species <select id="species"><option value="human">Human</option><option value="rat">Rat</option></select></label>
+    <label class="pathsel" for="path">Path <select id="path"><option value="vision">Vision · V1</option><option value="movement">Movement · M1</option><option value="touch">Touch · S1</option><option value="planning">Planning · prefrontal</option><option value="memory">Memory · hippocampus</option><option value="muscle">Muscle · neuromuscular junction</option><option value="skin">Skin · fingertip touch</option></select></label>
+    <button class="btn primary" id="btn-dive" type="button"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z" fill="currentColor"/></svg><span>Dive</span></button>
+    <button class="btn" id="btn-top" type="button">Back to the top</button>
+    <button class="btn" id="btn-motion" type="button" aria-pressed="false">Pause motion</button>
+  </div>
+</header>
+
+<main class="stage">
+<p class="wip-note">This page is still being written.</p>
+  <section class="pane dive" aria-label="Zoomable view of the nervous system">
+    <div class="dive-head">
+      <div class="lvl"><span class="lvl-idx" id="lvl-idx">Level 1 / 10</span><h2 id="lvl-name">Nervous system</h2></div>
+      <div class="fov">field of view <b id="fov">2.4 m</b></div>
+    </div>
+    <div class="dive-body">
+      <div class="ladder" id="ladder" role="slider" aria-label="Zoom level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0"><div class="lad-thumb" id="lad-thumb"></div></div>
+      <div class="canvas-wrap" id="cwrap">
+        <canvas id="cv" tabindex="0" aria-label="Zoomable scene. Scroll, drag up and down, or use the arrow keys to zoom."></canvas>
+        <div class="hint" id="hint">scroll or drag to zoom</div>
+        <div class="footprint" id="footprint" hidden></div>
+      </div>
+    </div>
+    <p class="caption" id="caption"></p>
+    <p class="process" id="process"></p>
+  </section>
+
+  <section class="pane methods" aria-label="Methods across scales of space and time">
+    <div class="m-head">
+      <h2>Who can see <em>this</em> scale?</h2>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="chart-wrap" id="chart-wrap">
+      <svg id="chart" viewBox="0 0 640 560" role="img" aria-label="Methods plotted by the range of sizes (vertical) and times (horizontal) they can measure"></svg>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+    <div class="detail" id="detail"></div>
+  </section>
+</main>
+
+<footer>
+  <p>Method ranges are rough, redrawn after Churchland &amp; Sejnowski (<i>Science</i> 1988) and Sejnowski, Churchland &amp; Movshon (<i>Nature Neuroscience</i> 2014), then extended with newer and molecular-scale methods. Vertical: the smallest detail a method resolves up to the largest region it covers. Horizontal: its finest time resolution up to the longest span it can follow. Scenes are schematic, drawn roughly to scale. Switch between human and rat anatomy at the top. Much of the human physiology shown was first worked out in rats, mice and monkeys.</p>
+</footer>
+
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const L10 = Math.log10, TAU = Math.PI * 2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = t => t * t * (3 - 2 * t);
+const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function hash(a, b, c = 0) { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 1274126177)) | 0; h = Math.imul(h ^ (h >>> 15), 2246822519); h = Math.imul(h ^ (h >>> 13), 3266489917); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+function hsl2rgb(h, s, l) { const f = n => { const k = (n + h * 12) % 12, a = s * Math.min(l, 1 - l); return 255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))); }; return [f(0), f(8), f(4)]; }
+function withA(hex, a) { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+
+// ---------- tokens ----------
+const C = {};
+const FB = '"IBM Plex Sans", system-ui, sans-serif', FM = '"IBM Plex Mono", ui-monospace, monospace';
+function readTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['bg', 'panel', 'ink', 'ink2', 'ink3', 'rule', 'accent', 'tissue', 'protein', 'lipid', 'c-ephys', 'c-struct', 'c-optical', 'c-macro', 'c-perturb'])
+    C[k] = cs.getPropertyValue('--' + k).trim();
+}
+readTokens();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTokens(); dirty = true; });
+new MutationObserver(() => { readTokens(); dirty = true; }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ---------- geometry helpers ----------
+function smoothPath(pts, closed = true, p = new Path2D()) {
+  const n = pts.length, g = i => pts[closed ? (i + n) % n : clamp(i, 0, n - 1)];
+  p.moveTo(pts[0][0], pts[0][1]);
+  const m = closed ? n : n - 1;
+  for (let i = 0; i < m; i++) {
+    const p0 = g(i - 1), p1 = g(i), p2 = g(i + 1), p3 = g(i + 2);
+    p.bezierCurveTo(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6, p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6, p2[0], p2[1]);
+  }
+  if (closed) p.closePath();
+  return p;
+}
+function along(pts, u) {
+  let tot = 0; const ls = [];
+  for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); ls.push(l); tot += l; }
+  let d = clamp(u, 0, 1) * tot;
+  for (let i = 0; i < ls.length; i++) {
+    if (d <= ls[i] || i === ls.length - 1) { const f = ls[i] ? d / ls[i] : 0, a = pts[i], b = pts[i + 1]; return { x: lerp(a[0], b[0], f), y: lerp(a[1], b[1], f), tx: (b[0] - a[0]) / (ls[i] || 1), ty: (b[1] - a[1]) / (ls[i] || 1) }; }
+    d -= ls[i];
+  }
+}
+const scratch = document.createElement('canvas').getContext('2d');
+const inside = (path, x, y) => scratch.isPointInPath(path, x, y);
+function circ(ctx, x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); }
+function glow(ctx, x, y, r, col, a = 1) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, withA(col, .95 * a)); g.addColorStop(.3, withA(col, .5 * a)); g.addColorStop(1, withA(col, 0));
+  ctx.fillStyle = g; circ(ctx, x, y, r); ctx.fill();
+}
+function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function capsule(ctx, cx, cy, len, wid, ang) { // rotated rounded bar
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); rrect(ctx, -wid / 2, -len / 2, wid, len, wid / 2); ctx.restore();
+}
+
+// labels drawn in screen pixels so text stays crisp at any zoom
+function label(env, text, x, y, o = {}) {
+  const la = env.la * (o.alpha ?? 1); if (la <= .01) return;
+  const { ctx } = env;
+  const sx = env.ox + x * env.k + (o.dx || 0), sy = env.oy + y * env.k + (o.dy || 0);
+  ctx.save(); ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = la;
+  ctx.font = `${o.italic ? 'italic ' : ''}${o.weight || 400} ${o.size || 12}px ${o.mono ? FM : FB}`;
+  const w = ctx.measureText(text).width, al = o.align || 'left';
+  const x0 = clamp(al === 'right' ? sx - w : al === 'center' ? sx - w / 2 : sx, 4, env.S - w - 4);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = C.panel; ctx.strokeText(text, x0, sy);
+  ctx.fillStyle = o.color || C.ink2; ctx.fillText(text, x0, sy); ctx.restore();
+}
+function callout(env, text, tx, ty, lx, ly, o = {}) {
+  const la = env.la * (o.alpha ?? 1); if (la <= .01) return;
+  const { ctx } = env, P = n => n / env.k;
+  ctx.save(); ctx.globalAlpha = la; ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1);
+  ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(lx, ly); ctx.stroke();
+  ctx.fillStyle = C.ink3; circ(ctx, tx, ty, P(2.2)); ctx.fill(); ctx.restore();
+  const left = lx < tx;
+  label(env, text, lx, ly, { ...o, align: left ? 'right' : 'left', dx: left ? -5 : 5 });
+}
+
+// ---------- the ten levels ----------
+// Each level draws in its own units: 1 unit = the level's home field of view (w, meters).
+// `focal` is where the next level sits, in this level's units; the camera glides there.
+const STEP = 0.8; // seconds per ion hop (shared by channel + filter so they stay in sync)
+function convT(t) { const s = Math.floor(t / STEP), f = t / STEP - s; return s + (f < .5 ? 0 : smooth((f - .5) / .5)); }
+
+const OLD = [
+// 0 ── nervous system
+{ id: 'cns', name: 'Nervous system', short: 'CNS', w: 2.4, size: 0, focal: [0, -0.322],
+  caption: 'Brain, spinal cord and the nerves that reach every part of the body. Everything further down happens somewhere inside this.',
+  proc: { text: 'a motor command travels from brain to hand in about 20 ms', t: -1.7, slow: 'shown ~50× slower' },
+  init() {
+    const R = rng(11);
+    const half = [[.022, -.272], [.06, -.256], [.095, -.24], [.118, -.205], [.128, -.13], [.133, -.05], [.142, .03], [.152, .085], [.148, .115], [.13, .112], [.122, .06], [.112, -.03], [.102, -.12], [.084, -.17], [.074, -.1], [.072, -.02], [.08, .05], [.082, .12], [.072, .24], [.062, .335], [.074, .36], [.03, .366], [.028, .34], [.03, .22], [.016, .1], [0, .086]];
+    const left = half.slice(0, -1).map(([x, y]) => [-x, y]).reverse();
+    this.outline = smoothPath([...half, ...left]);
+    const nerves = [{ pts: [[0, -.296], [0, -.2], [0, -.1], [0, 0], [0, .045]], w: 2.4 }];
+    for (const s of [1, -1]) {
+      const arm = [[0, -.245], [s * .05, -.238], [s * .095, -.222], [s * .112, -.17], [s * .118, -.1], [s * .124, -.03], [s * .134, .04], [s * .14, .1]];
+      const arm2 = [[s * .095, -.222], [s * .104, -.15], [s * .11, -.06], [s * .12, .02], [s * .128, .09]];
+      const leg = [[0, .045], [s * .028, .075], [s * .044, .12], [s * .05, .2], [s * .048, .27], [s * .05, .33], [s * .056, .356]];
+      const leg2 = [[s * .044, .12], [s * .038, .2], [s * .034, .28], [s * .038, .345]];
+      nerves.push({ pts: arm, w: 1.4 }, { pts: arm2, w: 1 }, { pts: leg, w: 1.5 }, { pts: leg2, w: 1 });
+      for (let j = 0; j < 8; j++) { const y = -.205 + j * .025; nerves.push({ pts: [[0, y], [s * .03, y + .007], [s * .052, y + .018], [s * .066, y + .034]], w: .8 }); }
+      for (const lim of [arm, arm2, leg, leg2]) for (let q = 0; q < 6; q++) {
+        const p = along(lim, .12 + .85 * R()); const sg = R() < .5 ? 1 : -1, a = Math.atan2(p.ty, p.tx) + sg * (.45 + R() * .5), l = .012 + R() * .022;
+        nerves.push({ pts: [[p.x, p.y], [p.x + Math.cos(a) * l * .5, p.y + Math.sin(a) * l * .5], [p.x + Math.cos(a + sg * .25) * l, p.y + Math.sin(a + sg * .25) * l]], w: .6 });
+      }
+      if (s === 1) this.route = [[0, -.322], [0, -.296], ...arm];
+    }
+    this.nerves = nerves.map(n => ({ p: smoothPath(n.pts, false), w: n.w }));
+    const g = []; for (let j = 0; j < 9; j++) { const a = R() * TAU, r = R() * .022; g.push([Math.cos(a) * r, -.322 + Math.sin(a) * r * .8, R() * TAU]); }
+    this.gyri = g;
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.fillStyle = C.tissue; ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1);
+    ctx.fill(this.outline); ctx.stroke(this.outline);
+    circ(ctx, 0, -.318, .046); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, -.322, .036, .029, 0, 0, TAU); ctx.fillStyle = C.panel; ctx.fill();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.3); ctx.stroke();
+    ctx.lineWidth = P(.8); ctx.strokeStyle = C.ink2;
+    for (const [x, y, a] of this.gyri) { ctx.beginPath(); ctx.arc(x, y, .008, a, a + 2.2); ctx.stroke(); }
+    ctx.strokeStyle = C.ink;
+    for (const n of this.nerves) { ctx.lineWidth = P(n.w); ctx.stroke(n.p); }
+    const ph = (env.t % 2.4) / 1.2;
+    if (ph < 1) { const p = along(this.route, smooth(ph)); glow(ctx, p.x, p.y, P(14), C.accent); }
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1);
+    ctx.beginPath(); ctx.moveTo(-.24, -.364); ctx.lineTo(-.24, .366); ctx.moveTo(-.25, -.364); ctx.lineTo(-.23, -.364); ctx.moveTo(-.25, .366); ctx.lineTo(-.23, .366); ctx.stroke();
+    label(env, '1.75 m', -.25, 0, { align: 'right', mono: true, size: 11, dx: -4 });
+    callout(env, 'brain', .03, -.335, .2, -.37);
+    callout(env, 'spinal cord', 0, -.13, .2, -.13);
+    callout(env, 'peripheral nerves', .05, .25, .2, .25);
+  } },
+
+// 1 ── brain
+{ id: 'brain', name: 'Brain', short: 'Brain', w: 0.2, size: -0.8, focal: [0.392, -0.005],
+  caption: 'About 86 billion neurons folded into a 15 cm organ. Hover over a region and zoom in (or click it) to pick a path: vision, movement and touch, planning, or memory.',
+  proc: { text: 'the blood-flow (BOLD) response peaks ~5 s after neurons fire', t: .7, slow: 'shown in real time' },
+  init() {
+    const R = rng(3);
+    const pts = [[-.42, -.02], [-.41, -.12], [-.35, -.22], [-.24, -.29], [-.1, -.325], [.05, -.325], [.19, -.295], [.31, -.23], [.39, -.13], [.425, -.03], [.42, .05], [.38, .1], [.3, .12], [.18, .14], [.05, .17], [-.08, .17], [-.18, .14], [-.235, .08], [-.25, .03], [-.3, .06], [-.37, .05]];
+    this.outline = smoothPath(pts);
+    this.stem = smoothPath([[.03, .15], [.13, .14], [.14, .25], [.125, .42], [.065, .42], [.055, .25]]);
+    this.sulci = [
+      [[-.02, -.325], [0, -.25], [.03, -.17], [.02, -.1], [.05, -.03]],
+      [[-.08, -.315], [-.06, -.24], [-.03, -.16], [-.04, -.09], [-.02, -.04]],
+      [[.05, -.32], [.07, -.25], [.1, -.17], [.09, -.1], [.12, -.05]],
+      [[-.25, .03], [-.12, 0], [0, -.02], [.12, -.05], [.2, -.1]],
+      [[-.17, .09], [-.05, .07], [.08, .05], [.2, 0], [.28, -.05]],
+      [[.355, -.13], [.335, -.05], [.34, .03], [.36, .1]],
+      [[.29, -.24], [.32, -.16]],
+    ].map(s => smoothPath(s, false));
+    const squig = [];
+    for (let n = 0; n < 70; n++) {
+      let x, y, tries = 0; do { x = -.42 + R() * .84; y = -.32 + R() * .48; } while (!inside(this.outline, x, y) && ++tries < 50);
+      let a = R() * TAU; const p = [[x, y]];
+      for (let i = 0; i < 6; i++) { a += (R() - .5) * 1.6; x += Math.cos(a) * .02; y += Math.sin(a) * .02; p.push([x, y]); }
+      squig.push(smoothPath(p, false));
+    }
+    this.squig = squig;
+    this.v1 = smoothPath([[.355, -.135], [.43, -.12], [.44, .02], [.4, .1], [.36, .1], [.335, .03], [.335, -.05]]);
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.fillStyle = C.tissue; ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.4);
+    ctx.fill(this.stem); ctx.stroke(this.stem);
+    ctx.beginPath(); ctx.ellipse(.27, .165, .135, .075, -.1, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.save(); ctx.beginPath(); ctx.ellipse(.27, .165, .135, .075, -.1, 0, TAU); ctx.clip();
+    ctx.lineWidth = P(.8); ctx.strokeStyle = C.ink3;
+    for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.ellipse(.27, .175 + i * .013, .15, .04, -.1, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke(); }
+    ctx.restore();
+    ctx.fillStyle = C.tissue; ctx.fill(this.outline);
+    ctx.save(); ctx.clip(this.outline);
+    ctx.fillStyle = withA(C.accent, .1); ctx.fill(this.v1);
+    const tau = env.t % 10, hrf = tau < .2 ? 0 : Math.pow(tau / 5, 5) * Math.exp(5 - tau);
+    for (const [x, y, s] of (GLOW[choice.brain] || [])) glow(ctx, x, y, .075 * s, C.accent, .8 * hrf);
+    ctx.lineWidth = P(.8); ctx.strokeStyle = C.ink3;
+    for (const s of this.squig) ctx.stroke(s);
+    ctx.lineWidth = P(1.6); ctx.strokeStyle = C.ink2;
+    for (const s of this.sulci) ctx.stroke(s);
+    ctx.restore();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.6); ctx.stroke(this.outline);
+    const o = { size: 12, italic: true, color: C.ink3 };
+    label(env, 'frontal', -.25, -.15, o); label(env, 'parietal', .14, -.22, o);
+    label(env, 'temporal', -.06, .11, o); label(env, 'cerebellum', .27, .18, { ...o, align: 'center' });
+    label(env, 'V1', .4, -.06, { mono: true, size: 11, color: C.ink, align: 'center' });
+    label(env, 'MT', .24, -.05, { mono: true, size: 10, align: 'center' });
+    label(env, 'V4', .29, .04, { mono: true, size: 10, align: 'center' });
+  } },
+
+// 2 ── cortical map
+{ id: 'v1map', name: 'Cortical map', short: 'Map', w: 0.012, size: -2, focal: [0.0, 0.0],
+  caption: 'The surface of visual cortex, seen through an imaging window. Each color marks the edge angle that neurons there respond to best. The colors swirl around pinwheel centers.',
+  proc: { text: 'neurons answer an edge at their preferred angle within ~100 ms', t: -1, slow: 'stimulus rotated slowly' },
+  init() {
+    const R = rng(5), N = 300, nw = 14, k = TAU / 0.0625;
+    const waves = []; for (let j = 0; j < nw; j++) { const th = Math.PI * j / nw + R() * .1, sg = R() < .5 ? -1 : 1; waves.push([Math.cos(th) * k * sg, Math.sin(th) * k * sg, R() * TAU]); }
+    const pref = new Float32Array(N * N), sel = new Float32Array(N * N);
+    let best = 9, pin = [0, 0];
+    for (let iy = 0; iy < N; iy++) for (let ix = 0; ix < N; ix++) {
+      const x = (ix + .5) / N - .5, y = (iy + .5) / N - .5; let re = 0, im = 0;
+      for (const [kx, ky, ph] of waves) { const a = kx * x + ky * y + ph; re += Math.cos(a); im += Math.sin(a); }
+      const i = iy * N + ix, m = Math.hypot(re, im) / Math.sqrt(nw);
+      pref[i] = Math.atan2(im, re) / 2; sel[i] = Math.min(1, m / 1.1);
+      const d = Math.hypot(x - .13, y + .12); if (d < .1 && m < best) { best = m; pin = [x, y]; }
+    }
+    this.pin = pin;
+    this.NF = 12; this.frames = [];
+    for (let f = 0; f < this.NF; f++) {
+      const c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d'), img = g.createImageData(N, N), phi = -Math.PI / 2 + Math.PI * f / this.NF;
+      for (let i = 0; i < N * N; i++) {
+        const [r, gg, b] = hsl2rgb((pref[i] + Math.PI / 2) / Math.PI, .72, .54);
+        const resp = Math.exp(2.4 * (Math.cos(2 * (pref[i] - phi)) - 1)), v = .32 + .68 * resp * (.35 + .65 * sel[i]);
+        img.data[i * 4] = r * v; img.data[i * 4 + 1] = gg * v; img.data[i * 4 + 2] = b * v; img.data[i * 4 + 3] = 255;
+      }
+      g.putImageData(img, 0, 0); this.frames.push(c);
+    }
+    const ves = [];
+    const vgrow = (x, y, a, w, depth) => {
+      const len = .05 + R() * .1, pts = [[x, y]];
+      for (let i = 0; i < 5; i++) { a += (R() - .5) * .5; x += Math.cos(a) * len / 5; y += Math.sin(a) * len / 5; pts.push([x, y]); }
+      ves.push({ p: smoothPath(pts, false), w });
+      if (depth < 4 && w > .003) { vgrow(x, y, a + .5 + R() * .4, w * .68, depth + 1); if (R() < .8) vgrow(x, y, a - .5 - R() * .4, w * .68, depth + 1); }
+    };
+    for (const al of [.4, 2.1, 3.5, 5.0]) vgrow(Math.cos(al) * .48, Math.sin(al) * .48, al + Math.PI + (R() - .5) * .5, .013, 0);
+    this.ves = ves;
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    const phi = ((env.t * .3) % Math.PI) - Math.PI / 2, fi = (phi + Math.PI / 2) / Math.PI * this.NF;
+    const f0 = Math.floor(fi) % this.NF, f1 = (f0 + 1) % this.NF, w = fi - Math.floor(fi), a0 = ctx.globalAlpha;
+    ctx.save(); circ(ctx, 0, 0, .46); ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.frames[f0], -.5, -.5, 1, 1);
+    ctx.globalAlpha = a0 * w; ctx.drawImage(this.frames[f1], -.5, -.5, 1, 1); ctx.globalAlpha = a0;
+    ctx.strokeStyle = 'rgba(60,14,18,.55)'; ctx.lineCap = 'round';
+    for (const v of this.ves) { ctx.lineWidth = Math.max(v.w, P(1)); ctx.stroke(v.p); }
+    ctx.restore();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(2); circ(ctx, 0, 0, .46); ctx.stroke();
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); circ(ctx, 0, 0, .485); ctx.stroke();
+    // stimulus icon (top right) and orientation key (bottom left)
+    const sx = .43, sy = -.43, sr = .045;
+    ctx.save(); circ(ctx, sx, sy, sr); ctx.fillStyle = C.panel; ctx.fill(); ctx.clip();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(2.2);
+    const ux = Math.cos(phi), uy = Math.sin(phi);
+    for (let i = -3; i <= 3; i++) { const ox = -uy * i * .014, oy = ux * i * .014; ctx.beginPath(); ctx.moveTo(sx + ox - ux * .06, sy + oy - uy * .06); ctx.lineTo(sx + ox + ux * .06, sy + oy + uy * .06); ctx.stroke(); }
+    ctx.restore(); ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); circ(ctx, sx, sy, sr); ctx.stroke();
+    ctx.lineWidth = P(3); ctx.lineCap = 'round';
+    for (let i = 0; i < 6; i++) {
+      const th = -Math.PI / 2 + Math.PI * i / 6, [r, g, b] = hsl2rgb((th + Math.PI / 2) / Math.PI, .72, .5), cx = -.47 + i * .03, cy = -.45;
+      ctx.strokeStyle = `rgb(${r | 0},${g | 0},${b | 0})`; ctx.beginPath(); ctx.moveTo(cx - Math.cos(th) * .011, cy - Math.sin(th) * .011); ctx.lineTo(cx + Math.cos(th) * .011, cy + Math.sin(th) * .011); ctx.stroke();
+    }
+    label(env, 'stimulus', .43, -.37, { align: 'center', size: 11, color: C.ink3 });
+    label(env, 'preferred edge angle', -.48, -.405, { size: 11, color: C.ink3 });
+    callout(env, 'pinwheel center', this.pin[0], this.pin[1], .3, -.3, { color: C.ink });
+    callout(env, 'blood vessel', -.2, .38, -.36, .3, { alpha: 0 });
+  } },
+
+// 5 ── dendrite and spines
+{ id: 'dendrite', name: 'Dendrite', short: 'Dendrite', w: 1.5e-5, size: -5.3, focal: [0, -0.027],
+  caption: 'A stretch of dendrite covered in spines. Most excitatory synapses land on a spine, and each spine can strengthen or weaken on its own. That is a leading candidate for where memories are stored.',
+  proc: { text: 'calcium floods a spine after its synapse fires, ~100 ms', t: -1, slow: 'shown ~10× slower' },
+  init() {
+    const R = rng(31);
+    this.yS = x => .105 + .006 * Math.sin(2.1 * x + .4); this.rS = x => .034 + .004 * Math.sin(5 * x);
+    const top = [], bot = [];
+    for (let x = -5; x <= 4.6; x += .04) { top.push([x, this.yS(x) - this.rS(x)]); bot.push([x, this.yS(x) + this.rS(x)]); }
+    const sh = new Path2D(); sh.moveTo(top[0][0], top[0][1]); for (const p of top) sh.lineTo(p[0], p[1]); for (let i = bot.length - 1; i >= 0; i--) sh.lineTo(bot[i][0], bot[i][1]); sh.closePath();
+    this.shaft = sh;
+    const spines = [{ x: 0, side: -1, neck: .046, head: .027, tilt: 0, type: 'mush', bout: true }];
+    const xs = []; let x = -1.35; while (x < 1.35) { x += .045 + R() * .06; if (Math.abs(x) > .07) xs.push(x); }
+    for (const sx of xs) {
+      const r = R(), type = r < .45 ? 'mush' : r < .8 ? 'thin' : 'stub';
+      spines.push({ x: sx, side: R() < .55 ? -1 : 1, type, tilt: (R() - .5) * .8, neck: type === 'thin' ? .07 + R() * .04 : type === 'mush' ? .04 + R() * .035 : .012, head: type === 'thin' ? .012 + R() * .006 : type === 'mush' ? .022 + R() * .01 : .022, bout: R() < .22 });
+    }
+    spines.forEach((s, i) => {
+      s.id = i;
+      const by = s.side < 0 ? this.yS(s.x) - this.rS(s.x) + .004 : this.yS(s.x) + this.rS(s.x) - .004;
+      const dx = Math.sin(s.tilt) , dy = s.side * Math.cos(s.tilt);
+      s.b = [s.x, by]; s.h = [s.x + dx * (s.neck + s.head), by + dy * (s.neck + s.head)]; s.dir = [dx, dy];
+      if (i === 0) { s.b = [0, this.yS(0) - this.rS(0) + .004]; s.h = [0, 0]; }
+      if (s.bout) {
+        s.bc = [s.h[0] + dx * (s.head + .024), s.h[1] + dy * (s.head + .024)];
+        const ang = Math.atan2(dy, dx) + Math.PI / 2 + (i === 0 ? 0 : (R() - .5) * .9), ux = Math.cos(ang), uy = Math.sin(ang);
+        const pts = [], ph = R() * TAU, A = .05 + R() * .05; for (let q = -5; q <= 5; q++) { const l = q * .24, off = q ? A * Math.sin(q * .9 + ph) : 0; pts.push([s.bc[0] + ux * l - uy * off * (q ? 1 : 0) - dx * .012 * q * q, s.bc[1] + uy * l + ux * off * (q ? 1 : 0) - dy * .012 * q * q]); }
+        s.axon = smoothPath(pts, false); s.bang = ang;
+      }
+      s.per = 2.2 + hash(i, 3) * 2.6; s.ph = hash(i, 4) * 5;
+    });
+    this.spines = spines;
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.1);
+    for (const s of this.spines) if (s.axon) ctx.stroke(s.axon);
+    ctx.fillStyle = C.tissue; ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.3);
+    ctx.fill(this.shaft); ctx.stroke(this.shaft);
+    for (const s of this.spines) {
+      const nw = s.type === 'stub' ? s.head * 1.4 : Math.max(.009, s.head * .45);
+      ctx.lineWidth = nw + P(2.6); ctx.strokeStyle = C.ink; ctx.beginPath(); ctx.moveTo(s.b[0], s.b[1]); ctx.lineTo(s.h[0], s.h[1]); ctx.stroke();
+      ctx.lineWidth = nw; ctx.strokeStyle = C.tissue; ctx.beginPath(); ctx.moveTo(s.b[0] - s.dir[0] * .006, s.b[1] - s.dir[1] * .006); ctx.lineTo(s.h[0], s.h[1]); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(s.h[0], s.h[1], s.head * 1.12, s.head, Math.atan2(s.dir[1], s.dir[0]), 0, TAU);
+      ctx.fillStyle = C.tissue; ctx.fill(); ctx.lineWidth = P(1.3); ctx.strokeStyle = C.ink; ctx.stroke();
+      const k = Math.floor((env.t + s.ph) / s.per), tau = (env.t + s.ph) - k * s.per, fire = hash(s.id, k) < .65 || s.id === 0;
+      if (fire && tau > .15) { const f = Math.exp(-(tau - .15) / .6); if (f > .02) { glow(ctx, s.h[0], s.h[1], s.head * 1.9, C.accent, f * .7); ctx.fillStyle = withA(C.accent, .75 * f); ctx.fill(); } }
+      if (s.bc) {
+        ctx.beginPath(); ctx.ellipse(s.bc[0], s.bc[1], .034, .024, s.bang, 0, TAU);
+        ctx.fillStyle = C.panel; ctx.fill(); ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.2); ctx.stroke();
+        if (fire && tau < .3) { ctx.fillStyle = withA(C.accent, .7 * (1 - tau / .3)); ctx.fill(); }
+      }
+    }
+    callout(env, 'dendritic spine', .02, .03, .14, -.13);
+    callout(env, 'axon bouton (input)', -.03, -.06, -.2, -.17);
+    callout(env, 'dendrite shaft', -.3, this.yS(-.3) + .02, -.36, .26);
+  } },
+
+// 6 ── synapse
+{ id: 'synapse', name: 'Synapse', short: 'Synapse', w: 1.6e-6, size: -6, focal: [0, 0.0078],
+  caption: 'A synapse, the way an electron microscope sees it. Vesicles packed with glutamate wait at the active zone, 20 nm across the cleft from the receptors.',
+  proc: { text: 'a vesicle fuses and releases glutamate in under 1 ms', t: -3.3, slow: 'shown ~3,000× slower' },
+  init() {
+    const R = rng(41), m = .0078;
+    this.bouton = smoothPath([[-.24, -m], [-.1, -m], [.1, -m], [.24, -m], [.29, -.05], [.31, -.16], [.27, -.3], [.17, -.4], [.08, -.46], [.06, -.62], [-.06, -.62], [-.09, -.46], [-.2, -.4], [-.29, -.29], [-.31, -.15], [-.28, -.05]]);
+    this.spine = smoothPath([[-.22, m], [-.1, m], [.1, m], [.22, m], [.28, .05], [.3, .15], [.25, .27], [.12, .35], [.065, .42], [.06, .62], [-.06, .62], [-.065, .42], [-.12, .35], [-.25, .27], [-.3, .15], [-.27, .05]]);
+    this.astro = smoothPath([[.62, -.4], [.42, -.26], [.355, -.12], [.34, 0], [.36, .13], [.44, .28], [.62, .42]]);
+    this.astroL = smoothPath([[-.62, .48], [-.44, .38], [-.4, .3], [-.47, .2], [-.62, .16]]);
+    const mito = { x: -.12, y: -.28, rx: .1, ry: .048, a: .4 }; this.mito = mito;
+    const ves = [], vr = .0125;
+    this.fuseX = .03;
+    for (const x of [-.13, -.075, this.fuseX, .085, .14]) ves.push({ x, y: -m - .0018 - vr, docked: true, fuse: x === this.fuseX });
+    let tries = 0;
+    while (ves.length < 58 && tries++ < 6000) {
+      const x = (R() - .5) * .5, y = -.03 - .32 * Math.pow(R(), 1.5);
+      if (!inside(this.bouton, x, y) || !inside(this.bouton, x, y - vr * 1.6) || !inside(this.bouton, x + vr * 1.6, y) || !inside(this.bouton, x - vr * 1.6, y)) continue;
+      const dx = x - mito.x, dy = y - mito.y, ca = Math.cos(-mito.a), sa = Math.sin(-mito.a), u = (dx * ca - dy * sa) / (mito.rx + .02), v = (dx * sa + dy * ca) / (mito.ry + .02);
+      if (u * u + v * v < 1) continue;
+      if (ves.some(o => Math.hypot(o.x - x, o.y - y) < vr * 2.3)) continue;
+      ves.push({ x, y });
+    }
+    this.ves = ves;
+    this.psd = []; for (let i = 0; i < 150; i++) this.psd.push([(R() - .5) * .34 * (1 - .2 * R()), m + .004 + R() * .022, .002 + R() * .004, R() * Math.PI]);
+    this.glu = []; for (let i = 0; i < 36; i++) this.glu.push([R() * TAU, .3 + R()]);
+    this.actin = []; for (let i = 0; i < 9; i++) { const pts = []; let x = (R() - .5) * .08, y = .45 + R() * .15, a = -Math.PI / 2 + (R() - .5) * .6; for (let q = 0; q < 5; q++) { pts.push([x, y]); x += Math.cos(a) * .05; y += Math.sin(a) * .05; a += (R() - .5) * .7; } this.actin.push(smoothPath(pts, false)); }
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, m = .0078, vr = .0125, memW = Math.max(.0035, P(1.4));
+    const tau = env.t % 3.4;
+    ctx.fillStyle = withA(C.ink3, .12); ctx.fill(this.astro); ctx.fill(this.astroL);
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = memW; ctx.stroke(this.astro); ctx.stroke(this.astroL);
+    ctx.fillStyle = C.tissue; ctx.fill(this.bouton); ctx.fill(this.spine);
+    ctx.save(); ctx.clip(this.spine);
+    ctx.fillStyle = withA(C.ink, .8);
+    for (const [x, y, r, a] of this.psd) { ctx.beginPath(); ctx.ellipse(x, y, r * 1.6, r, a, 0, TAU); ctx.fill(); }
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1);
+    for (const a of this.actin) ctx.stroke(a);
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = Math.max(.003, P(1.2));
+    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.ellipse(.05, .17 + i * .028, .07 - i * .008, .008, .05, 0, TAU); ctx.stroke(); }
+    if (tau > .95) { const f = Math.exp(-(tau - .95) / .7); ctx.fillStyle = withA(C.accent, .55 * f); ctx.fillRect(-.18, m, .36, .028); }
+    ctx.restore();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = memW; ctx.stroke(this.bouton); ctx.stroke(this.spine);
+    // active-zone dense projections
+    ctx.fillStyle = withA(C.ink, .75);
+    for (let i = -3; i <= 3; i++) { const x = i * .045; ctx.beginPath(); ctx.moveTo(x - .012, -m - .002); ctx.lineTo(x, -m - .03); ctx.lineTo(x + .012, -m - .002); ctx.fill(); }
+    // mitochondrion
+    const mt = this.mito; ctx.save(); ctx.translate(mt.x, mt.y); ctx.rotate(mt.a);
+    ctx.beginPath(); ctx.ellipse(0, 0, mt.rx, mt.ry, 0, 0, TAU); ctx.fillStyle = withA(C.ink3, .22); ctx.fill(); ctx.lineWidth = memW; ctx.strokeStyle = C.ink; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 0, mt.rx - .008, mt.ry - .008, 0, 0, TAU); ctx.lineWidth = Math.max(.002, P(1)); ctx.stroke();
+    ctx.beginPath(); for (let i = -4; i <= 4; i++) { const x = i * .019; ctx.moveTo(x, (i % 2 ? 1 : -1) * (mt.ry - .008)); ctx.lineTo(x + .004, (i % 2 ? -1 : 1) * .012); } ctx.stroke();
+    ctx.restore();
+    // vesicles
+    ctx.lineWidth = Math.max(.003, P(1.2)); ctx.strokeStyle = C.ink;
+    for (const v of this.ves) {
+      let r = vr, y = v.y, a = 1;
+      if (v.fuse) { if (tau > .6 && tau < .95) { const u = (tau - .6) / .35; y = lerp(v.y, -m + .002, u); r = vr * (1 - .55 * u); } else if (tau >= .95) { a = clamp((tau - 2.6) / .6, 0, 1); } }
+      if (a <= 0) continue;
+      ctx.globalAlpha = env.a * a; circ(ctx, v.x, y, r); ctx.fillStyle = C.panel; ctx.fill(); ctx.stroke();
+      ctx.fillStyle = withA(C.accent, .35); circ(ctx, v.x, y, r * .45); ctx.fill();
+    }
+    ctx.globalAlpha = env.a;
+    if (tau > .9 && tau < 2.6) {
+      const s = Math.sqrt(tau - .9), fade = 1 - clamp((tau - 1.8) / .8, 0, 1);
+      ctx.fillStyle = withA(C.accent, .9 * fade);
+      for (const [ang, sp] of this.glu) { const x = this.fuseX + Math.cos(ang) * s * .16 * sp, y = clamp(-m + .001 + Math.abs(Math.sin(ang)) * s * .02 * sp, -m + .001, m - .001); circ(ctx, x, y, Math.max(.0022, P(1.8))); ctx.fill(); }
+    }
+    callout(env, 'presynaptic bouton', -.2, -.36, -.32, -.44);
+    callout(env, 'synaptic vesicles · 40 nm', .17, -.12, .26, -.38);
+    callout(env, 'mitochondrion', -.05, -.255, .04, -.33, { alpha: 0 });
+    callout(env, 'synaptic cleft · 20 nm', -.2, 0, -.36, -.06);
+    callout(env, 'postsynaptic density', -.13, .022, -.36, .1);
+    callout(env, 'spine head', .2, .25, .3, .36);
+    label(env, 'astrocyte', .47, 0, { size: 11, italic: true, color: C.ink3, align: 'center' });
+  } },
+
+// 7 ── membrane
+{ id: 'membrane', name: 'Membrane', short: 'Membrane', w: 1.2e-7, size: -7.3, focal: [0, -0.0133],
+  caption: 'Zoomed in on the cleft. Each membrane is a 5 nm film of lipids, studded with receptors that open when glutamate binds and with channels that let ions through.',
+  proc: { text: 'glutamate crosses the 20 nm cleft in well under a microsecond', t: -6.5, slow: 'shown ~10⁶× slower' },
+  init() {
+    const R = rng(51);
+    this.prot = [
+      { t: 'ampa', x: -.25 }, { t: 'nmda', x: -.1 }, { t: 'k', x: 0 }, { t: 'ampa', x: .17 }, { t: 'ampa', x: .34 }, { t: 'nmda', x: .52 }, { t: 'ampa', x: -.47 },
+    ];
+    this.pre = [{ x: .12 }, { x: -.3 }];
+    this.glu = []; for (let i = 0; i < 26; i++) this.glu.push([(R() - .5) * 1.1, R() * TAU, R() * TAU, R() * TAU, .4 + R() * .8, .5 + R() * .9]);
+    this.psd = this.prot.filter(p => p.t !== 'k').map(p => { const b = []; let x = p.x, y = .03; for (let i = 0; i < 4; i++) { x += (R() - .5) * .03; y += .019; b.push([x, y]); } return b; });
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, hr = .0037;
+    const bil = (yc, skip) => {
+      ctx.fillStyle = withA(C.lipid, .35); ctx.fillRect(-.75, yc - .0145, 1.5, .029);
+      ctx.fillStyle = C.lipid; ctx.strokeStyle = withA(C.ink, .5); ctx.lineWidth = Math.max(.0006, P(.5));
+      for (let x = -.75; x <= .75; x += .0078) {
+        if (skip.some(s => Math.abs(s.x - x) < s.hw + .004)) continue;
+        for (const s of [-1, 1]) { circ(ctx, x, yc + s * .0175, hr); ctx.fill(); if (env.k > 900) ctx.stroke(); }
+      }
+    };
+    const hw = { ampa: .03, nmda: .03, k: .035 };
+    bil(0, this.prot.map(p => ({ x: p.x, hw: hw[p.t] })));
+    bil(-.208, this.pre.map(p => ({ x: p.x, hw: .035 })));
+    // PSD-95 scaffold + actin
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1);
+    for (const b of this.psd) { ctx.beginPath(); ctx.moveTo(b[0][0], .026); for (const [x, y] of b) ctx.lineTo(x, y); ctx.stroke(); }
+    ctx.beginPath(); this.psd.map(b => b[3]).sort((a, b) => a[0] - b[0]).forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+    ctx.fillStyle = C.tissue; ctx.strokeStyle = C.ink2;
+    for (const b of this.psd) for (const [x, y] of b) { circ(ctx, x, y, .008); ctx.fill(); ctx.stroke(); }
+    for (const ph of [0, Math.PI]) for (let x = -.75; x < .75; x += .046) { circ(ctx, x, .2 + .012 * Math.sin(x * 22 + ph), .021); ctx.fillStyle = withA(C.ink3, .3); ctx.fill(); ctx.strokeStyle = C.ink3; ctx.stroke(); }
+    // glutamate
+    const gp = this.glu.map(([x0, a, b, c, f1, f2]) => [clamp(x0 + .06 * Math.sin(env.t * f1 + a) + .03 * Math.sin(env.t * 2.3 * f2 + b), -.7, .7), -.105 + .065 * Math.sin(env.t * f2 + c) + .012 * Math.sin(env.t * 3.1 * f1 + a)]);
+    // proteins
+    ctx.lineWidth = P(1); ctx.strokeStyle = C.ink;
+    const blob = (x, y, rx, ry, hot) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, TAU); ctx.fillStyle = C.protein; ctx.fill(); if (hot) { ctx.fillStyle = withA(C.accent, .6); ctx.fill(); } ctx.stroke(); };
+    for (const p of this.prot) {
+      const x = p.x;
+      if (p.t === 'k') {
+        rrect(ctx, x - .035, -.026, .07, .052, .01); ctx.fillStyle = C.protein; ctx.fill(); ctx.stroke();
+        ctx.fillStyle = C.panel; ctx.fillRect(x - .0025, -.026, .005, .052);
+        ctx.beginPath(); ctx.moveTo(x - .02, .026); ctx.lineTo(x - .015, .04); ctx.moveTo(x + .02, .026); ctx.lineTo(x + .015, .04); ctx.stroke();
+        blob(x, .052, .032, .015);
+        continue;
+      }
+      const top = p.t === 'nmda' ? -.115 : -.108;
+      ctx.beginPath(); ctx.moveTo(x - .012, -.026); ctx.lineTo(x - .018, -.042); ctx.moveTo(x + .012, -.026); ctx.lineTo(x + .018, -.042); ctx.stroke();
+      rrect(ctx, x - .03, -.026, .06, .052, .012); ctx.fillStyle = C.protein; ctx.fill(); ctx.stroke();
+      for (const s of [-1, 1]) {
+        const lx = x + s * .019, ly = -.057, hot = gp.some(([gx, gy]) => Math.hypot(gx - lx, gy - ly) < .028);
+        blob(lx, ly, .018, .016, hot);
+        blob(x + s * .02, top + .02, .018, p.t === 'nmda' ? .026 : .021);
+      }
+      if (p.t === 'nmda') { ctx.beginPath(); ctx.moveTo(x - .01, .026); ctx.quadraticCurveTo(x - .03, .07, x - .01, .11); ctx.moveTo(x + .01, .026); ctx.quadraticCurveTo(x + .03, .07, x + .012, .1); ctx.stroke(); }
+    }
+    for (const p of this.pre) { rrect(ctx, p.x - .035, -.234, .07, .052, .01); ctx.fillStyle = C.protein; ctx.fill(); ctx.stroke(); blob(p.x, -.258, .028, .014); }
+    ctx.fillStyle = C.accent;
+    for (const [x, y] of gp) { circ(ctx, x, y, Math.max(.0035, P(2.2))); ctx.fill(); }
+    // K+ ions leaving through the channel
+    const T = convT(env.t);
+    for (let j = Math.floor(T) - 8; j <= Math.floor(T) + 2; j += 1) {
+      if (j & 1) continue; const p = T - j; if (p < -2 || p > 9) continue;
+      const y = p <= 3 ? .03 - p * .016 : .03 - 3 * .016 - (p - 3) * .02, x = p <= 3 ? 0 : (p - 3) * .012 * (j % 4 ? 1 : -1);
+      ctx.globalAlpha = env.a * clamp((9 - p) / 2, 0, 1) * clamp((p + 2) / 1, 0, 1);
+      glow(ctx, x, y, Math.max(.006, P(5)), C.accent, 1);
+    }
+    ctx.globalAlpha = env.a;
+    callout(env, 'presynaptic membrane', -.42, -.222, -.3, -.31);
+    label(env, 'synaptic cleft', -.6 + .13, -.13, { size: 11, italic: true, color: C.ink3 });
+    callout(env, 'glutamate', gp[3][0], gp[3][1], gp[3][0] + .06, gp[3][1] - .03, { alpha: 0 });
+    callout(env, 'AMPA receptor', .19, -.1, .245, -.16);
+    callout(env, 'NMDA receptor', -.12, -.11, -.18, -.165);
+    callout(env, 'K⁺ channel', .03, -.02, .07, -.07);
+    callout(env, 'lipid bilayer · 5 nm', -.36, .0175, -.36, .14, { alpha: 1 });
+    callout(env, 'PSD-95 scaffold', .19, .1, .27, .12);
+    callout(env, 'actin', .45, .19, .45, .26);
+  } },
+
+// 8 ── ion channel
+{ id: 'channel', name: 'Ion channel', short: 'Channel', w: 1.6e-8, size: -8.1, focal: [0, 0],
+  caption: 'A potassium channel: a protein pore through the membrane. It lets K⁺ through up to 100 million times a second, yet blocks the smaller Na⁺ almost completely.',
+  proc: { text: 'one K⁺ ion through the pore every ~10 ns', t: -8, slow: 'shown ~10⁸× slower' },
+  init() {
+    const R = rng(61);
+    this.lip = []; for (let x = -1.3; x <= 1.3; x += .056) if (Math.abs(x) > .25) for (const s of [-1, 1]) this.lip.push({ x: x + (R() - .5) * .01, s, ph: R() * TAU, k: R() < .5, f: .8 + R() * .6 });
+    this.free = []; for (let i = 0; i < 9; i++) this.free.push([(R() - .5) * 1.2, R() < .5 ? -1 : 1, R() * TAU, .3 + R() * .5]);
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, yb = .1, hy = .131, hr = .028;
+    ctx.fillStyle = withA(C.lipid, .22); ctx.fillRect(-1.4, yb - hy, 2.8, hy * 2);
+    ctx.lineCap = 'round';
+    for (const l of this.lip) {
+      const jy = .005 * Math.sin(env.t * 1.7 * l.f + l.ph), jx = .004 * Math.sin(env.t * 1.3 * l.f + l.ph * 2);
+      const hx = l.x + jx, hyy = yb - l.s * hy + jy;
+      ctx.strokeStyle = C.ink3; ctx.lineWidth = Math.max(.006, P(1.2));
+      for (const o of [-.012, .012]) {
+        ctx.beginPath(); ctx.moveTo(hx + o, hyy + l.s * hr * .8);
+        const ky = l.k && o > 0 ? .02 : 0;
+        ctx.bezierCurveTo(hx + o * 1.5 + jx, hyy + l.s * .05, hx + o + ky * .6, hyy + l.s * .085, hx + o * 1.2 - jx + ky, yb - l.s * .008); ctx.stroke();
+      }
+      circ(ctx, hx, hyy, hr); ctx.fillStyle = C.lipid; ctx.fill(); ctx.strokeStyle = withA(C.ink, .6); ctx.lineWidth = P(1); ctx.stroke();
+    }
+    // two of four subunits
+    for (const s of [-1, 1]) {
+      ctx.fillStyle = C.protein; ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.2);
+      ctx.beginPath(); ctx.moveTo(s * .2, -.09); ctx.bezierCurveTo(s * .19, -.14, s * .07, -.12, s * .035, -.045); ctx.lineWidth = P(2.2); ctx.stroke(); ctx.lineWidth = P(1.2);
+      for (const [cx, cy, len, wid, ang] of [[.205, .1, .37, .078, .2], [.105, .14, .3, .07, -.45], [.085, -.004, .1, .055, -.95]]) {
+        capsule(ctx, s * cx, cy, len, wid, s * ang); ctx.fill(); ctx.stroke();
+        ctx.save(); ctx.translate(s * cx, cy); ctx.rotate(s * ang); ctx.strokeStyle = withA(C.ink, .25); ctx.lineWidth = P(1);
+        for (let q = -len / 2 + .03; q < len / 2 - .02; q += .027) { ctx.beginPath(); ctx.moveTo(-wid / 2 + .008, q); ctx.lineTo(wid / 2 - .008, q + .012); ctx.stroke(); }
+        ctx.restore();
+      }
+      ctx.fillStyle = withA(C.ink2, .9);
+      for (let i = 0; i < 5; i++) { circ(ctx, s * .03, -.0375 + i * .01875, .0062); ctx.fill(); }
+      ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.4); ctx.beginPath(); ctx.moveTo(s * .033, -.045); ctx.lineTo(s * .036, .045); ctx.stroke();
+    }
+    // free ions drifting outside / inside
+    for (const [x0, side, ph, f] of this.free) {
+      const x = x0 + .05 * Math.sin(env.t * f + ph), y = side < 0 ? -.2 + .05 * Math.sin(env.t * f * 1.3 + ph) : .38 + .05 * Math.sin(env.t * f * 1.1 + ph);
+      if (Math.abs(x) < .3 && side > 0) continue;
+      drawK(env, x, y, .0083, true, 1);
+    }
+    // the single-file conduction queue
+    const T = convT(env.t), sp = .01875, yS4 = .028;
+    for (let j = Math.floor(T) - 10; j <= Math.floor(T) + 5; j++) {
+      const p = T - j; if (p < -3.5 || p > 7) continue;
+      const isK = !(j & 1);
+      let x = 0, y;
+      if (p < 0) y = yS4 - p * .03; else if (p <= 3) y = yS4 - p * sp; else { y = yS4 - 3 * sp - (p - 3) * .045; x = (p - 3) * .03 * (j % 4 ? 1 : -1); }
+      const a = clamp((7 - p) / 1.5, 0, 1) * clamp((p + 3.5) / 1, 0, 1);
+      if (isK) drawK(env, x, y, .0083, p < -.4 || p > 3.4, a);
+      else if (p > -.6 && p < 3.6) drawWater(env, x, y, .0075, a);
+    }
+    label(env, 'outside the cell', -.47, -.44, { size: 11, italic: true, color: C.ink3 });
+    label(env, 'inside', -.47, .45, { size: 11, italic: true, color: C.ink3 });
+    callout(env, 'K⁺ channel (2 of its 4 subunits)', .24, -.06, .3, -.3);
+    callout(env, 'selectivity filter', .038, -.01, .3, -.18);
+    callout(env, 'lipid', -.45, yb - hy, -.38, -.13);
+    callout(env, 'water-filled cavity', 0, .1, .3, .38);
+  } },
+
+// 9 ── selectivity filter
+{ id: 'filter', name: 'Selectivity filter', short: 'Filter', w: 2.6e-9, size: -9.4, focal: [0, 0],
+  caption: 'The selectivity filter is about 1.2 nm long. Rings of oxygen atoms fit a K⁺ ion that has shed its water shell. In one classic picture, ions and water molecules move through in single file.',
+  proc: { text: 'ions hop between binding sites every few nanoseconds', t: -9, slow: 'shown ~10⁹× slower' },
+  init() {
+    const rings = [-.23, -.115, 0, .115, .23];
+    const atoms = [], bonds = [];
+    for (const s of [-1, 1]) {
+      const add = (x, y, el) => { atoms.push({ x: s * x, y, el }); return atoms.length - 1; };
+      let prev = add(.33, .36, 'C');
+      for (let k = 4; k >= 0; k--) {
+        const y = rings[k];
+        if (k === 4) { // Thr75: backbone C=O at ring 3; side-chain OH forms the bottom ring
+          const ca = add(.31, .3, 'C'); bonds.push([prev, ca]);
+          const cb = add(.23, .27, 'C'), og = add(.13, .232, 'O'), h = add(.075, .255, 'H'); bonds.push([ca, cb], [cb, og], [og, h]);
+          const c = add(.21, .16, 'C'); bonds.push([ca, c]); prev = c; continue;
+        }
+        const c = prev, o = add(.12, y, 'O'); atoms[c].y = y; atoms[c].x = s * .21; bonds.push([c, o, 2]);
+        const n = add(.28, y - .035, 'N'), ca = add(.31, y - .085, 'C'); bonds.push([c, n], [n, ca]);
+        const next = add(.21, k > 0 ? rings[k - 1] : -.3, 'C'); bonds.push([ca, next]);
+        if (k === 3) { const cb = add(.4, y - .1, 'C'), g1 = add(.47, y - .06, 'C'), g2 = add(.45, y - .16, 'C'); bonds.push([ca, cb], [cb, g1], [cb, g2]); }  // Val76
+        if (k === 1) { const cb = add(.39, y - .1, 'C'); bonds.push([ca, cb]); const hx = []; for (let q = 0; q < 6; q++) { const a = q * Math.PI / 3; hx.push(add(.45 + .05 * Math.cos(a), y - .17 + .05 * Math.sin(a), 'C')); } for (let q = 0; q < 6; q++) bonds.push([hx[q], hx[(q + 1) % 6]]); bonds.push([cb, hx[4]]); }  // Tyr78
+        prev = next;
+      }
+    }
+    this.atoms = atoms; this.bonds = bonds; this.rings = rings;
+    this.res = [['Tyr78', -.17], ['Gly77', -.06], ['Val76', .05], ['Thr75', .2]];
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    const col = { C: '#9aa3ab', O: '#e2574c', N: '#4a74d9', H: '#f4f6f7' }, rad = { C: .026, O: .032, N: .026, H: .016 };
+    ctx.fillStyle = withA(C.protein, .25); ctx.fillRect(-.7, -.33, .48, .7); ctx.fillRect(.22, -.33, .48, .7);
+    ctx.lineCap = 'round'; ctx.strokeStyle = C.ink2; ctx.lineWidth = P(3);
+    for (const [a, b, d] of this.bonds) {
+      const A = this.atoms[a], B = this.atoms[b];
+      if (d === 2) { const nx = -(B.y - A.y), ny = B.x - A.x, l = Math.hypot(nx, ny) || 1, o = .009; ctx.lineWidth = P(2); for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(A.x + nx / l * o * s, A.y + ny / l * o * s); ctx.lineTo(B.x + nx / l * o * s, B.y + ny / l * o * s); ctx.stroke(); } ctx.lineWidth = P(3); }
+      else { ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); }
+    }
+    for (const at of this.atoms) { circ(ctx, at.x, at.y, rad[at.el]); ctx.fillStyle = col[at.el]; ctx.fill(); ctx.strokeStyle = withA('#13171b', .55); ctx.lineWidth = P(1); ctx.stroke(); }
+    const T = convT(env.t), yS4 = .1725, sp = .115;
+    for (let j = Math.floor(T) - 6; j <= Math.floor(T) + 4; j++) {
+      const p = T - j; if (p < -2.6 || p > 5.6) continue;
+      const isK = !(j & 1); let x = 0, y;
+      if (p < 0) y = yS4 - p * .15; else if (p <= 3) y = yS4 - p * sp; else { y = yS4 - 3 * sp - (p - 3) * .15; x = (p - 3) * .05 * (j % 4 ? 1 : -1); }
+      const a = clamp((5.6 - p) / 1, 0, 1) * clamp((p + 2.6) / 1, 0, 1);
+      if (isK) {
+        const near = Math.abs(p - Math.round(p)) < .12 && p > -.1 && p < 3.1;
+        if (near) { ctx.save(); ctx.globalAlpha = env.a * a * .8; ctx.setLineDash([P(3), P(3)]); ctx.strokeStyle = C.accent; ctx.lineWidth = P(1.2); for (const s of [-1, 1]) for (const dy of [-.0575, .0575]) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(s * .12, y + dy); ctx.stroke(); } ctx.restore(); }
+        drawK(env, x, y, .051, p < -.35 || p > 3.35, a, true);
+      } else if (p > -.7 && p < 3.7) drawWater(env, x, y, .04, a, true);
+    }
+    this.res.forEach(([n, y]) => label(env, n, -.47, y, { mono: true, size: 11, color: C.ink2 }));
+    ['S1', 'S2', 'S3', 'S4'].forEach((n, i) => label(env, n, .2, -.1725 + i * .115, { mono: true, size: 10, color: C.ink3 }));
+    label(env, 'outside', 0, -.46, { size: 11, italic: true, color: C.ink3, align: 'center' });
+    label(env, 'cavity (inside)', 0, .465, { size: 11, italic: true, color: C.ink3, align: 'center' });
+    callout(env, 'carbonyl oxygens', .14, -.115, .3, -.4);
+    const keyY = .39; drawK(env, .3, keyY, .03, false, 1, true); label(env, 'K⁺', .3, keyY, { dx: 14, size: 11 });
+    drawWater(env, .42, keyY, .028, 1, true); label(env, 'water', .42, keyY, { dx: 14, size: 11 });
+  } },
+];
+
+function drawK(env, x, y, r, hyd, a = 1, big = false) {
+  const { ctx } = env, P = n => n / env.k;
+  ctx.save(); ctx.globalAlpha = env.a * a;
+  if (hyd) for (let q = 0; q < 6; q++) { const an = q * TAU / 6 + 0.3; drawWater(env, x + Math.cos(an) * r * 2.15, y + Math.sin(an) * r * 2.15, r * .82, a * .9, big, an + Math.PI); }
+  ctx.globalAlpha = env.a * a;
+  const g = ctx.createRadialGradient(x - r * .35, y - r * .35, r * .1, x, y, r);
+  g.addColorStop(0, withA('#ffffff', .9)); g.addColorStop(.25, C.accent); g.addColorStop(1, C.accent);
+  circ(ctx, x, y, Math.max(r, P(2.5))); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = withA('#13171b', .5); ctx.lineWidth = P(1); ctx.stroke();
+  if (big && r > .02) label({ ...env, la: env.a * a }, '+', x, y, { align: 'center', size: Math.min(16, r * env.k * .9), color: '#ffffff', weight: 600 });
+  ctx.restore();
+}
+function drawWater(env, x, y, r, a = 1, big = false, face = -Math.PI / 2) {
+  const { ctx } = env, P = n => n / env.k;
+  ctx.save(); ctx.globalAlpha = env.a * a * .9;
+  for (const s of [-1, 1]) { const an = face + Math.PI + s * .9; circ(ctx, x + Math.cos(an) * r * .95, y + Math.sin(an) * r * .95, r * .5); ctx.fillStyle = '#f4f6f7'; ctx.fill(); ctx.strokeStyle = withA('#13171b', .4); ctx.lineWidth = P(.8); ctx.stroke(); }
+  circ(ctx, x, y, r); ctx.fillStyle = '#e2574c'; ctx.fill(); ctx.strokeStyle = withA('#13171b', .45); ctx.lineWidth = P(.8); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- the level tree ----------
+// Shared top (body, brain) and a shared deep end (dendrite → filter). The middle depends on the path.
+// Each node draws in its own units (1 unit = its home field of view, w meters); `at` is where it sits inside its parent.
+const NODES = {};
+const def = n => { n.children = n.children || []; NODES[n.id] = n; return n; };
+function ensure(n) { if (!n._init) { n._init = true; n.init && n.init(); } }
+let hover = null;                                   // {fork, child} under the pointer at a fork level
+const choice = { brain: 'v1map', smstrip: 'm1col' };
+const poly = pts => { const p = new Path2D(); pts.forEach(([x, y], i) => i ? p.lineTo(x, y) : p.moveTo(x, y)); p.closePath(); return p; };
+
+const bgA = env => clamp((.5 - env.r) / .3, 0, 1);
+function bgFill(env, col, x, y, w, h) { const { ctx } = env, a = ctx.globalAlpha; ctx.globalAlpha = a * bgA(env); ctx.fillStyle = col; ctx.fillRect(x, y, w, h); ctx.globalAlpha = a; }
+function drawRegions(env, regions, fork) {
+  const { ctx } = env, P = n => n / env.k;
+  for (const R of regions) {
+    const hot = hover && hover.fork === fork && hover.child === R.child, act = choice[fork] === R.child;
+    if (hot) { ctx.fillStyle = withA(C.accent, .16); ctx.fill(R.path); ctx.strokeStyle = C.accent; ctx.lineWidth = P(2); ctx.stroke(R.path); }
+    else if (act) { ctx.save(); ctx.setLineDash([P(4), P(3)]); ctx.strokeStyle = withA(C.accent, .75); ctx.lineWidth = P(1.3); ctx.stroke(R.path); ctx.restore(); }
+    if (hot) label({ ...env, la: env.a }, R.name + '  →', R.lp[0], R.lp[1], { size: 13, weight: 600, color: C.ink, align: R.al || 'left' });
+  }
+}
+
+// ---- old shared scenes, re-wired into the tree ----
+const [N_CNS, N_BRAIN, N_V1MAP, N_DEND, N_SYN, N_MEM, N_CHAN, N_FILT] = OLD;
+def(Object.assign(N_CNS, { children: ['brain', 'h_arm', 'h_hand'],
+  caption: 'Brain, spinal cord and the nerves that reach every part of the body. Hover over the head, the arm or the hand to choose where to zoom in.' }));
+{
+  const cInit = N_CNS.init, cDraw = N_CNS.draw;
+  N_CNS.init = function () { cInit.call(this); const hd = new Path2D(); hd.arc(0, -.318, .05, 0, TAU);
+    this.regions = [{ child: 'brain', name: 'Brain', path: hd, lp: [0, -.395], al: 'center' },
+      { child: 'h_arm', name: 'Arm muscle', path: poly([[.085, -.235], [.125, -.215], [.137, -.13], [.132, -.06], [.104, -.06], [.098, -.15]]), lp: [.16, -.15] },
+      { child: 'h_hand', name: 'Fingertips (touch)', path: poly([[.115, .05], [.165, .055], [.17, .125], [.115, .125]]), lp: [.18, .1] }]; };
+  N_CNS.draw = function (env) { cDraw.call(this, env); drawRegions(env, this.regions, this.id); };
+}
+def(Object.assign(N_BRAIN, { at: [0, -.322], children: ['v1map', 'smstrip', 'frontal', 'coronal'] }));
+def(Object.assign(N_V1MAP, { at: [.392, -.005], children: ['v1col'] }));
+def(Object.assign(N_DEND, { at: [0, 0], children: ['synapse'] }));
+def(Object.assign(N_SYN, { at: [0, -.027], children: ['membrane'] }));
+def(Object.assign(N_MEM, { at: [0, .0078], children: ['channel'] }));
+def(Object.assign(N_CHAN, { at: [0, -.0133], children: ['filter'] }));
+def(Object.assign(N_FILT, { at: [0, 0] }));
+const GLOW = { v1map: [[.39, -.01, 1], [.29, .07, .7], [.24, -.02, .8]], smstrip: [[0, -.2, .8], [.06, -.17, .7]], frontal: [[-.24, -.15, 1]], coronal: [[0, .08, .9]] };
+{
+  const bInit = N_BRAIN.init, bDraw = N_BRAIN.draw;
+  N_BRAIN.init = function () {
+    bInit.call(this);
+    this.regions = [
+      { child: 'v1map', name: 'Visual cortex', path: this.v1, lp: [.33, -.2], al: 'right' },
+      { child: 'smstrip', name: 'Motor & touch strip', path: poly([[-.08, -.315], [-.06, -.24], [-.03, -.16], [-.04, -.09], [-.02, -.04], [.12, -.05], [.09, -.1], [.1, -.17], [.07, -.25], [.05, -.32]]), lp: [.02, -.37], al: 'center' },
+      { child: 'frontal', name: 'Frontal lobe', path: poly([[-.42, -.02], [-.41, -.12], [-.35, -.22], [-.24, -.29], [-.1, -.322], [-.08, -.315], [-.06, -.24], [-.03, -.16], [-.04, -.09], [-.02, -.04], [-.12, 0], [-.25, .03], [-.3, .06], [-.37, .05]]), lp: [-.3, -.36], al: 'center' },
+      { child: 'coronal', name: 'Hippocampus (temporal lobe)', path: poly([[-.25, .03], [-.12, 0], [0, -.02], [.12, -.05], [.2, -.1], [.28, -.02], [.3, .12], [.18, .14], [.05, .17], [-.08, .17], [-.18, .14], [-.235, .08]]), lp: [0, .25], al: 'center' },
+    ];
+  };
+  N_BRAIN.draw = function (env) {
+    bDraw.call(this, env);
+    const { ctx } = env, P = n => n / env.k;
+    if (choice.brain === 'coronal' || (hover && hover.child === 'coronal')) {
+      ctx.save(); ctx.beginPath(); ctx.ellipse(0, .085, .1, .024, -.12, 0, TAU); ctx.fillStyle = withA(C.accent, .16); ctx.fill();
+      ctx.setLineDash([P(4), P(3)]); ctx.strokeStyle = C.accent; ctx.lineWidth = P(1.4); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineWidth = P(2); ctx.beginPath(); ctx.moveTo(0, -.03); ctx.lineTo(0, .19); ctx.stroke(); ctx.restore();
+      const cn = NODES.coronal, pp = easeInOut(clamp(cn.popP || 0, 0, 1));
+      if (pp > .01) {
+        const ccx = lerp(cn.popFrom[0], cn.at[0], pp), ccy = lerp(cn.popFrom[1], cn.at[1], pp), h = .5 * cn.w / this.w * pp;
+        ctx.strokeStyle = withA(C.accent, .8); ctx.lineWidth = P(1.2); ctx.beginPath();
+        ctx.moveTo(0, -.03); ctx.lineTo(ccx - h, ccy - h); ctx.moveTo(0, .19); ctx.lineTo(ccx - h, ccy + h); ctx.stroke();
+      }
+      const lab = { ...env, la: hover ? env.a : env.la };
+      label(lab, 'hippocampus, deep inside', -.11, .125, { size: 11, color: C.accent, align: 'right' });
+      label(lab, 'cut here', 0, -.05, { size: 11, color: C.accent, align: 'center' });
+    }
+    drawRegions(env, this.regions, this.id);
+  };
+}
+
+// ---- factories ----
+const winSpikes = (win, p, spont, period) => (c, cyc) => {
+  const out = [], w = win[c.L];
+  if (w && w[1] > 0 && hash(c.id, cyc) < p) out.push(w[0] + (w[1] - w[0]) * hash(c.id, cyc, 1));
+  if (hash(c.id, cyc, 7) < spont) out.push(period * hash(c.id, cyc, 8));
+  return out;
+};
+const thalInput = (toFrac, xs) => ({ make(R, Y) {
+  const lines = xs.map(x => { const pts = [[x, Y(1.15)]]; let y = Y(1.15), xx = x; while (y > Y(toFrac) + .001) { y = Math.max(y - .07, Y(toFrac)); xx += (R() - .5) * .03; pts.push([xx, y]); } return { p: smoothPath(pts, false), top: pts[pts.length - 1], tw: [0, 1, 2].map(() => [(R() - .5) * .12, (R() - .5) * .08]) }; });
+  return { lines, draw(env, tau, P) {
+    const { ctx } = env, a = tau > .05 && tau < .45 ? Math.sin((tau - .05) / .4 * Math.PI) : 0;
+    for (const th of this.lines) {
+      ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); ctx.stroke(th.p);
+      ctx.beginPath(); for (const [dx, dy] of th.tw) { ctx.moveTo(th.top[0], th.top[1]); ctx.lineTo(th.top[0] + dx, th.top[1] + dy); } ctx.stroke();
+      if (a > 0) { ctx.strokeStyle = withA(C.accent, .7 * a); ctx.lineWidth = P(1.8); ctx.stroke(th.p); }
+    }
+  } };
+} });
+function somaPath(ctx, c) {
+  ctx.beginPath();
+  if (c.type === 'pyr' || c.type === 'betz') { const d = c.dir; ctx.moveTo(c.x, c.y + d * c.s); ctx.lineTo(c.x - c.s * .65, c.y - d * c.s * .55); ctx.lineTo(c.x + c.s * .65, c.y - d * c.s * .55); ctx.closePath(); }
+  else ctx.arc(c.x, c.y, c.s * .6, 0, TAU);
+}
+function makeColumn(cfg) {
+  return def({ ...cfg, children: [cfg.child],
+    init() {
+      const R = rng(cfg.seed), nr = NODES[cfg.child]; ensure(nr);
+      const Y = f => cfg.top + (cfg.bot - cfg.top) * f; this.Y = Y;
+      const cs = [cfg.soma[0], Y(cfg.soma[1])];
+      nr.at = [cs[0] - nr.somaU[0] * nr.w / this.w, cs[1] - nr.somaU[1] * nr.w / this.w];
+      const cells = [];
+      for (const sp of cfg.specs) for (let i = 0; i < sp.n; i++) for (let tr = 0; tr < 40; tr++) {
+        const b = cfg.bands[sp.L], [lo, hi] = sp.f || [b.lo + (b.hi - b.lo) * .1, b.hi - (b.hi - b.lo) * .1];
+        const x = -.62 + 1.24 * R(), y = Y(lo + (hi - lo) * R());
+        if (Math.hypot(x - cs[0], y - cs[1]) < (sp.clear || cfg.clear || .035)) continue;
+        if (cells.some(c => Math.hypot(c.x - x, c.y - y) < (c.s + sp.s) * (sp.pack || 2))) continue;
+        cells.push({ x, y, s: sp.s, L: sp.L, type: sp.type, dir: sp.dir || -1, id: cells.length, dx: (R() - .5) * .02, ap: sp.ap != null ? Y(sp.ap) : null, tuft: sp.tuft,
+          basal: [0, 1, 2].map(() => [Math.PI * (.15 + .7 * R()), 2.5 + R() * 2]) });
+        break;
+      }
+      this.cells = cells;
+      this.inputs = (cfg.inputs || []).map(inp => inp.make(R, Y));
+      cfg.setup && cfg.setup.call(this, R, Y);
+    },
+    draw(env) {
+      const { ctx } = env, P = n => n / env.k, Y = this.Y;
+      bgFill(env, C.tissue, -.75, cfg.top, 1.5, cfg.bot - cfg.top);
+      for (const b of cfg.bands) if (b.shade) bgFill(env, withA(C.ink3, .09), -.75, Y(b.lo), 1.5, Y(b.hi) - Y(b.lo));
+      ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); ctx.setLineDash([P(4), P(4)]);
+      for (const b of cfg.bands.slice(1)) { ctx.beginPath(); ctx.moveTo(-.75, Y(b.lo)); ctx.lineTo(.75, Y(b.lo)); ctx.stroke(); }
+      ctx.setLineDash([]);
+      if (cfg.surface) { ctx.strokeStyle = C.ink; ctx.lineWidth = P(2); ctx.beginPath(); ctx.moveTo(-.75, cfg.top); ctx.lineTo(.75, cfg.top); ctx.stroke(); }
+      const cyc = Math.floor(env.t / cfg.period), tau = env.t - cyc * cfg.period;
+      ctx.lineCap = 'round';
+      for (const inp of this.inputs) inp.draw(env, tau, P);
+      ctx.strokeStyle = C.ink3; ctx.lineWidth = P(.9); ctx.beginPath();
+      for (const c of this.cells) {
+        if (c.type === 'pyr' || c.type === 'betz') {
+          const tip = c.y + c.dir * c.s, end = c.ap ?? (c.y + c.dir * .1), ex = c.x + c.dx * .6;
+          ctx.moveTo(c.x, tip); ctx.quadraticCurveTo(c.x + c.dx, (tip + end) / 2, ex, end);
+          if (c.tuft) { ctx.moveTo(ex, end - c.dir * .03); ctx.lineTo(ex - .02, end - c.dir * .005); ctx.moveTo(ex, end - c.dir * .03); ctx.lineTo(ex + .02, end - c.dir * .005); }
+        }
+        const bl = c.type === 'betz' ? 1.5 : 1;
+        for (const [a, l] of c.basal) { ctx.moveTo(c.x, c.y); ctx.lineTo(c.x + Math.cos(a) * c.s * l * bl, c.y - c.dir * Math.sin(a) * c.s * l * bl); }
+      }
+      ctx.stroke();
+      for (const c of this.cells) {
+        let f = 0;
+        for (const ts of cfg.spikes.call(this, c, cyc, tau)) if (tau >= ts) f = Math.max(f, Math.exp(-(tau - ts) / .18));
+        if (f > .02) glow(ctx, c.x, c.y, Math.max(c.s * 3, P(9)), C.accent, f);
+        somaPath(ctx, c); ctx.fillStyle = C.ink2; ctx.fill();
+        if (f > .02) { ctx.fillStyle = withA(C.accent, f); ctx.fill(); }
+      }
+      cfg.extra && cfg.extra.call(this, env, tau, cyc, P);
+      cfg.bands.forEach(b => label(env, b.n, -.485, Y((b.lo + b.hi) / 2), { mono: true, size: b.n.length > 3 ? 10 : 11, color: C.ink2, weight: 500 }));
+      cfg.labels && cfg.labels.call(this, env, P);
+    } });
+}
+function colLabels(env, top, bot) {
+  label(env, 'layer', -.485, top - .03, { mono: true, size: 10, color: C.ink3 });
+  label(env, 'brain surface', .48, top - .03, { size: 11, color: C.ink3, align: 'right' });
+  label(env, 'white matter', .48, bot + .04, { size: 11, color: C.ink3, align: 'right' });
+}
+
+function makeNeuron(cfg) {
+  return def({ ...cfg, children: ['dendrite'],
+    init() {
+      const R = rng(cfg.seed), segs = [], spines = []; let target = null, tflag = false;
+      const grow = (x, y, ang, len, w0, w1, type, d, jit, cb) => {
+        const step = 5, n = Math.max(1, Math.round(len / step));
+        for (let i = 0; i < n; i++) {
+          ang += (R() - .5) * 2 * jit;
+          const nx = x + Math.cos(ang) * step, ny = y + Math.sin(ang) * step;
+          segs.push({ x0: x, y0: y, x1: nx, y1: ny, w: lerp(w0, w1, i / n), type, d0: d, d1: d + step });
+          x = nx; y = ny; d += step; cb && cb(i, n, x, y, ang, d);
+        }
+        return { x, y, ang, d };
+      };
+      if (cfg.kind === 'stellate') {
+        grow(7, 2, .015, 150, 1.4, .6, 'basal', 8, .006, (i, n, x, y, a, d) => { if (!target && d >= 85) target = [x, y]; if (i === 24) grow(x, y, a - .5, 40, .6, .4, 'basal', d, .1); });
+        for (const a0 of [.95, 1.75, 2.45, 3.15, 3.9, 4.6, 5.35]) grow(Math.cos(a0) * 7, Math.sin(a0) * 7, a0, 70 + R() * 60, 1.4, .5, 'basal', 8, .12, (i, n, x, y, a, d) => { if (i === Math.floor(n * .4)) grow(x, y, a + (R() < .5 ? .5 : -.5), 30 + R() * 30, .7, .4, 'basal', d, .12); });
+        grow(0, 8, Math.PI / 2 + .05, 260, .8, .6, 'axon', 8, .05, (i, n, x, y, a, d) => { if (i === 9) grow(x, y, a + 2.7, 180, .6, .5, 'axonc', d, .08); if (i === 30) grow(x, y, a - .9, 90, .6, .5, 'axonc', d, .12); });
+      } else {
+        const H = cfg.somaH;
+        const ap = grow(0, -H * .7, -Math.PI / 2, cfg.apLen, cfg.apW, cfg.apW * .45, 'apical', H * .7, .04, (i, n, x, y, a, d) => {
+          if (cfg.target === 'oblique' && !tflag && d >= cfg.tAt) { tflag = true; grow(x, y, 0, 160, 1.3, .6, 'oblique', d, .004, (j, m, x2, y2, a2, d2) => { if (!target && d2 - d >= 85) target = [x2, y2]; }); return; }
+          if (i > 3 && i < n - 4 && i % cfg.oblEvery === 3) { const side = ((i / cfg.oblEvery) | 0) % 2 ? 1 : -1; const e = grow(x, y, a + side * (.85 + R() * .4), 45 + R() * 55, 1, .5, 'oblique', d, .12); if (R() < .45) grow(e.x, e.y, e.ang + side * .5, 25 + R() * 25, .5, .4, 'oblique', e.d, .15); }
+        });
+        for (let j = 0; j < cfg.tuft; j++) { const e = grow(ap.x, ap.y, -Math.PI / 2 + (j - (cfg.tuft - 1) / 2) * .5, 45 + R() * 45, 1, .5, 'tuft', ap.d, .15); grow(e.x, e.y, e.ang + (R() < .5 ? .5 : -.5), 20 + R() * 30, .5, .35, 'tuft', e.d, .15); }
+        if (cfg.target === 'basal') grow(H * .5, H * .25, .02, 150, 1.7, .6, 'basal', 10, .006, (i, n, x, y, a, d) => { if (!target && d >= 95) target = [x, y]; if (i === 24) grow(x, y, a + .55, 45, .7, .45, 'basal', d, .1); });
+        for (const a0 of cfg.basalAng) grow(Math.cos(a0) * H * .5, Math.sin(a0) * H * .4, a0, cfg.basalLen * (.75 + R() * .5), cfg.basalW || 1.6, .5, 'basal', 10, .1, (i, n, x, y, a, d) => { if (i === Math.floor(n * .45)) grow(x, y, a + (R() < .5 ? .5 : -.5), cfg.basalLen * (.3 + R() * .25), .7, .4, 'basal', d, .12); });
+        grow(0, H * .5, Math.PI / 2 + .04, cfg.axLen, cfg.axW, cfg.axW * .8, 'axon', H * .5, .03, (i, n, x, y, a, d) => {
+          if (cfg.collat.includes(i)) grow(x, y, a + (i % 2 ? -1 : 1) * (.8 + R() * .3), 70 + R() * 90, .6, .5, 'axonc', d, .12);
+        });
+      }
+      for (const s of segs) {
+        if (s.type.startsWith('axon') || s.d0 < 18) continue;
+        const nx = -(s.y1 - s.y0) / 5, ny = (s.x1 - s.x0) / 5;
+        for (let q = 0; q < 2; q++) {
+          const u = R(), bx = lerp(s.x0, s.x1, u), by = lerp(s.y0, s.y1, u), sd = R() < .5 ? 1 : -1, l = 1 + R() * .9;
+          spines.push([bx + nx * sd * s.w / 2, by + ny * sd * s.w / 2, bx + nx * sd * (s.w / 2 + l), by + ny * sd * (s.w / 2 + l)]);
+        }
+      }
+      const sg = cfg.flip ? -1 : 1;
+      if (cfg.flip) { for (const s of segs) { s.y0 = -s.y0; s.y1 = -s.y1; } for (const sp of spines) { sp[1] = -sp[1]; sp[3] = -sp[3]; } target = [target[0], -target[1]]; }
+      target = [target[0], target[1] - 1.6];
+      const U = cfg.w * 1e6, [Tx, Ty] = target, fx = v => (v - Tx) / U, fy = v => (v - Ty) / U;
+      this.U = U;
+      this.segs = segs.map(s => ({ ...s, x0: fx(s.x0), y0: fy(s.y0), x1: fx(s.x1), y1: fy(s.y1), w: s.w / U }));
+      this.spines = spines.map(s => [fx(s[0]), fy(s[1]), fx(s[2]), fy(s[3])]);
+      this.somaU = [fx(0), fy(0)];
+      const sp = new Path2D();
+      if (cfg.kind === 'stellate') sp.ellipse(fx(0), fy(0), 8 / U, 7 / U, 0, 0, TAU);
+      else { const H = cfg.somaH; sp.moveTo(fx(0), fy(-H * sg)); sp.quadraticCurveTo(fx(-H * .22), fy(-H * .1 * sg), fx(-H * .6), fy(H * .45 * sg)); sp.quadraticCurveTo(fx(0), fy(H * .72 * sg), fx(H * .6), fy(H * .45 * sg)); sp.quadraticCurveTo(fx(H * .22), fy(-H * .1 * sg), fx(0), fy(-H * sg)); }
+      this.soma = sp;
+      this.dend = this.segs.filter(s => !s.type.startsWith('axon'));
+      this.axon = this.segs.filter(s => s.type.startsWith('axon'));
+      const main = this.segs.filter(s => s.type === 'axon');
+      const pick = (arr, d) => arr.length ? arr.reduce((b, s) => Math.abs(s.d0 - d) < Math.abs(b.d0 - d) ? s : b) : null;
+      this.lAxon = pick(main, (cfg.axLen || 260) * .55);
+      this.lApical = pick(this.segs.filter(s => s.type === 'apical'), Math.min(170, (cfg.apLen || 0) * .55));
+      if (cfg.myelin) {
+        this.myel = main.filter(s => s.d0 > 40 && (s.d0 - 40) % 75 < 68);
+        this.nodes = main.filter(s => s.d0 > 40 && (s.d0 - 40) % 75 >= 68).map(s => ({ x: s.x0, y: s.y0, d: s.d0 }));
+      }
+    },
+    draw(env) {
+      const { ctx } = env, P = n => n / env.k, U = this.U;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = C.ink2; ctx.lineWidth = Math.max(.4 / U, P(.6)); ctx.beginPath();
+      for (const s of this.spines) { ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); } ctx.stroke();
+      ctx.strokeStyle = C.ink;
+      for (const s of this.dend) { ctx.lineWidth = Math.max(s.w, P(1)); ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke(); }
+      if (this.myel) { ctx.strokeStyle = C.lipid; ctx.lineWidth = Math.max(7 / U, P(4)); ctx.lineCap = 'butt'; ctx.beginPath(); for (const s of this.myel) { ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); } ctx.stroke(); ctx.lineCap = 'round'; }
+      ctx.strokeStyle = C.ink2;
+      for (const s of this.axon) { ctx.lineWidth = Math.max(s.w, P(1)); ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke(); }
+      ctx.fillStyle = C.ink; ctx.fill(this.soma);
+      const cyc = Math.floor(env.t / cfg.period), tau = env.t - cyc * cfg.period, first = cfg.spikes[0];
+      for (let e = 0; e < 12; e++) {
+        const te = .05 + (first - .1) * hash(cyc, e, 1); if (tau < te) continue;
+        const f = Math.exp(-(tau - te) / .25), s = this.dend[Math.floor(hash(cyc, e) * this.dend.length)];
+        if (f > .03) glow(ctx, (s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2, P(9), C.accent, f * .9);
+      }
+      for (const t0 of cfg.spikes) {
+        if (tau < t0) continue;
+        const f = Math.exp(-(tau - t0) / .3); if (f > .02) glow(ctx, this.somaU[0], this.somaU[1], P(26), C.accent, f);
+        const D = (tau - t0) * cfg.vel, Db = (tau - t0) * 320;
+        if (this.nodes) { for (const nd of this.nodes) if (nd.d <= D) { const g = Math.exp(-(D - nd.d) / 70); if (g > .03) glow(ctx, nd.x, nd.y, P(12), C.accent, g); } }
+        else {
+          ctx.lineWidth = P(3.2);
+          for (const s of this.axon) if (s.d1 <= D && s.d1 > D - 50) { ctx.strokeStyle = withA(C.accent, 1 - (D - s.d1) / 50); ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke(); }
+        }
+        ctx.lineWidth = P(2.4);
+        for (const s of this.dend) if (s.d1 <= Db && s.d1 > Db - 30) { ctx.strokeStyle = withA(C.accent, .6 * Math.exp(-s.d1 / 180) * (1 - (Db - s.d1) / 30)); ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke(); }
+      }
+      const [sx, sy] = this.somaU;
+      callout(env, 'cell body', sx - .012, sy, sx - .12, sy + .05);
+      if (this.lAxon) callout(env, cfg.myelin ? 'myelinated axon' : 'axon', this.lAxon.x0, this.lAxon.y0, this.lAxon.x0 + .1, this.lAxon.y0 + .02);
+      if (this.lApical) callout(env, 'apical dendrite', this.lApical.x0, this.lApical.y0, this.lApical.x0 - .12, this.lApical.y0 + .02);
+      callout(env, cfg.targetLabel || 'dendrite', -.04, .0027, .02, .1);
+    } });
+}
+
+// ---- visual path ----
+makeNeuron({ id: 'n_v1', name: 'Pyramidal neuron', short: 'Neuron', w: .0006, size: -3.8, kind: 'pyr', seed: 23, somaH: 18, apLen: 250, apW: 2.8, oblEvery: 7, tuft: 4, target: 'basal',
+  basalAng: [.85, 1.45, 2.05, 2.6, 3.05], basalLen: 110, axLen: 470, axW: .9, collat: [16, 34, 58], spikes: [.95], period: 2.8, vel: 700, targetLabel: 'basal dendrite',
+  caption: 'One pyramidal neuron. Dendrites collect inputs, the cell body adds them up, and when the total crosses a threshold the axon fires a spike.',
+  proc: { text: 'an action potential: ~1 ms, then it runs down the axon at ~1 m/s', t: -3, slow: 'shown ~1,000× slower' } });
+const V1BANDS = [{ n: '1', lo: 0, hi: .1 }, { n: '2/3', lo: .1, hi: .4 }, { n: '4', lo: .4, hi: .6, shade: 1 }, { n: '5', lo: .6, hi: .75 }, { n: '6', lo: .75, hi: 1, shade: 1 }];
+const V1SPECS = [{ L: 1, n: 50, type: 'pyr', s: .0065, ap: .01 }, { L: 2, n: 46, type: 'stel', s: .0045 }, { L: 3, n: 20, type: 'pyr', s: .011, ap: .01, tuft: 1 }, { L: 4, n: 36, type: 'pyr', s: .0065, ap: .42 },
+  { L: 0, n: 4, type: 'int', s: .004 }, { L: 1, n: 7, type: 'int', s: .0045 }, { L: 3, n: 5, type: 'int', s: .0045 }, { L: 4, n: 5, type: 'int', s: .0045 }];
+makeColumn({ id: 'v1col', name: 'Cortical layers', short: 'Layers', w: .0025, size: -3, at: [0, 0], child: 'n_v1', seed: 9, top: -.4, bot: .4, surface: true, period: 2.6, soma: [-.02, .31],
+  caption: 'Slice through the cortex and it has six layers, about 2 mm deep in all. Input from the thalamus arrives in layer 4 and spreads up and down from there.',
+  proc: { text: 'a volley sweeps layer 4 → 2/3 → 5 → 6 in ~10 ms', t: -2, slow: 'shown ~100× slower' },
+  bands: V1BANDS, specs: V1SPECS, spikes: winSpikes([[0, 0], [.55, .95], [.25, .55], [.8, 1.2], [.95, 1.4]], .55, .1, 2.6),
+  inputs: [thalInput(.5, [-.5, -.32, -.12, .1, .3, .46])],
+  labels(env) { colLabels(env, -.4, .4); callout(env, 'input from thalamus', .1, .25, .2, .3); } });
+
+// ---- motor & touch ----
+// One body part, drawn pointing outward from the strip. Local units: 1 = the part's share of the strip (H).
+function drawPart(ctx, part, H, lw, fill, stroke) {
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  const path = pts => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x * H, y * H) : ctx.moveTo(x * H, y * H)); };
+  const limb = (pts, w) => { path(pts); ctx.strokeStyle = stroke; ctx.lineWidth = w * H + 2 * lw; ctx.stroke(); ctx.strokeStyle = fill; ctx.lineWidth = w * H; ctx.stroke(); };
+  const fs = () => { ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); };
+  const E = (x, y, rx, ry) => { ctx.beginPath(); ctx.ellipse(x * H, y * H, rx * H, ry * H, 0, 0, TAU); };
+  if (part === 'leg') { limb([[0, -.1], [.8, -.25], [1.45, .02]], .26); limb([[1.45, .02], [1.62, .3]], .2); }
+  else if (part === 'trunk') { ctx.beginPath(); ctx.roundRect(0, -.33 * H, .8 * H, .66 * H, .16 * H); fs(); }
+  else if (part === 'arm') { limb([[0, 0], [.75, -.2], [1.4, .06]], .22); }
+  else if (part === 'hand') {
+    limb([[0, .04], [.2, .04]], .26);
+    for (let f = 0; f < 4; f++) { const y = -.25 + f * .135; limb([[.62, y * .8], [1.08 - Math.abs(f - 1.4) * .07, y * 1.25]], .11); }
+    limb([[.4, .26], [.66, .48]], .12);
+    E(.42, .03, .33, .29); fs();
+  }
+  else if (part === 'face') { E(.48, 0, .46, .42); fs(); ctx.fillStyle = stroke; E(.62, -.13, .05, .05); ctx.fill(); ctx.beginPath(); ctx.moveTo(.92 * H, -.02 * H); ctx.lineTo(1.0 * H, .06 * H); ctx.lineTo(.9 * H, .1 * H); ctx.lineWidth = lw; ctx.stroke(); }
+  else if (part === 'lips') {
+    ctx.beginPath(); ctx.moveTo(.1 * H, 0); ctx.bezierCurveTo(.3 * H, -.42 * H, .45 * H, -.3 * H, .5 * H, -.2 * H); ctx.bezierCurveTo(.55 * H, -.3 * H, .7 * H, -.42 * H, .9 * H, 0); ctx.closePath(); fs();
+    ctx.beginPath(); ctx.moveTo(.1 * H, 0); ctx.bezierCurveTo(.3 * H, .46 * H, .7 * H, .46 * H, .9 * H, 0); ctx.closePath(); fs();
+  }
+  else if (part === 'tongue') { ctx.beginPath(); ctx.moveTo(0, -.24 * H); ctx.lineTo(.55 * H, -.24 * H); ctx.quadraticCurveTo(.95 * H, -.24 * H, .95 * H, 0); ctx.quadraticCurveTo(.95 * H, .24 * H, .55 * H, .24 * H); ctx.lineTo(0, .24 * H); ctx.closePath(); fs(); ctx.beginPath(); ctx.moveTo(.1 * H, 0); ctx.lineTo(.6 * H, 0); ctx.lineWidth = lw; ctx.stroke(); }
+  else if (part === 'throat') { ctx.beginPath(); ctx.roundRect(0, -.2 * H, .55 * H, .4 * H, .15 * H); fs(); }
+}
+def({ id: 'smstrip', name: 'Motor & touch strip', short: 'Strip', w: .07, size: -1.3, at: [.02, -.17], children: ['m1col', 's1col'],
+  caption: 'Two strips of cortex on either side of the central sulcus. The front one moves the body, the back one feels it. Both are laid out as a map of the body, with outsized areas for the hands and lips. Hover over one and zoom in.',
+  proc: { text: 'moving a finger lights the motor hand area; touch feedback lights the sensory hand area ~30 ms later', t: -1.5, slow: 'shown ~20× slower' },
+  init() {
+    const R = rng(71), cx = y => .24 * y + .015 * Math.sin(y * 11), Y0 = -.44, Y1 = .37;
+    Object.assign(this, { cx, Y0, Y1 });
+    const strip = (a, b, x0, x1) => { const pts = []; for (let i = 0; i <= 10; i++) { const y = a + (b - a) * i / 10; pts.push([cx(y) + x0, y]); } for (let i = 10; i >= 0; i--) { const y = a + (b - a) * i / 10; pts.push([cx(y) + x1, y]); } return poly(pts); };
+    const mk = (wts, x0, x1) => { const tot = wts.reduce((s, w) => s + w[1], 0); let acc = 0; return wts.map(([n, w]) => { const a = Y0 + (Y1 - Y0) * acc / tot; acc += w; const b = Y0 + (Y1 - Y0) * acc / tot, ym = (a + b) / 2; return { n, a, b, p: strip(a, b, x0, x1), mid: [cx(ym) + (x0 + x1) / 2, ym] }; }); };
+    this.mot = mk([['leg', 1], ['trunk', .6], ['arm', .9], ['hand', 2.4], ['face', 1.4], ['lips', 1.2], ['tongue', 1], ['throat', .6]], -.15, -.012);
+    this.sen = mk([['leg', 1], ['trunk', .6], ['arm', .8], ['hand', 2.6], ['face', 1.3], ['lips', 1.4], ['tongue', .9], ['throat', .5]], .012, .13);
+    const mh = this.mot.find(s => s.n === 'hand').mid, sh = this.sen.find(s => s.n === 'hand').mid;
+    this.regions = [
+      { child: 'm1col', name: 'Motor cortex (M1)', path: strip(Y0, Y1, -.15, -.012), lp: [mh[0] - .1, mh[1] - .19], al: 'right' },
+      { child: 's1col', name: 'Somatosensory cortex (S1)', path: strip(Y0, Y1, .012, .13), lp: [sh[0] + .09, sh[1] - .19] },
+    ];
+    NODES.m1col.at = mh; NODES.s1col.at = sh;
+    this.squig = [];
+    for (let n = 0; n < 70; n++) { let x = -.7 + 1.4 * R(), y = Y0 + (Y1 - Y0) * R(); if (Math.abs(x - cx(y)) < .2) continue; let a = R() * TAU; const pts = [[x, y]]; for (let i = 0; i < 6; i++) { a += (R() - .5) * 1.4; x += Math.cos(a) * .04; y += Math.sin(a) * .04; pts.push([x, y]); } this.squig.push(smoothPath(pts, false)); }
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, { cx, Y0, Y1 } = this;
+    bgFill(env, C.tissue, -.8, Y0, 1.6, 1.3);
+    bgFill(env, withA(C.ink3, .12), -.8, Y1 + .03, 1.6, .5);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.6);
+    ctx.beginPath(); ctx.moveTo(-.8, Y0); ctx.lineTo(.8, Y0); ctx.moveTo(-.8, Y1 + .02); ctx.lineTo(.8, Y1 + .02); ctx.stroke();
+    ctx.save(); ctx.beginPath(); ctx.rect(-.8, Y0, 1.6, Y1 - Y0); ctx.clip();
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = P(.8); for (const q of this.squig) ctx.stroke(q);
+    for (const [off, w, col] of [[0, 2, C.ink], [-.165, 1.3, C.ink2], [.145, 1.3, C.ink2], [-.42, 1.1, C.ink3], [.4, 1.1, C.ink3]]) {
+      ctx.strokeStyle = col; ctx.lineWidth = P(w); ctx.beginPath();
+      for (let i = 0; i <= 40; i++) { const y = Y0 + (Y1 - Y0) * i / 40; i ? ctx.lineTo(cx(y) + off, y) : ctx.moveTo(cx(y) + off, y); } ctx.stroke();
+    }
+    ctx.restore();
+    const tc = env.t % 3, mG = tc > .3 && tc < 1.4 ? Math.sin((tc - .3) / 1.1 * Math.PI) : 0, sG = tc > .75 && tc < 1.85 ? Math.sin((tc - .75) / 1.1 * Math.PI) : 0;
+    for (const [segs, g] of [[this.mot, mG], [this.sen, sG]]) segs.forEach((s, i) => {
+      ctx.fillStyle = withA(C.ink3, i % 2 ? .14 : .24); ctx.fill(s.p);
+      if (s.n === 'hand' && g > 0) { ctx.fillStyle = withA(C.accent, .55 * g); ctx.fill(s.p); }
+      ctx.strokeStyle = withA(C.ink, .3); ctx.lineWidth = P(.8); ctx.stroke(s.p);
+      label(env, s.n, s.mid[0], s.mid[1], { size: 11, italic: true, align: 'center', color: C.ink });
+    });
+    const slope = y => .24 + .165 * Math.cos(y * 11);
+    for (const [segs, g, side, x0] of [[this.mot, mG, -1, -.165], [this.sen, sG, 1, .145]]) for (const sgm of segs) {
+      const ym = (sgm.a + sgm.b) / 2, H = (sgm.b - sgm.a) * .9;
+      ctx.save(); ctx.translate(cx(ym) + x0, ym); ctx.rotate(-Math.atan(slope(ym))); ctx.scale(side, 1);
+      drawPart(ctx, sgm.n, H, P(1.2), C.panel, C.ink);
+      if (sgm.n === 'hand' && g > 0) glow(ctx, .45 * H, 0, .75 * H, C.accent, g);
+      ctx.restore();
+    }
+    drawRegions(env, this.regions, this.id);
+    label(env, 'movement', cx(Y0) - .08, Y0 - .035, { size: 11, weight: 600, align: 'center', color: C.ink2 });
+    label(env, 'touch', cx(Y0) + .07, Y0 - .035, { size: 11, weight: 600, align: 'center', color: C.ink2 });
+    callout(env, 'central sulcus', cx(.28), .28, cx(.28) + .17, .45);
+    label(env, 'top of the brain', .48, Y0 - .035, { size: 11, color: C.ink3, align: 'right' });
+  } });
+
+makeNeuron({ id: 'n_betz', name: 'Betz cell', short: 'Betz cell', w: .0014, size: -3.4, kind: 'pyr', seed: 91, somaH: 55, apLen: 900, apW: 6, oblEvery: 6, tuft: 0, target: 'oblique', tAt: 170,
+  basalAng: [-.3, .25, .8, 1.3, 1.85, 2.35, 2.9, 3.45], basalLen: 230, basalW: 3, axLen: 900, axW: 2.4, collat: [20, 60], myelin: true, spikes: [.9], period: 3, vel: 900, targetLabel: 'oblique dendrite',
+  caption: 'A Betz cell, the largest neuron in the human cortex. Its axon runs all the way down the spinal cord, wrapped in myelin so the spike can leap from gap to gap.',
+  proc: { text: 'the spike jumps node to node down a myelinated axon at ~60 m/s', t: -3, slow: 'shown ~10,000× slower' } });
+makeColumn({ id: 'm1col', name: 'Motor cortex layers', short: 'M1 layers', w: .004, size: -2.6, child: 'n_betz', seed: 29, top: -.42, bot: .42, surface: true, period: 2.8, soma: [0, .63], clear: .06,
+  caption: 'Primary motor cortex is thick and has no layer 4. Layer 5 holds giant Betz cells whose axons run all the way down to the spinal cord.',
+  proc: { text: 'a layer 5 burst sends a command down the corticospinal tract, ~10 ms', t: -2, slow: 'shown ~100× slower' },
+  bands: [{ n: '1', lo: 0, hi: .08 }, { n: '2/3', lo: .08, hi: .35 }, { n: '5', lo: .35, hi: .72, shade: 1 }, { n: '6', lo: .72, hi: 1 }],
+  specs: [{ L: 2, n: 5, type: 'betz', s: .014, ap: .01, tuft: 1, f: [.55, .68], pack: 3 }, { L: 1, n: 40, type: 'pyr', s: .0045, ap: .01 }, { L: 2, n: 22, type: 'pyr', s: .0065, ap: .01, tuft: 1 }, { L: 3, n: 30, type: 'pyr', s: .0045, ap: .36 },
+    { L: 0, n: 3, type: 'int', s: .0035 }, { L: 1, n: 6, type: 'int', s: .004 }, { L: 2, n: 4, type: 'int', s: .004 }],
+  spikes(c, cyc) { return c.type === 'betz' ? [.85 + .15 * hash(c.id, cyc)] : winSpikes([[0, 0], [.3, .7], [.6, 1.0], [.95, 1.35]], .55, .08, 2.8)(c, cyc); },
+  inputs: [thalInput(.3, [-.45, -.2, .15, .42])],
+  setup() { this.outs = [...this.cells.filter(c => c.type === 'betz').map(c => [c.x, c.y]), [0, this.Y(.63)]]; },
+  extra(env, tau, cyc, P) {
+    const { ctx } = env, g = tau > 1.0 && tau < 1.9 ? Math.sin((tau - 1) / .9 * Math.PI) : 0;
+    for (const [x, y] of this.outs) { ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.6); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + .01, .6); ctx.stroke(); if (g > 0) { ctx.strokeStyle = withA(C.accent, .85 * g); ctx.lineWidth = P(2.6); ctx.stroke(); } }
+  },
+  labels(env) {
+    colLabels(env, -.42, .42);
+    label(env, 'no layer 4 here ("agranular" cortex)', .48, this.Y(.35) - .025, { size: 11, color: C.ink3, align: 'right' });
+    const b = this.cells.find(c => c.type === 'betz' && c.x > .1) || this.cells.find(c => c.type === 'betz');
+    if (b) callout(env, 'Betz cells', b.x + .01, b.y, b.x + .12, b.y - .1);
+    label(env, 'down to the spinal cord ↓', 0, .47, { size: 11, color: C.ink2, align: 'center' });
+  } });
+
+makeNeuron({ id: 'n_stel', name: 'Spiny stellate cell', short: 'Stellate', w: .0005, size: -4, kind: 'stellate', seed: 13, spikes: [.95], period: 2.8, vel: 600, axLen: 260, targetLabel: 'dendrite',
+  caption: 'A spiny stellate cell in layer 4. It has no long apical dendrite; it collects touch signals relayed by the thalamus and passes them up to layers 2/3.',
+  proc: { text: 'a spike fired when touch input arrives, ~1 ms', t: -3, slow: 'shown ~1,000× slower' } });
+makeColumn({ id: 's1col', name: 'Touch cortex layers', short: 'S1 layers', w: .0025, size: -3, child: 'n_stel', seed: 19, top: -.4, bot: .4, surface: true, period: 2.6, soma: [0, .5], clear: .045,
+  caption: 'Somatosensory cortex has a thick layer 4, packed with small stellate cells. Touch signals from the skin, relayed by the thalamus, land there first.',
+  proc: { text: 'touch input reaches layer 4, then spreads up and down in ~10 ms', t: -2, slow: 'shown ~100× slower' },
+  bands: V1BANDS, specs: V1SPECS, spikes: winSpikes([[0, 0], [.55, .95], [.25, .55], [.8, 1.2], [.95, 1.4]], .55, .1, 2.6),
+  inputs: [thalInput(.5, [-.48, -.3, -.1, .12, .28, .45])],
+  labels(env) { colLabels(env, -.4, .4); callout(env, 'touch input from thalamus', .12, .25, .2, .3); } });
+
+// ---- planning (prefrontal) ----
+def({ id: 'frontal', name: 'Frontal lobe', short: 'Frontal', w: .07, size: -1.3, at: [-.25, -.14], children: ['pfccol'],
+  caption: 'The front of the brain handles planning, decisions, language, and holding things in mind. Dorsolateral prefrontal cortex (areas 9/46) keeps information alive across seconds of delay.',
+  proc: { text: 'dorsolateral PFC stays active while you hold a number in mind, for seconds', t: .5, slow: 'shown in real time' },
+  init() {
+    this.s = .2 / .07;
+    this.areas = [
+      { n: 'frontal pole (10)', x: -.385, y: -.07, rx: .035, ry: .075, h: .58 }, { n: 'dorsolateral PFC (9/46)', x: -.24, y: -.15, rx: .085, ry: .05, h: .75, key: 1 },
+      { n: 'eye fields (8)', x: -.13, y: -.215, rx: .03, ry: .055, h: .12 }, { n: 'premotor (6)', x: -.075, y: -.17, rx: .022, ry: .12, h: .3 },
+      { n: "Broca's area (44/45)", x: -.2, y: -.02, rx: .055, ry: .03, h: .9 }, { n: 'superior frontal', x: -.22, y: -.27, rx: .1, ry: .03, h: .5 },
+    ];
+  },
+  draw(env) {
+    const { ctx } = env, s = this.s, B = NODES.brain, P = n => n / (env.k * s), T = (x, y) => [(x + .25) * s, (y + .14) * s];
+    const tc = env.t % 5, on = tc > .6 && tc < 3.6 ? Math.min(1, (tc - .6) / .5, (3.6 - tc) / .4) : 0;
+    ctx.save(); ctx.scale(s, s); ctx.translate(.25, .14);
+    ctx.fillStyle = C.tissue; ctx.fill(B.outline);
+    ctx.save(); ctx.clip(B.outline);
+    for (const a of this.areas) {
+      ctx.beginPath(); ctx.ellipse(a.x, a.y, a.rx, a.ry, 0, 0, TAU); const [r, g, b] = hsl2rgb(a.h, .45, .6);
+      ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},.3)`; ctx.fill();
+      if (a.key && on > 0) { ctx.fillStyle = withA(C.accent, .5 * on); ctx.fill(); }
+    }
+    ctx.lineWidth = P(.8); ctx.strokeStyle = C.ink3; for (const q of B.squig) ctx.stroke(q);
+    ctx.lineWidth = P(1.6); ctx.strokeStyle = C.ink2; for (const q of B.sulci) ctx.stroke(q);
+    ctx.restore();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.6); ctx.stroke(B.outline);
+    ctx.restore();
+    for (const a of this.areas) { const [x, y] = T(a.x, a.y); label(env, a.n, x, y, { size: 11, align: 'center', color: C.ink, weight: a.key ? 600 : 400 }); }
+    const P2 = n => n / env.k, X = t => -.4 + .8 * t / 5, ty = .43;
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = P2(1); ctx.beginPath(); ctx.moveTo(X(0), ty); ctx.lineTo(X(5), ty); ctx.stroke();
+    for (const [a, b, n] of [[.3, .6, 'cue'], [.6, 3.6, 'delay: hold it in mind'], [3.6, 4.1, 'respond']]) { ctx.fillStyle = withA(C.ink3, n === 'cue' || n === 'respond' ? .5 : .2); ctx.fillRect(X(a), ty - .008, X(b) - X(a), .016); label(env, n, (X(a) + X(b)) / 2, ty + .03, { size: 10.5, align: 'center', color: C.ink2 }); }
+    ctx.fillStyle = C.accent; circ(ctx, X(tc), ty, P2(4)); ctx.fill();
+  } });
+makeNeuron({ id: 'n_pfc', name: 'Pyramidal neuron', short: 'Neuron', w: .0007, size: -3.8, kind: 'pyr', seed: 77, somaH: 20, apLen: 300, apW: 3, oblEvery: 6, tuft: 4, target: 'basal',
+  basalAng: [.6, 1.1, 1.6, 2.1, 2.6, 3.0, 3.4], basalLen: 130, axLen: 450, axW: .9, collat: [14, 30, 52], spikes: [.7, 1.0, 1.3, 1.62, 1.95, 2.25, 2.6, 2.92, 3.3], period: 4.5, vel: 700, targetLabel: 'basal dendrite',
+  caption: 'A layer 3 pyramidal cell in prefrontal cortex. Its many spines take input from neighbors that fire along with it, so the group can keep itself going after the cue is gone.',
+  proc: { text: 'spike after spike through a delay of a few seconds', t: .3, slow: 'shown about real time' } });
+makeColumn({ id: 'pfccol', name: 'Prefrontal layers', short: 'PFC layers', w: .003, size: -3, at: [.029, -.029], child: 'n_pfc', seed: 37, top: -.4, bot: .4, surface: true, period: 5, soma: [0, .33],
+  caption: 'Prefrontal cortex, layer by layer. During a working-memory delay, a group of interconnected cells keeps firing after the cue is gone, holding the memory for seconds.',
+  proc: { text: 'persistent firing through a delay of a few seconds', t: .5, slow: 'shown in real time' },
+  bands: [{ n: '1', lo: 0, hi: .09 }, { n: '2/3', lo: .09, hi: .45 }, { n: '4', lo: .45, hi: .52, shade: 1 }, { n: '5', lo: .52, hi: .75 }, { n: '6', lo: .75, hi: 1, shade: 1 }],
+  specs: [{ L: 1, n: 55, type: 'pyr', s: .0055, ap: .01 }, { L: 2, n: 14, type: 'stel', s: .004 }, { L: 3, n: 22, type: 'pyr', s: .009, ap: .01, tuft: 1 }, { L: 4, n: 30, type: 'pyr', s: .0055, ap: .47 },
+    { L: 1, n: 7, type: 'int', s: .0045 }, { L: 3, n: 5, type: 'int', s: .0045 }],
+  spikes(c, cyc) {
+    const out = [];
+    if (this.asm.has(c.id)) { for (let t = .7 + .2 * hash(c.id, cyc); t < 3.6; t += .22 + .14 * hash(c.id, cyc, t * 100 | 0)) out.push(t); }
+    else if (hash(c.id, cyc, 7) < .35) out.push(5 * hash(c.id, cyc, 8));
+    return out;
+  },
+  setup() {
+    const a = this.cells.filter(c => (this.asmL || [1, 3]).includes(c.L) && c.type === 'pyr' && hash(c.id, 99) < .2); this.asm = new Set(a.map(c => c.id));
+    this.pairs = []; for (const c of a) a.filter(o => o !== c).sort((p, q) => Math.hypot(p.x - c.x, p.y - c.y) - Math.hypot(q.x - c.x, q.y - c.y)).slice(0, 2).forEach(o => this.pairs.push([c, o]));
+  },
+  extra(env, tau, cyc, P) {
+    const { ctx } = env, on = tau > .6 && tau < 3.7 ? Math.min(1, (tau - .6) / .3, (3.7 - tau) / .3) : 0;
+    ctx.strokeStyle = withA(C.accent, .15 + .35 * on); ctx.lineWidth = P(1.2); ctx.beginPath();
+    for (const [a, b] of this.pairs) { ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo((a.x + b.x) / 2 + (a.y - b.y) * .2, (a.y + b.y) / 2, b.x, b.y); } ctx.stroke();
+    const X = t => -.4 + .8 * t / 5, ty = .455;
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); ctx.beginPath(); ctx.moveTo(X(0), ty); ctx.lineTo(X(5), ty); ctx.stroke();
+    for (const [a, b, n] of [[.4, .6, 'cue'], [.6, 3.6, 'delay'], [3.6, 4.1, 'respond']]) { ctx.fillStyle = withA(C.ink3, n === 'delay' ? .2 : .5); ctx.fillRect(X(a), ty - .007, X(b) - X(a), .014); label(env, n, (X(a) + X(b)) / 2, ty + .028, { size: 10, align: 'center', color: C.ink2 }); }
+    ctx.fillStyle = C.accent; circ(ctx, X(tau), ty, P(4)); ctx.fill();
+  },
+  labels(env) { label(env, 'layer', -.485, -.43, { mono: true, size: 10, color: C.ink3 }); label(env, 'brain surface', .48, -.43, { size: 11, color: C.ink3, align: 'right' }); const c = this.cells.find(c => this.asm.has(c.id) && c.x > .15); if (c) callout(env, 'cells holding the memory', c.x, c.y, c.x + .08, c.y - .08); } });
+
+// ---- memory (hippocampus) ----
+def({ id: 'coronal', name: 'Coronal slice', short: 'Slice', w: .07, size: -1.4, at: [.27, .3], popFrom: [0, .08], card: true, children: ['hippo'],
+  caption: 'A coronal section: imagine slicing the brain at the dashed line and turning the slice to face you. The hippocampus curls along the floor of the lateral ventricle, deep in the medial temporal lobe.',
+  proc: { text: 'theta rhythm, 4–8 waves per second, while you explore or remember', t: -.8, slow: 'shown ~6× slower' },
+  init() {
+    this.outline = smoothPath([[-.26, -.62], [0, -.66], [.25, -.6], [.42, -.45], [.5, -.25], [.49, -.1], [.36, -.06], [.3, -.02], [.37, .02], [.48, .08], [.47, .2], [.38, .31], [.22, .37], [.08, .34], [0, .25], [-.05, .13], [-.08, .04], [-.13, .06], [-.17, .18], [-.2, .4], [-.22, .62], [-.26, .62]]);
+    this.vent = smoothPath([[-.24, -.3], [-.1, -.29], [-.02, -.25], [-.08, -.22], [-.2, -.2], [-.24, -.22]]);
+    this.horn = smoothPath([[-.03, -.035], [.05, -.06], [.09, -.035], [.03, -.022]]);
+    this.cc = smoothPath([[-.26, -.34], [-.1, -.35], [.06, -.31], [.04, -.29], [-.1, -.315], [-.26, -.31]]);
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, g = .09 / .07;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 4; ctx.fillStyle = C.panel; ctx.fillRect(-.5, -.5, 1, 1); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(-.5, -.5, 1, 1); ctx.clip(); ctx.scale(g, g);
+    this.content({ ...env, k: env.k * g });
+    ctx.restore();
+    ctx.strokeStyle = C.accent; ctx.lineWidth = P(1.5); ctx.strokeRect(-.5, -.5, 1, 1);
+    label(env, 'coronal section · seen from the front', -.48, -.47, { mono: true, size: 10.5, color: C.accent });
+  },
+  content(env) {
+    const { ctx } = env, P = n => n / env.k;
+    ctx.fillStyle = C.tissue; ctx.fill(this.outline);
+    ctx.save(); ctx.clip(this.outline); ctx.lineWidth = .075; ctx.strokeStyle = withA(C.ink3, .38); ctx.stroke(this.outline); ctx.restore();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.6); ctx.stroke(this.outline);
+    ctx.fillStyle = withA(C.ink3, .32);
+    for (const [x, y, rx, ry, a] of [[-.06, -.2, .05, .035, .3], [-.17, -.07, .08, .09, 0], [.17, -.12, .055, .09, .2]]) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, a, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = C.panel; ctx.fill(this.vent); ctx.fill(this.horn); ctx.lineWidth = P(1.2); ctx.strokeStyle = C.ink2; ctx.stroke(this.vent); ctx.stroke(this.horn);
+    ctx.fillStyle = withA(C.panel, .6); ctx.fill(this.cc);
+    const th = .5 + .5 * Math.sin(env.t * TAU * 1.0);
+    glow(ctx, 0, .01, .07, C.accent, .25 + .5 * th);
+    ctx.strokeStyle = withA(C.ink, .85); ctx.lineCap = 'round';
+    ctx.lineWidth = .012; ctx.beginPath(); ctx.arc(0, .008, .045, Math.PI * .95, Math.PI * 2.45); ctx.stroke();
+    ctx.lineWidth = .009; ctx.beginPath(); ctx.arc(.012, .014, .022, Math.PI * .25, Math.PI * 1.75); ctx.stroke();
+    callout(env, 'hippocampus', .03, .04, .17, .27);
+    callout(env, 'lateral ventricle', -.12, -.26, .04, -.33);
+    label(env, 'thalamus', -.17, -.07, { size: 11, italic: true, align: 'center', color: C.ink2 });
+    callout(env, 'insula', .32, -.03, .3, -.2);
+    label(env, 'temporal lobe', .32, .2, { size: 11, italic: true, align: 'center', color: C.ink2 });
+    label(env, 'midline', -.27, .33, { size: 10.5, color: C.ink3, align: 'right' });
+  } });
+def({ id: 'hippo', name: 'Hippocampus', short: 'Hippocampus', w: .014, size: -2.1, at: [0, 0], children: ['ca1'],
+  caption: 'The hippocampus in cross-section: two interlocking C’s. Signals run a loop from entorhinal cortex to the dentate gyrus, then CA3, then CA1, and out through the subiculum.',
+  proc: { text: 'a signal runs the loop: entorhinal → dentate gyrus → CA3 → CA1, ~20 ms', t: -1.7, slow: 'shown ~100× slower' },
+  init() {
+    const R = rng(83);
+    this.ca = [[-.48, .18], [-.38, 0], [-.25, -.18], [-.05, -.27], [.15, -.26], [.32, -.18], [.42, -.02], [.38, .15], [.25, .22], [.15, .16]];
+    this.caP = smoothPath(this.ca, false);
+    this.pyr = []; for (let i = 0; i <= 120; i++) { const u = i / 120, p = along(this.ca, u); this.pyr.push({ u, x: p.x + (R() - .5) * .012, y: p.y + (R() - .5) * .012, nx: -p.ty, ny: p.tx }); }
+    this.dg = []; for (let i = 0; i <= 90; i++) { const a = Math.PI * (.35 + 1.3 * i / 90), r = .15 + (R() - .5) * .012; this.dg.push({ x: .15 + Math.cos(a) * r, y: .17 + Math.sin(a) * r, a }); }
+    this.ec = poly([[-.5, .24], [-.3, .3], [-.18, .5], [-.5, .5]]);
+    const mk = pts => ({ pts, p: smoothPath(pts, false) });
+    this.paths = {
+      perforant: mk([[-.36, .4], [-.22, .27], [-.06, .15], [.03, .07]]),
+      mossy: mk([[.05, .2], [.15, .16], [.26, .17], [.38, .07]]),
+      schaffer: mk([[.41, 0], [.3, -.12], [.12, -.19], [-.05, -.2], [-.2, -.12]]),
+      out: mk([[-.1, -.24], [-.3, -.12], [-.45, .12]]),
+    };
+    const p = along(this.ca, .33);
+    const ch = NODES[this.children[0]]; ch.at = [p.x, p.y + .19 * ch.w / this.w];
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, tc = env.t % 3.4;
+    const pulse = (a, b) => tc > a && tc < b ? Math.sin((tc - a) / (b - a) * Math.PI) : 0;
+    bgFill(env, C.tissue, -.8, -.8, 1.6, 1.6);
+    ctx.fillStyle = withA(C.ink3, .12); ctx.fill(this.ec);
+    ctx.strokeStyle = withA(C.ink3, .35); ctx.lineWidth = .045; ctx.lineCap = 'round'; ctx.stroke(this.caP);
+    ctx.beginPath(); ctx.arc(.15, .17, .15, Math.PI * .35, Math.PI * 1.65); ctx.lineWidth = .03; ctx.stroke();
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.2); ctx.setLineDash([P(6), P(4)]);
+    ctx.beginPath(); ctx.moveTo(-.3, -.08); ctx.quadraticCurveTo(0, -.12, .25, -.02); ctx.stroke(); ctx.setLineDash([]);
+    const G = { perforant: pulse(.15, .75), mossy: pulse(.85, 1.35), schaffer: pulse(1.45, 1.95), out: pulse(2.05, 2.6) };
+    for (const [k, pa] of Object.entries(this.paths)) {
+      ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1.4); ctx.stroke(pa.p);
+      if (G[k] > 0) { ctx.strokeStyle = withA(C.accent, .9 * G[k]); ctx.lineWidth = P(3); ctx.stroke(pa.p); }
+      const e = pa.pts[pa.pts.length - 1], q = pa.pts[pa.pts.length - 2], a = Math.atan2(e[1] - q[1], e[0] - q[0]);
+      ctx.fillStyle = C.ink3; ctx.beginPath(); ctx.moveTo(e[0], e[1]); ctx.lineTo(e[0] - Math.cos(a - .4) * .025, e[1] - Math.sin(a - .4) * .025); ctx.lineTo(e[0] - Math.cos(a + .4) * .025, e[1] - Math.sin(a + .4) * .025); ctx.fill();
+    }
+    const fCA3 = pulse(1.25, 1.75), fCA1 = pulse(1.8, 2.3), fDG = pulse(.65, 1.1), fEC = pulse(0, .45);
+    ctx.lineWidth = P(.8); ctx.strokeStyle = C.ink3; ctx.beginPath();
+    for (const c of this.pyr) { ctx.moveTo(c.x, c.y); ctx.lineTo(c.x + c.nx * .045, c.y + c.ny * .045); } ctx.stroke();
+    for (const c of this.pyr) {
+      const f = c.u > .55 ? fCA3 : c.u > .15 && c.u < .45 ? fCA1 : 0, s = .007;
+      ctx.beginPath(); ctx.moveTo(c.x + c.nx * s, c.y + c.ny * s); ctx.lineTo(c.x - c.ny * s * .7 - c.nx * s * .5, c.y + c.nx * s * .7 - c.ny * s * .5); ctx.lineTo(c.x + c.ny * s * .7 - c.nx * s * .5, c.y - c.nx * s * .7 - c.ny * s * .5); ctx.closePath();
+      ctx.fillStyle = C.ink2; ctx.fill(); if (f > 0) { ctx.fillStyle = withA(C.accent, f); ctx.fill(); }
+    }
+    for (const c of this.dg) { circ(ctx, c.x, c.y, .0045); ctx.fillStyle = C.ink2; ctx.fill(); if (fDG > 0) { ctx.fillStyle = withA(C.accent, fDG); ctx.fill(); } }
+    if (fEC > 0) { ctx.fillStyle = withA(C.accent, .4 * fEC); ctx.fill(this.ec); }
+    label(env, 'CA1', -.1, -.37, { size: 13, weight: 600, align: 'center', color: C.ink });
+    label(env, 'CA3', .5, -.04, { size: 13, weight: 600, align: 'right', color: C.ink });
+    label(env, 'CA2', .36, -.27, { size: 11, align: 'center', color: C.ink2 });
+    label(env, 'dentate gyrus', .14, .37, { size: 13, weight: 600, align: 'center', color: C.ink });
+    label(env, 'hilus', .17, .17, { size: 10.5, italic: true, align: 'center', color: C.ink3 });
+    label(env, 'subiculum', -.44, .06, { size: 11, align: 'left', color: C.ink2 });
+    label(env, 'entorhinal cortex', -.46, .45, { size: 11, weight: 600, color: C.ink2 });
+    label(env, 'fissure', -.28, -.1, { size: 10, italic: true, color: C.ink3 });
+    callout(env, 'perforant path', -.22, .27, -.12, .38);
+    callout(env, 'mossy fibers', .26, .17, .36, .3);
+    callout(env, 'Schaffer collaterals', .12, -.19, .2, -.38);
+  } });
+makeNeuron({ id: 'n_ca1', name: 'CA1 pyramidal cell', short: 'Neuron', w: .0007, size: -3.8, kind: 'pyr', seed: 5, somaH: 17, apLen: 340, apW: 2.6, oblEvery: 5, tuft: 5, target: 'oblique', tAt: 95, flip: true,
+  basalAng: [.7, 1.3, 1.9, 2.5], basalLen: 90, axLen: 260, axW: .8, collat: [12, 30], spikes: [.9, .97, 1.04, 1.11], period: 3, vel: 600, targetLabel: 'oblique dendrite (stratum radiatum)',
+  caption: 'A CA1 pyramidal cell. In people as in rats, cells like this fire at a particular place or moment, which is why they’re called place cells and time cells.',
+  proc: { text: 'a place cell fires a burst of spikes as you cross its place field, ~10 ms', t: -2, slow: 'shown ~100× slower' } });
+makeColumn({ id: 'ca1', name: 'CA1 layers', short: 'CA1', w: .0025, size: -3, child: 'n_ca1', seed: 47, top: -.46, bot: .46, period: 3.6, soma: [0, .29], clear: .03,
+  caption: 'Area CA1, layer by layer. Pyramidal cells pack into one thin band, with dendrites reaching down through stratum radiatum where inputs from CA3 land. During a sharp-wave ripple, place cells fire in a fast sequence that replays a path. Most of this was mapped in rats; people show the same ripples in intracranial recordings.',
+  proc: { text: 'a sharp-wave ripple: a ~100 ms burst in which place cells replay a path in order', t: -1, slow: 'shown ~10× slower' },
+  bands: [{ n: 'alveus', lo: 0, hi: .05, shade: 1 }, { n: 'oriens', lo: .05, hi: .25 }, { n: 'pyramidale', lo: .25, hi: .33, shade: 1 }, { n: 'radiatum', lo: .33, hi: .75 }, { n: 'lac.-mol.', lo: .75, hi: .92, shade: 1 }, { n: 'DG', lo: .92, hi: 1 }],
+  specs: [{ L: 2, n: 95, type: 'pyr', s: .0055, dir: 1, ap: .86, tuft: 1, f: [.26, .32], pack: 1.5 }, { L: 1, n: 6, type: 'int', s: .0045 }, { L: 3, n: 6, type: 'int', s: .0045 }],
+  spikes(c, cyc) {
+    if (c.type === 'int') return hash(c.id, cyc) < .8 ? [.85, .95, 1.05, 1.15, 1.25].map(t => t + .03 * hash(c.id, cyc, t * 10)) : [];
+    const out = []; if (hash(c.id, cyc) < .6) out.push(.8 + .75 * (c.x + .62) / 1.24 + .04 * (hash(c.id, cyc, 2) - .5));
+    if (hash(c.id, cyc, 7) < .06) out.push(3.6 * hash(c.id, cyc, 8)); return out;
+  },
+  inputs: [{ make(R, Y) {
+    const sch = []; for (let i = 0; i < 16; i++) { const y0 = Y(.36 + .34 * R()), y1 = Y(.38 + .34 * R()); sch.push(smoothPath([[.78, y0], [.2, (y0 * 2 + y1) / 3 + (R() - .5) * .04], [-.3, (y0 + y1 * 2) / 3 + (R() - .5) * .04], [-.78, y1]], false)); }
+    const pp = []; for (let i = 0; i < 6; i++) { const y = Y(.77 + .13 * R()); const pts = []; for (let x = -.78; x <= .78; x += .13) pts.push([x, y + (R() - .5) * .015]); pp.push(smoothPath(pts, false)); }
+    return { draw(env, tau, P) {
+      const { ctx } = env, g = tau > .7 && tau < 1.7 ? Math.sin((tau - .7) / 1 * Math.PI) : 0;
+      ctx.strokeStyle = C.ink3; ctx.lineWidth = P(.8); for (const q of [...sch, ...pp]) ctx.stroke(q);
+      if (g > 0) { ctx.strokeStyle = withA(C.accent, .55 * g); ctx.lineWidth = P(1.6); for (const q of sch) ctx.stroke(q); }
+    } };
+  } }],
+  extra(env, tau, cyc, P) {
+    const { ctx } = env, x0 = .08, x1 = .48, y0 = .43, A = .028;
+    const v = t => -.9 * Math.exp(-(((t - 1.2) / .32) ** 2)) + .55 * Math.exp(-(((t - 1.2) / .22) ** 2)) * Math.sin(TAU * 11 * t) + .06 * Math.sin(t * 23 + Math.sin(t * 7));
+    ctx.fillStyle = withA(C.panel, .85); ctx.fillRect(x0 - .02, y0 - .05, x1 - x0 + .04, .085);
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.2); ctx.beginPath();
+    for (let i = 0; i <= 240; i++) { const t = 3.6 * i / 240, x = x0 + (x1 - x0) * i / 240, y = y0 - v(t) * A; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
+    const cx = x0 + (x1 - x0) * tau / 3.6; ctx.fillStyle = C.accent; circ(ctx, cx, y0 - v(tau) * A, P(3.5)); ctx.fill();
+    label(env, 'LFP', x0 - .01, y0 - .035, { size: 10, mono: true, color: C.ink3 });
+  },
+  labels(env) {
+    label(env, 'replay: cells fire left → right', .48, -.43, { size: 11, color: C.ink2, align: 'right' });
+    callout(env, 'Schaffer collaterals from CA3', .5, this.Y(.5), .3, this.Y(.6), { alpha: 1 });
+  } });
+
+
+
+// ---------- peripheral paths: muscle (motor output) and skin / whiskers (touch input) ----------
+const MUS = '#b8574f';
+const cyc01 = (t, per, a, b) => { const x = t % per; return x > a && x < b ? Math.sin((x - a) / (b - a) * Math.PI) : 0; };
+
+// a limb with one muscle belly and its motor nerve; the motor point (child) sits at [.02, .05]
+function makeLimb(cfg) {
+  return def({ ...cfg, children: ['muscle'],
+    init() {
+      this.skin = smoothPath(cfg.skin); this.belly = smoothPath(cfg.belly);
+      this.nerve = smoothPath(cfg.nerve, false);
+      this.twigs = [[[.02, .05], [.1, -.12]], [[.02, .05], [-.06, .22]], [[.02, .05], [.13, .2]], [[.02, .05], [-.08, -.15]]].map(p => smoothPath(p, false));
+      this.fib = []; for (let i = -6; i <= 6; i++) this.fib.push(i * .028);
+    },
+    draw(env) {
+      const { ctx } = env, P = n => n / env.k, per = 2.4, tc = env.t % per;
+      bgFill(env, C.panel, -.8, -.8, 1.6, 1.6);
+      ctx.fillStyle = C.tissue; ctx.fill(this.skin); ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1.2); ctx.stroke(this.skin);
+      if (cfg.bone) { ctx.fillStyle = withA(C.ink3, .18); ctx.beginPath(); ctx.roundRect(...cfg.bone, .03); ctx.fill(); }
+      const c = cyc01(env.t, per, .55, 1.5);
+      ctx.save(); ctx.translate(0, 0); ctx.scale(1 + .1 * c, 1 - .04 * c);
+      ctx.fillStyle = withA(MUS, .28 + .2 * c); ctx.fill(this.belly); ctx.strokeStyle = withA(MUS, .85); ctx.lineWidth = P(1.4); ctx.stroke(this.belly);
+      ctx.save(); ctx.clip(this.belly); ctx.strokeStyle = withA(MUS, .35); ctx.lineWidth = P(.8);
+      for (const x of this.fib) { ctx.beginPath(); ctx.moveTo(x * .9, -.7); ctx.quadraticCurveTo(x * 1.25, 0, x * .9, .7); ctx.stroke(); }
+      ctx.restore(); ctx.restore();
+      ctx.strokeStyle = C.ink; ctx.lineWidth = P(2); ctx.lineCap = 'round'; ctx.stroke(this.nerve);
+      ctx.lineWidth = P(1.1); for (const t of this.twigs) ctx.stroke(t);
+      const ph = (tc - .1) / .45;
+      if (ph > 0 && ph < 1) { const p = along(cfg.nerve, ph); glow(ctx, p.x, p.y, P(14), C.accent); }
+      if (tc > .5 && tc < .9) { ctx.strokeStyle = withA(C.accent, 1 - (tc - .5) / .4); ctx.lineWidth = P(2.4); for (const t of this.twigs) ctx.stroke(t); }
+      for (const [txt, tx, ty, lx, ly] of cfg.labels) callout(env, txt, tx, ty, lx, ly);
+    } });
+}
+makeLimb({ id: 'h_arm', name: 'Upper arm', short: 'Arm', w: .12, size: -1, at: [.115, -.15],
+  caption: 'The biceps and the nerve that drives it. Motor axons leave the spinal cord, run down the arm in a nerve, and fan out where they enter the muscle.',
+  proc: { text: 'a motor command arrives and the biceps contracts within ~100 ms', t: -1, slow: 'shown ~10× slower' },
+  skin: [[-.33, -.7], [.33, -.7], [.32, 0], [.29, .7], [-.29, .7], [-.32, 0]], bone: [.1, -.7, .12, 1.4],
+  belly: [[-.05, -.62], [-.17, -.3], [-.21, 0], [-.17, .3], [-.05, .62], [.05, .62], [.18, .3], [.22, 0], [.18, -.3], [.05, -.62]],
+  nerve: [[-.6, -.45], [-.42, -.3], [-.24, -.12], [-.08, 0], [.02, .05]],
+  labels: [['biceps', .15, -.3, .3, -.42], ['motor nerve', -.42, -.3, -.4, -.45], ['humerus', .16, .4, .35, .45]] });
+makeLimb({ id: 'r_leg', name: 'Hindlimb', short: 'Leg', w: .06, size: -1.3, at: [.1, .06],
+  caption: 'A rat’s calf muscle (gastrocnemius) and the branch of the sciatic nerve that drives it. The wiring is the same as in our arms and legs.',
+  proc: { text: 'a motor command arrives and the muscle contracts within ~100 ms', t: -1, slow: 'shown ~10× slower' },
+  skin: [[-.3, -.7], [.3, -.7], [.33, -.1], [.25, .45], [.45, .6], [.5, .72], [-.1, .72], [-.25, .3], [-.32, -.2]], bone: [-.04, -.7, .06, 1.3],
+  belly: [[-.05, -.6], [-.2, -.3], [-.22, 0], [-.15, .3], [-.03, .55], [.06, .55], [.18, .3], [.24, 0], [.2, -.3], [.06, -.6]],
+  nerve: [[-.55, -.62], [-.4, -.4], [-.22, -.15], [-.07, -.01], [.02, .05]],
+  labels: [['gastrocnemius', .17, -.3, .3, -.42], ['sciatic nerve branch', -.4, -.4, -.38, -.55]] });
+
+def({ id: 'muscle', name: 'Muscle fascicle', short: 'Muscle', w: .004, size: -2.5, at: [.02, .05], children: ['nmj'],
+  caption: 'A bundle of muscle fibers. Each motor axon branches to many fibers, one endplate per fiber. One axon plus the fibers it drives is a motor unit, and they all twitch together.',
+  proc: { text: 'one motor unit twitches: ~50 ms', t: -1.3, slow: 'shown ~10× slower' },
+  init() {
+    const R = rng(301), fib = [];
+    for (let x = -.66; x <= .66; x += .021) fib.push({ x: Math.abs(x) < .01 ? 0 : x + (R() - .5) * .004, w: .007 + R() * .002, ey: (R() - .5) * .12, u: 1 + Math.floor(R() * 3), ph: R() * TAU });
+    const f0 = fib.reduce((b, f) => Math.abs(f.x) < Math.abs(b.x) ? f : b); f0.x = 0; f0.ey = 0; f0.u = 0;
+    fib.forEach((f, i) => { if (f !== f0 && R() < .22) f.u = 0; });
+    this.fib = fib;
+    this.ax = [0, 1, 2, 3].map(u => { const yu = [-.32, .3, -.42, .4][u]; const brs = fib.filter(f => f.u === u).map(f => smoothPath([[f.x - .06, yu], [f.x - .02, (yu + f.ey) / 2], [f.x, f.ey]], false)); const xs = fib.filter(f => f.u === u).map(f => f.x); return { yu, brs, x1: Math.max(...xs, -.5) - .06 }; });
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, tw = cyc01(env.t, 2.5, .45, 1.3);
+    bgFill(env, withA(MUS, .08), -.8, -.8, 1.6, 1.6);
+    for (const f of this.fib) {
+      const hot = f.u === 0 ? tw : 0;
+      ctx.fillStyle = withA(MUS, .22 + .25 * hot); ctx.fillRect(f.x - f.w, -.8, f.w * 2, 1.6);
+      ctx.strokeStyle = withA(MUS, .55); ctx.lineWidth = P(.8); ctx.strokeRect(f.x - f.w, -.8, f.w * 2, 1.6);
+    }
+    ctx.lineCap = 'round';
+    this.ax.forEach((a, u) => {
+      const fire = u === 0 ? cyc01(env.t, 2.5, .15, .55) : 0;
+      ctx.strokeStyle = u === 0 ? C.ink : C.ink2; ctx.lineWidth = P(u === 0 ? 1.8 : 1.2);
+      ctx.beginPath(); ctx.moveTo(-.8, a.yu); ctx.lineTo(a.x1, a.yu); ctx.stroke(); ctx.lineWidth = P(1); for (const b of a.brs) ctx.stroke(b);
+      if (fire > 0) { ctx.strokeStyle = withA(C.accent, fire); ctx.lineWidth = P(2.6); ctx.beginPath(); ctx.moveTo(-.8, a.yu); ctx.lineTo(a.x1, a.yu); ctx.stroke(); for (const b of a.brs) ctx.stroke(b); }
+    });
+    for (const f of this.fib) { ctx.beginPath(); ctx.ellipse(f.x, f.ey, f.w * .9, .012, 0, 0, TAU); ctx.fillStyle = f.u === 0 ? C.ink : C.ink2; ctx.fill(); }
+    callout(env, 'endplate', .0, .0, .1, .14);
+    label(env, 'muscle fibers (~60 µm wide)', .48, -.45, { size: 11, align: 'right', color: C.ink2 });
+    label(env, 'one motor unit', -.47, -.36, { size: 11, weight: 600, color: C.ink });
+  } });
+
+def({ id: 'nmj', name: 'Neuromuscular junction', short: 'NMJ', w: 8e-5, size: -4.3, at: [0, 0], children: ['nmjsyn'],
+  caption: 'The neuromuscular junction: the motor axon’s terminal branches form a pretzel-shaped endplate on a single muscle fiber. Every spike that arrives makes the fiber fire, a synapse built for reliability.',
+  proc: { text: 'the endplate fires the muscle fiber within ~1 ms; the wave spreads along it at ~4 m/s', t: -3, slow: 'shown ~1,000× slower' },
+  init() {
+    this.br = [[[-.3, 0], [-.15, -.01], [0, 0], [.1, .04], [.17, 0]], [[-.15, -.01], [-.08, -.08], [.02, -.11], [.12, -.07]], [[-.12, 0], [-.06, .08], [.04, .1], [.11, .14]], [[0, 0], [.03, -.05]], [[.1, .04], [.15, .09]]].map(p => smoothPath(p, false));
+    this.nuc = [[-.27, -.35], [.27, -.12], [-.28, .3], [.26, .42]];
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, tc = env.t % 2.6, con = cyc01(env.t, 2.6, .8, 1.9) * .06;
+    bgFill(env, C.panel, -.8, -.8, 1.6, 1.6);
+    ctx.fillStyle = withA(MUS, .16); ctx.fillRect(-.31, -.8, .62, 1.6);
+    const sp = .031 * (1 - con);
+    ctx.fillStyle = withA(MUS, .26); for (let y = -.8; y < .8; y += sp) ctx.fillRect(-.31, y, .62, sp * .6);
+    ctx.strokeStyle = withA(MUS, .8); ctx.lineWidth = P(1.4); ctx.beginPath(); ctx.moveTo(-.31, -.8); ctx.lineTo(-.31, .8); ctx.moveTo(.31, -.8); ctx.lineTo(.31, .8); ctx.stroke();
+    for (const [x, y] of this.nuc) { ctx.beginPath(); ctx.ellipse(x, y, .02, .06, 0, 0, TAU); ctx.fillStyle = withA(C.ink2, .5); ctx.fill(); }
+    if (tc > .75 && tc < 1.6) { const d = (tc - .75) * .9, a = 1 - (tc - .75) / .85; ctx.fillStyle = withA(C.accent, .35 * a); ctx.fillRect(-.31, -d - .03, .62, .06); ctx.fillRect(-.31, d - .03, .62, .06); }
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = C.lipid; ctx.lineWidth = .05; ctx.beginPath(); ctx.moveTo(-.8, 0); ctx.lineTo(-.34, 0); ctx.stroke();
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.6); ctx.beginPath(); ctx.moveTo(-.8, 0); ctx.lineTo(-.3, 0); ctx.stroke();
+    ctx.strokeStyle = withA(C.accent, .35); ctx.lineWidth = .05; for (const b of this.br) ctx.stroke(b);
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = .028; for (const b of this.br) ctx.stroke(b);
+    const ax = (tc - .1) / .4; if (ax > 0 && ax < 1) glow(ctx, lerp(-.8, -.3, ax), 0, P(14), C.accent);
+    const tf = cyc01(env.t, 2.6, .45, .95); if (tf > 0) { ctx.strokeStyle = withA(C.accent, tf); ctx.lineWidth = .03; for (const b of this.br) ctx.stroke(b); }
+    callout(env, 'motor axon, wrapped in myelin', -.6, 0, -.55, -.2);
+    callout(env, 'endplate (axon terminal)', .14, .1, .3, .3);
+    callout(env, 'muscle fiber', .25, -.5, .4, -.4);
+    label(env, 'stripes = sarcomeres, 2.5 µm apart', .0, .46, { size: 11, align: 'center', color: C.ink2 });
+    callout(env, 'nucleus', -.27, -.35, -.45, -.42);
+  } });
+
+def({ id: 'nmjsyn', name: 'NMJ synapse', short: 'NMJ synapse', w: 2.5e-6, size: -6, at: [0, 0],
+  caption: 'The neuromuscular synapse up close. Acetylcholine crosses a 50 nm cleft to receptors packed on the crests of deep junctional folds, and an enzyme in the cleft clears it within a millisecond.',
+  proc: { text: 'acetylcholine crosses the cleft and is cleared within ~1 ms', t: -3.3, slow: 'shown ~3,000× slower' },
+  init() {
+    const R = rng(311);
+    this.term = smoothPath([[-.42, -.012], [0, -.012], [.42, -.012], [.46, -.12], [.38, -.3], [.15, -.4], [-.15, -.4], [-.38, -.3], [-.46, -.12]]);
+    const pts = [[-.7, .012]]; this.folds = [];
+    for (let x = -.6; x < .6; x += .13) { pts.push([x - .015, .012], [x - .012, .32 + R() * .06], [x + .012, .32 + R() * .06], [x + .015, .012]); this.folds.push(x); }
+    pts.push([.7, .012], [.7, .8], [-.7, .8]); this.post = poly(pts);
+    this.ves = []; for (let t = 0; t < 4000 && this.ves.length < 60; t++) { const x = (R() - .5) * .8, y = -.04 - .3 * R(); if (!inside(this.term, x, y) || !inside(this.term, x, y - .02) || Math.abs(x) > .38) continue; if (this.ves.some(v => Math.hypot(v.x - x, v.y - y) < .025)) continue; this.ves.push({ x, y }); }
+    this.ach = []; for (let i = 0; i < 40; i++) this.ach.push([R() * TAU, .4 + R() * .9]);
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, tc = env.t % 3, m = Math.max(.004, P(1.4));
+    bgFill(env, C.panel, -.8, -.8, 1.6, 1.6);
+    ctx.fillStyle = withA(MUS, .14); ctx.fill(this.post); ctx.strokeStyle = C.ink; ctx.lineWidth = m; ctx.stroke(this.post);
+    ctx.save(); ctx.clip(this.post); ctx.strokeStyle = withA(MUS, .35); ctx.lineWidth = P(1); for (let y = .45; y < .8; y += .05) { ctx.beginPath(); ctx.moveTo(-.7, y); ctx.lineTo(.7, y); ctx.stroke(); } ctx.restore();
+    const hot = cyc01(env.t, 3, .9, 1.8);
+    for (const x of this.folds) { ctx.strokeStyle = hot > 0 ? withA(C.accent, .4 + .6 * hot) : C.ink; ctx.lineWidth = Math.max(.012, P(3)); ctx.beginPath(); ctx.moveTo(x - .06, .016); ctx.lineTo(x - .02, .016); ctx.moveTo(x + .02, .016); ctx.lineTo(x + .06, .016); ctx.stroke(); }
+    ctx.setLineDash([P(3), P(3)]); ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); ctx.beginPath(); ctx.moveTo(-.7, 0); ctx.lineTo(.7, 0); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = withA(C.ink3, .15); ctx.beginPath(); ctx.ellipse(0, -.43, .5, .09, 0, Math.PI, TAU); ctx.fill();
+    ctx.fillStyle = C.tissue; ctx.fill(this.term); ctx.strokeStyle = C.ink; ctx.lineWidth = m; ctx.stroke(this.term);
+    ctx.beginPath(); ctx.ellipse(.2, -.28, .1, .045, .3, 0, TAU); ctx.fillStyle = withA(C.ink3, .25); ctx.fill(); ctx.lineWidth = P(1.2); ctx.stroke();
+    for (const v of this.ves) { circ(ctx, v.x, v.y, .01); ctx.fillStyle = C.panel; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(.002, P(1)); ctx.stroke(); }
+    if (tc > .7 && tc < 2) { const s = Math.sqrt(tc - .7), f = 1 - (tc - .7) / 1.3; ctx.fillStyle = withA(C.accent, .9 * f); for (const [a, sp] of this.ach) { const x = Math.cos(a) * s * .25 * sp, y = clamp(Math.abs(Math.sin(a)) * s * .02 * sp, -.01, .01); circ(ctx, x, y, Math.max(.003, P(1.8))); ctx.fill(); } }
+    callout(env, 'motor axon terminal', -.3, -.3, -.42, -.46);
+    callout(env, 'synaptic cleft · ~50 nm', -.55, 0, -.5, -.12);
+    callout(env, 'junctional folds', this.folds[1], .25, -.3, .55);
+    callout(env, 'ACh receptors on the crests', this.folds[6] + .04, .016, .25, .2);
+    label(env, 'muscle fiber', .45, .7, { size: 11, italic: true, color: C.ink2, align: 'right' });
+    label(env, 'Schwann cell cap', 0, -.49, { size: 10.5, italic: true, color: C.ink3, align: 'center' });
+  } });
+
+// ---- touch: human hand → fingertip skin → Meissner corpuscle; rat whisker pad → follicle → lanceolate endings; both → terminal → Piezo2
+def({ id: 'h_hand', name: 'Hand', short: 'Hand', w: .15, size: -1, at: [.145, .1], children: ['h_skin'],
+  caption: 'The hand, palm facing you. Each fingertip is packed with touch receptors, wired to the brain through the digital nerves running along each finger.',
+  proc: { text: 'a touch signal races up the arm at ~50 m/s', t: -1.7, slow: 'shown ~50× slower' },
+  init() {
+    this.fingers = [[-.13, .33], [-.045, .4], [.045, .42], [.13, .4]];
+    this.nerves = this.fingers.map(([x, l]) => smoothPath([[x * .3, -.55], [x * .7, -.2], [x, .05], [x + .02, l - .02]], false));
+    this.nerves.push(smoothPath([[.04, -.55], [.12, -.25], [.22, -.05], [.3, .12]], false));
+    this.route = [[.15, .38], [.13, .05], [.091, -.2], [.039, -.55]];
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    bgFill(env, C.panel, -.8, -.8, 1.6, 1.6);
+    ctx.fillStyle = C.tissue; ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1.3);
+    ctx.beginPath(); ctx.roundRect(-.17, -.7, .34, .2, .05); ctx.fill(); ctx.stroke();
+    for (const [x, l] of this.fingers) { ctx.beginPath(); ctx.roundRect(x - .038, -.05, .076, l + .05, .038); ctx.fill(); ctx.stroke(); }
+    ctx.save(); ctx.translate(.2, -.08); ctx.rotate(-.55); ctx.beginPath(); ctx.roundRect(-.04, 0, .085, .3, .04); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.beginPath(); ctx.roundRect(-.18, -.52, .38, .55, .08); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.3); for (const n of this.nerves) ctx.stroke(n);
+    const tc = env.t % 2.2, tap = tc < .4 ? Math.sin(tc / .4 * Math.PI) : 0;
+    if (tap > 0) glow(ctx, .13, .39, .05, C.accent, tap);
+    const ph = (tc - .3) / .9; if (ph > 0 && ph < 1) { const p = along(this.route, ph); glow(ctx, p.x, p.y, P(13), C.accent); }
+    callout(env, 'index fingertip', .15, .4, .3, .44);
+    callout(env, 'digital nerves', .13, .2, .3, .25);
+    label(env, 'palm', 0, -.3, { size: 11, italic: true, align: 'center', color: C.ink3 });
+  } });
+def({ id: 'h_skin', name: 'Fingertip skin', short: 'Skin', w: .003, size: -2.6, at: [.13, .4], children: ['meissner'],
+  caption: 'Fingertip skin in cross-section. Different endings report different things: Meissner corpuscles catch flutter and slip, Merkel discs hold steady pressure and edges, and the deep onion-like Pacinian corpuscle picks up vibration.',
+  proc: { text: 'touch receptors fire within milliseconds of a press; fast-adapting ones only at on and off', t: -2, slow: 'shown ~20× slower' },
+  init() {
+    this.ridgeX = []; for (let x = -.765; x <= .75; x += .17) this.ridgeX.push(x);
+    this.surf = x => -.33 - .025 * Math.cos((x + .085) / .17 * TAU);
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, tc = env.t % 3, press = tc > .4 && tc < 1.9 ? Math.min(1, (tc - .4) / .15, (1.9 - tc) / .15) : 0;
+    const on = cyc01(env.t, 3, .4, .7), off = cyc01(env.t, 3, 1.85, 2.15);
+    const S = x => this.surf(x) + .06 * press * Math.exp(-(x * x) / .02);
+    bgFill(env, C.panel, -.8, -.8, 1.6, 1.6);
+    const top = []; for (let x = -.8; x <= .8; x += .01) top.push([x, S(x)]);
+    ctx.fillStyle = withA(C.ink3, .18); ctx.beginPath(); top.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.lineTo(.8, .8); ctx.lineTo(-.8, .8); ctx.fill();
+    ctx.fillStyle = C.tissue; ctx.beginPath(); for (let x = -.8; x <= .8; x += .01) { const y = S(x) + .13 + .05 * Math.cos((x + .085) / .17 * TAU + Math.PI); x <= -.8 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.lineTo(.8, .8); ctx.lineTo(-.8, .8); ctx.fill();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.5); ctx.beginPath(); top.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+    const pk = .4 * Math.max(on, off);
+    ctx.lineCap = 'round';
+    for (const x of this.ridgeX) {
+      const xm = x + .085, ym = S(xm) + .14;
+      ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1); ctx.beginPath(); ctx.moveTo(xm - .02, .7); ctx.quadraticCurveTo(xm - .05, .3, xm, ym + .03); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(xm, ym, .018, .03, 0, 0, TAU); ctx.fillStyle = C.panel; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.2); ctx.stroke();
+      if (Math.abs(xm) < .2 && (on > 0 || off > 0)) { ctx.fillStyle = withA(C.accent, Math.max(on, off)); ctx.fill(); }
+      const mx = x, my = S(x) + .19; ctx.beginPath(); ctx.moveTo(mx + .01, .7); ctx.quadraticCurveTo(mx + .04, .4, mx, my + .01); ctx.strokeStyle = C.ink2; ctx.stroke();
+      circ(ctx, mx, my, .009); ctx.fillStyle = Math.abs(mx) < .25 && press > .5 ? C.accent : C.ink; ctx.fill();
+    }
+    ctx.beginPath(); ctx.moveTo(.3, .75); ctx.lineTo(.3, .45); ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.3); ctx.stroke();
+    for (let i = 5; i >= 1; i--) { ctx.beginPath(); ctx.ellipse(.3, .37, .03 * i, .018 * i, 0, 0, TAU); ctx.fillStyle = i === 1 && pk > 0 ? withA(C.accent, pk * 2) : withA(C.panel, .5); ctx.fill(); ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); ctx.stroke(); }
+    if (press > 0) { ctx.fillStyle = withA(C.ink, .85); ctx.beginPath(); ctx.roundRect(-.06, -.62 + .06 * press, .12, .27, .06); ctx.fill(); label(env, 'press', 0, -.66 + .06 * press, { size: 10.5, align: 'center', color: C.ink2 }); }
+    callout(env, 'Meissner corpuscle', .018, S(0) + .14, .2, -.12);
+    callout(env, 'Merkel disc', this.ridgeX[4], S(this.ridgeX[4]) + .19, -.35, .05);
+    callout(env, 'Pacinian corpuscle', .42, .37, .45, .22);
+    label(env, 'epidermis', -.47, -.26, { size: 11, italic: true, color: C.ink2 });
+    label(env, 'dermis', -.47, .12, { size: 11, italic: true, color: C.ink2 });
+    label(env, 'fingerprint ridges', -.47, -.42, { size: 11, color: C.ink3 });
+  } });
+def({ id: 'meissner', name: 'Meissner corpuscle', short: 'Meissner', w: 1.5e-4, size: -4, at: [0, -.165], children: ['axterm'],
+  caption: 'A Meissner corpuscle: stacked flat cells with a sensory axon zigzagging between them, tucked under each fingerprint ridge. It fires when skin starts or stops moving, which is how you feel something slip.',
+  proc: { text: 'fires a burst at the start and end of a press, ~10 ms each', t: -2, slow: 'shown ~20× slower' },
+  init() {
+    const pts = [[0, .55]]; for (let i = 0; i < 9; i++) pts.push([(i % 2 ? .16 : -.16), .38 - i * .085]); pts.push([0, -.38]);
+    this.axon = pts; this.axP = smoothPath(pts, false);
+    this.ax2 = smoothPath([[.05, .55], [-.12, .3], [.13, .12], [-.1, -.05], [.12, -.2]], false);
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, tc = env.t % 3, sq = tc > .4 && tc < 1.9 ? Math.min(1, (tc - .4) / .15, (1.9 - tc) / .15) : 0;
+    const fire = Math.max(cyc01(env.t, 3, .4, .75), cyc01(env.t, 3, 1.85, 2.2));
+    bgFill(env, C.tissue, -.8, -.8, 1.6, 1.6);
+    ctx.fillStyle = withA(C.ink3, .14); ctx.fillRect(-.8, -.8, 1.6, .3);
+    for (let x = -.75; x < .8; x += .1) { ctx.beginPath(); ctx.ellipse(x, -.47, .045, .03, 0, 0, TAU); ctx.fillStyle = withA(C.ink3, .3); ctx.fill(); }
+    ctx.save(); ctx.scale(1 + .06 * sq, 1 - .08 * sq);
+    ctx.beginPath(); ctx.ellipse(0, 0, .26, .44, 0, 0, TAU); ctx.fillStyle = C.panel; ctx.fill(); ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.5); ctx.stroke();
+    ctx.save(); ctx.clip();
+    for (let y = -.4; y <= .4; y += .065) { ctx.beginPath(); ctx.ellipse(0, y, .24, .022, 0, 0, TAU); ctx.fillStyle = withA(C.lipid, .45); ctx.fill(); ctx.strokeStyle = withA(C.ink3, .6); ctx.lineWidth = P(.8); ctx.stroke(); }
+    ctx.restore();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const p of [this.axP, this.ax2]) { ctx.strokeStyle = C.ink; ctx.lineWidth = .012; ctx.stroke(p); if (fire > 0) { ctx.strokeStyle = withA(C.accent, fire); ctx.lineWidth = .018; ctx.stroke(p); } }
+    ctx.restore();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = .012; ctx.beginPath(); ctx.moveTo(0, .55); ctx.lineTo(.02, .8); ctx.stroke();
+    callout(env, 'sensory axon', .02, .7, .2, .66);
+    callout(env, 'stacked lamellar cells', .2, -.1, .35, -.2);
+    label(env, 'epidermis', -.47, -.62, { size: 11, italic: true, color: C.ink2 });
+  } });
+
+def({ id: 'r_pad', name: 'Whisker pad', short: 'Whiskers', w: .02, size: -1.8, at: [-.322, .02], children: ['r_whisk'],
+  caption: 'The whisker pad: five rows of large whiskers (A–E), each in its own follicle. The rat sweeps them back and forth to feel its way around.',
+  proc: { text: 'whisking: the whiskers sweep ~8 times a second', t: -.9, slow: 'shown ~8× slower' },
+  init() {
+    const n = [4, 4, 5, 6, 6], F = [];
+    for (let r = 0; r < 5; r++) for (let k = 1; k <= n[r]; k++) F.push({ r, k, x: .02 + (k - 1) * .065 + r * .01, y: -.17 + r * .085, name: 'ABCDE'[r] + k });
+    this.F = F; this.c2 = F.find(f => f.name === 'C2');
+    NODES.r_whisk.at = [this.c2.x, this.c2.y];
+    this.snout = smoothPath([[-.55, .05], [-.45, -.12], [-.2, -.3], [.2, -.38], [.6, -.4], [.6, .4], [.2, .3], [-.2, .22], [-.45, .16]]);
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, sweep = .3 * Math.sin(env.t * TAU);
+    bgFill(env, C.panel, -.8, -.8, 1.6, 1.6);
+    ctx.fillStyle = C.tissue; ctx.fill(this.snout); ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1.2); ctx.stroke(this.snout);
+    ctx.beginPath(); ctx.ellipse(-.5, .03, .04, .03, 0, 0, TAU); ctx.fillStyle = withA(C.ink, .5); ctx.fill();
+    ctx.lineCap = 'round';
+    for (const f of this.F) {
+      const a = Math.PI + (f.r - 2) * .25 + sweep + f.k * .05, l = .25 + (6 - f.k) * .07, hot = f === this.c2;
+      ctx.strokeStyle = hot ? C.accent : C.ink2; ctx.lineWidth = P(hot ? 2 : 1.1) + .003 * (6 - f.k) / 6;
+      ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.quadraticCurveTo(f.x + Math.cos(a) * l * .5, f.y + Math.sin(a) * l * .5 - .03, f.x + Math.cos(a) * l, f.y + Math.sin(a) * l + .02); ctx.stroke();
+      circ(ctx, f.x, f.y, .012); ctx.fillStyle = hot ? C.accent : C.ink; ctx.fill();
+    }
+    'ABCDE'.split('').forEach((r, i) => label(env, r, .43, -.17 + i * .085, { size: 10.5, mono: true, color: C.ink3 }));
+    callout(env, 'whisker C2', this.c2.x, this.c2.y, this.c2.x + .15, this.c2.y + .32);
+    label(env, 'nose', -.5, .1, { size: 11, italic: true, align: 'center', color: C.ink3 });
+  } });
+def({ id: 'r_whisk', name: 'Whisker follicle', short: 'Follicle', w: .003, size: -2.6, children: ['r_lanc'],
+  caption: 'A whisker follicle, cut lengthwise. The hair sits in a capsule wrapped in a blood-filled sinus, and around it nerve endings of several kinds report every bend of the whisker.',
+  proc: { text: 'the whisker bends and its follicle’s endings fire within a few ms', t: -2.5, slow: 'shown ~50× slower' },
+  init() { this.cap = smoothPath([[-.12, -.32], [.12, -.32], [.15, 0], [.12, .35], [0, .42], [-.12, .35], [-.15, 0]]); },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, bend = cyc01(env.t, 2.4, .2, 1), fire = cyc01(env.t, 2.4, .3, .9);
+    bgFill(env, C.tissue, -.8, -.8, 1.6, 1.6);
+    bgFill(env, withA(C.ink3, .16), -.8, -.8, 1.6, .42);
+    ctx.fillStyle = withA('#c0504a', .22); ctx.fill(this.cap); ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.6); ctx.stroke(this.cap);
+    ctx.beginPath(); ctx.ellipse(0, -.05, .1, .08, 0, 0, TAU); ctx.fillStyle = withA('#c0504a', .3); ctx.fill();
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = .028; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, .32); ctx.lineTo(0, -.38); ctx.quadraticCurveTo(0, -.6, -.2 * bend - .02, -.8); ctx.stroke();
+    ctx.strokeStyle = withA(C.ink3, .7); ctx.lineWidth = .02; ctx.beginPath(); ctx.moveTo(-.035, .3); ctx.lineTo(-.035, -.32); ctx.moveTo(.035, .3); ctx.lineTo(.035, -.32); ctx.stroke();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.4); ctx.beginPath(); ctx.moveTo(.4, .7); ctx.quadraticCurveTo(.25, .3, .14, .1); ctx.stroke();
+    for (let i = 0; i < 7; i++) { const y = -.22 + i * .025, s = i % 2 ? 1 : -1; ctx.beginPath(); ctx.moveTo(.14, .1); ctx.quadraticCurveTo(.1, y + .05, s * .045, y); ctx.strokeStyle = fire > 0 ? withA(C.accent, .4 + .6 * fire) : C.ink2; ctx.lineWidth = P(1.2); ctx.stroke(); }
+    callout(env, 'whisker shaft', -.01, -.5, -.3, -.55);
+    callout(env, 'blood sinus', .08, -.05, .3, -.1);
+    callout(env, 'lanceolate endings', .045, -.17, .3, -.3);
+    callout(env, 'deep vibrissal nerve', .3, .5, .42, .42);
+    label(env, 'skin', -.47, -.45, { size: 11, italic: true, color: C.ink2 });
+  } });
+def({ id: 'r_lanc', name: 'Lanceolate endings', short: 'Endings', w: 1.2e-4, size: -4, at: [.045, -.17], children: ['axterm'],
+  caption: 'Lanceolate endings: flat blades of sensory axon lined up like a picket fence along the hair, each cupped by a terminal Schwann cell. When the hair bends, they stretch.',
+  proc: { text: 'stretch opens channels in the endings and they fire, ~ms', t: -2.7, slow: 'shown ~50× slower' },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, bend = cyc01(env.t, 2.4, .2, 1), fire = cyc01(env.t, 2.4, .3, .9);
+    bgFill(env, C.tissue, -.8, -.8, 1.6, 1.6);
+    ctx.save(); ctx.translate(-.42 + .03 * bend, 0); ctx.fillStyle = withA(C.ink3, .35); ctx.fillRect(-.4, -.8, .4, 1.6); ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.4); ctx.beginPath(); ctx.moveTo(0, -.8); ctx.lineTo(0, .8); ctx.stroke(); ctx.restore();
+    ctx.fillStyle = withA(C.ink3, .15); ctx.fillRect(-.4, -.8, .3, 1.6);
+    for (let i = -6; i <= 6; i++) {
+      const y = i * .12, sk = .015 * bend * Math.sign(-y || 1);
+      ctx.fillStyle = withA(C.lipid, .55); ctx.beginPath(); ctx.ellipse(.02, y, .07, .05, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(-.012, y - .045 + sk, .024, .09, .012); ctx.fillStyle = fire > 0 ? withA(C.accent, .5 + .5 * fire) : C.ink2; ctx.fill();
+    }
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.6); ctx.beginPath(); ctx.moveTo(.4, .8); ctx.quadraticCurveTo(.25, .2, .12, .06); ctx.lineTo(.012, 0); ctx.stroke();
+    callout(env, 'hair (whisker) shaft', -.6, -.3, -.5, -.45);
+    callout(env, 'lanceolate ending', .012, .0, .25, -.2);
+    callout(env, 'terminal Schwann cell', .08, .24, .3, .36);
+    callout(env, 'sensory axon', .3, .45, .42, .62);
+  } });
+def({ id: 'axterm', name: 'Sensory terminal', short: 'Terminal', w: 2e-6, size: -5.8, at: [0, 0], children: ['piezo'],
+  caption: 'The tip of a touch-sensing axon. Its membrane is studded with Piezo2 channels, and fine tethers anchor it to the surrounding cells, so any squeeze or bend stretches the membrane.',
+  proc: { text: 'stretch opens Piezo2 channels and the terminal starts a spike, ~1 ms', t: -3, slow: 'shown ~1,000× slower' },
+  init() { const R = rng(331); this.pz = []; for (let x = -.7; x < .7; x += .07 + R() * .06) this.pz.push(x); this.pz.push(0); this.teth = this.pz.map(x => [x + .02, (R() - .5) * .05]); },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, st = cyc01(env.t, 2.4, .3, 1.3), y0 = -.25 - .02 * st;
+    bgFill(env, withA(C.lipid, .25), -.8, -.8, 1.6, .5); bgFill(env, withA(C.lipid, .25), -.8, .3, 1.6, .5);
+    ctx.fillStyle = C.tissue; ctx.fillRect(-.8, y0, 1.6, .5 - (y0 + .25) * 2);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(.005, P(1.5)); ctx.beginPath(); ctx.moveTo(-.8, y0); ctx.lineTo(.8, y0); ctx.moveTo(-.8, -y0); ctx.lineTo(.8, -y0); ctx.stroke();
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); for (const [x, dx] of this.teth) { ctx.beginPath(); ctx.moveTo(x, y0); ctx.quadraticCurveTo(x + dx, y0 - .08, x + dx * 2, y0 - .2); ctx.stroke(); }
+    for (const x of this.pz) { ctx.beginPath(); ctx.moveTo(x - .012, y0 - .008); ctx.quadraticCurveTo(x, y0 + .006, x + .012, y0 - .008); ctx.lineWidth = Math.max(.006, P(2.5)); ctx.strokeStyle = st > .4 ? C.accent : C.ink; ctx.stroke(); }
+    ctx.beginPath(); ctx.ellipse(.25, .05, .14, .06, .1, 0, TAU); ctx.fillStyle = withA(C.ink3, .25); ctx.fill(); ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1); ctx.stroke();
+    if (st > .3) { ctx.fillStyle = withA(C.accent, st); for (let i = 0; i < 12; i++) { const x = this.pz[i % this.pz.length], d = (env.t * .3 + i * .13) % .2; circ(ctx, x, y0 + .02 + d, Math.max(.004, P(2))); ctx.fill(); } }
+    callout(env, 'Piezo2 channels', this.pz[3], y0, this.pz[3] + .06, y0 - .3);
+    callout(env, 'tethers', this.teth[6][0] + this.teth[6][1] * 2, y0 - .2, -.1, -.47);
+    label(env, 'inside the axon terminal', .0, .15, { size: 11, italic: true, align: 'center', color: C.ink2 });
+    callout(env, 'mitochondrion', .3, .05, .4, .2);
+  } });
+def({ id: 'piezo', name: 'Piezo2 channel', short: 'Piezo2', w: 4e-8, size: -7.6, at: [0, -.25],
+  caption: 'Piezo2, the touch channel (Nobel Prize 2021). Three long curved blades bend the membrane into a dome. Stretch flattens the dome, the blades straighten, and the central pore opens to let positive ions in.',
+  proc: { text: 'Piezo2 opens within about a millisecond of stretch', t: -3, slow: 'shown ~1,000× slower' },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, st = cyc01(env.t, 3, .5, 2), h = .14 * (1 - .75 * st), y = x => -h * Math.exp(-(x * x) / .09);
+    bgFill(env, C.panel, -.8, -.8, 1.6, 1.6);
+    const hr = .011, th = .055;
+    for (const s of [-1, 1]) {
+      ctx.strokeStyle = withA(C.ink3, .55); ctx.lineWidth = Math.max(.004, P(1)); ctx.beginPath();
+      for (let x = -.8; x <= .8; x += .028) { if (Math.abs(x) < .05) continue; const yy = y(x); ctx.moveTo(x, yy + s * th); ctx.lineTo(x, yy + s * .008); } ctx.stroke();
+      for (let x = -.8; x <= .8; x += .028) { if (Math.abs(x) < .05) continue; circ(ctx, x, y(x) + s * th, hr); ctx.fillStyle = C.lipid; ctx.fill(); }
+    }
+    ctx.fillStyle = withA(C.protein, .95); ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.2);
+    for (const s of [-1, 1]) for (let i = 1; i <= 9; i++) { const x = s * (.04 + i * .052), yy = y(x) - th - .012; ctx.beginPath(); ctx.ellipse(x, yy, .03, .02, Math.atan2(y(x + .01) - y(x - .01), .02), 0, TAU); ctx.fill(); ctx.stroke(); }
+    ctx.beginPath(); ctx.ellipse(0, y(0) - th - .07, .07, .035, 0, 0, TAU); ctx.fill(); ctx.stroke();
+    const op = .006 + .02 * st;
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.roundRect(s > 0 ? op : -op - .045, y(0) - th - .02, .045, th * 2 + .04, .012); ctx.fill(); ctx.stroke(); }
+    ctx.beginPath(); ctx.ellipse(0, y(0) + th + .06, .06, .03, 0, 0, TAU); ctx.fill(); ctx.stroke();
+    if (st > .5) { const T = env.t * 1.5; for (let i = 0; i < 4; i++) { const p = (T + i * .25) % 1, yy = lerp(y(0) - th - .2, y(0) + th + .2, p); glow(ctx, 0, yy, .022, C.accent, 1); } }
+    label(env, 'outside the cell', -.47, -.44, { size: 11, italic: true, color: C.ink3 });
+    label(env, 'inside the terminal', -.47, .45, { size: 11, italic: true, color: C.ink3 });
+    callout(env, 'curved blades (2 of 3 shown)', .3, y(.3) - th - .015, .3, -.33);
+    callout(env, 'central pore', op + .02, y(0), .2, .25);
+    label(env, st > .5 ? 'stretched: dome flattens, pore opens' : 'at rest: membrane bent into a dome', 0, .38, { size: 11, weight: 600, align: 'center', color: C.ink });
+  } });
+
+// ---------- the rat tree ----------
+// Same deep end as the human tree; the top and middle are rat anatomy.
+function stimIcon(env, phi, sx, sy, sr) {
+  const { ctx } = env, P = n => n / env.k;
+  ctx.save(); circ(ctx, sx, sy, sr); ctx.fillStyle = C.panel; ctx.fill(); ctx.clip();
+  ctx.strokeStyle = C.ink; ctx.lineWidth = P(2.2);
+  const ux = Math.cos(phi), uy = Math.sin(phi), sp = sr * .31;
+  for (let i = -3; i <= 3; i++) { const ox = -uy * i * sp, oy = ux * i * sp; ctx.beginPath(); ctx.moveTo(sx + ox - ux * sr * 1.3, sy + oy - uy * sr * 1.3); ctx.lineTo(sx + ox + ux * sr * 1.3, sy + oy + uy * sr * 1.3); ctx.stroke(); }
+  ctx.restore(); ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); circ(ctx, sx, sy, sr); ctx.stroke();
+}
+
+def({ id: 'r_body', name: 'Rat', short: 'Rat', w: .5, size: -.7, children: ['r_brain', 'r_leg', 'r_pad'],
+  caption: 'A rat, about 25 cm from nose to rump. Its nervous system is built from the same parts as ours. Hover over the head, a leg or the whiskers to choose where to zoom in.',
+  proc: { text: 'whisking: the whiskers sweep back and forth ~8 times a second', t: -.9, slow: 'shown ~8× slower' },
+  init() {
+    this.outline = smoothPath([[-.335, .03], [-.31, -.005], [-.27, -.04], [-.22, -.065], [-.15, -.085], [-.05, -.1], [.06, -.1], [.14, -.075], [.18, -.03], [.175, .03], [.14, .065], [.09, .075], [.12, .1], [.07, .105], [.04, .075], [-.08, .075], [-.11, .1], [-.15, .1], [-.15, .07], [-.22, .06], [-.29, .055]]);
+    this.tail = [[.17, 0], [.26, .04], [.35, .09], [.43, .1], [.49, .08]];
+    const N = [{ pts: [[-.19, -.045], [-.1, -.066], [0, -.072], [.1, -.06], [.17, -.02], [.24, .03]], w: 2 },
+      { pts: [[-.1, -.064], [-.12, 0], [-.13, .06], [-.13, .095]], w: 1.1 }, { pts: [[.1, -.058], [.1, .02], [.09, .07], [.1, .1]], w: 1.1 },
+      { pts: [[-.205, -.035], [-.26, -.015], [-.315, .015]], w: 1.1 }];
+    for (let j = 0; j < 6; j++) { const x = -.07 + j * .026; N.push({ pts: [[x, -.069], [x + .01, -.03], [x + .006, .015]], w: .7 }); }
+    this.nerves = N.map(n => ({ p: smoothPath(n.pts, false), w: n.w }));
+    this.route = [[-.322, .02], [-.26, -.015], [-.215, -.04]];
+    const E = (x, y, rx, ry) => { const p = new Path2D(); p.ellipse(x, y, rx, ry, 0, 0, TAU); return p; };
+    this.regions = [{ child: 'r_brain', name: 'Brain', path: E(-.205, -.04, .045, .032), lp: [-.2, -.11], al: 'center' },
+      { child: 'r_leg', name: 'Leg muscle', path: poly([[.06, .03], [.14, .03], [.135, .11], [.06, .11]]), lp: [.1, .16], al: 'center' },
+      { child: 'r_pad', name: 'Whiskers (touch)', path: E(-.322, .02, .03, .03), lp: [-.33, .1], al: 'center' }];
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    for (let i = 1; i < this.tail.length; i++) { ctx.strokeStyle = C.ink3; ctx.lineWidth = Math.max(P(1.5), .016 * (1 - i / 6)) + P(2); ctx.beginPath(); ctx.moveTo(...this.tail[i - 1]); ctx.lineTo(...this.tail[i]); ctx.stroke(); ctx.strokeStyle = C.tissue; ctx.lineWidth = Math.max(P(.5), .016 * (1 - i / 6)); ctx.stroke(); }
+    ctx.fillStyle = C.tissue; ctx.strokeStyle = C.ink3; ctx.lineWidth = P(1); ctx.fill(this.outline); ctx.stroke(this.outline);
+    ctx.beginPath(); ctx.ellipse(-.2, -.075, .018, .022, -.3, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = C.ink; circ(ctx, -.272, -.018, P(2.5)); ctx.fill();
+    const sweep = .28 * Math.sin(env.t * TAU * 1.0);
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = P(.9);
+    for (let i = 0; i < 7; i++) { const a = Math.PI + (-.45 + i * .14) + sweep, l = .06 + (i % 3) * .015; ctx.beginPath(); ctx.moveTo(-.322, .02); ctx.quadraticCurveTo(-.322 + Math.cos(a) * l * .6, .02 + Math.sin(a) * l * .6 - .006, -.322 + Math.cos(a) * l, .02 + Math.sin(a) * l); ctx.stroke(); }
+    ctx.strokeStyle = C.ink; for (const n of this.nerves) { ctx.lineWidth = P(n.w); ctx.stroke(n.p); }
+    ctx.beginPath(); ctx.ellipse(-.215, -.04, .027, .013, -.15, 0, TAU); ctx.fillStyle = C.panel; ctx.fill(); ctx.lineWidth = P(1.3); ctx.stroke();
+    const ph = (env.t % 2) / .8; if (ph < 1) { const p = along(this.route, smooth(ph)); glow(ctx, p.x, p.y, P(12), C.accent); }
+    callout(env, 'brain', -.21, -.052, -.16, -.2);
+    callout(env, 'spinal cord', .02, -.072, .06, -.2);
+    callout(env, 'whiskers', -.37, .0, -.42, -.12);
+    label(env, '≈ 25 cm, nose to rump', -.08, .2, { size: 11, mono: true, align: 'center', color: C.ink3 });
+    drawRegions(env, this.regions, this.id);
+  } });
+
+def({ id: 'r_brain', name: 'Rat brain', short: 'Brain', w: .03, size: -1.6, at: [-.215, -.04], children: ['r_v1map', 'r_barrel', 'r_m1col', 'r_pfccol', 'r_coronal'],
+  caption: 'A rat brain seen from above, front to the left. It’s about 2.5 cm long and smooth, with no folds. Hover over an area and zoom in (or click it) to pick a path.',
+  proc: { text: 'sensory responses reach the cortex within ~10–20 ms', t: -1.8, slow: 'shown ~50× slower' },
+  init() {
+    this.hemi = smoothPath([[-.32, -.006], [-.31, -.08], [-.24, -.15], [-.12, -.19], [.03, -.205], [.16, -.19], [.25, -.13], [.27, -.05], [.26, -.006], [.1, -.004], [-.1, -.004]]);
+    const E = (x, y, rx, ry, a = 0) => { const p = new Path2D(); p.ellipse(x, y, rx, ry, a, 0, TAU); return p; };
+    this.areas = [
+      { child: 'r_coronal', name: 'Hippocampus (under the cortex)', short: '', path: E(.07, -.075, .07, .03, -.45), lp: [.07, .02], al: 'center', c: [.07, -.075] },
+      { child: 'r_m1col', name: 'Motor cortex (M1)', short: 'M1', path: E(-.15, -.08, .075, .05), lp: [-.15, -.17], al: 'center', c: [-.15, -.08], h: .02 },
+      { child: 'r_barrel', name: 'Barrel cortex (whiskers)', short: 'S1 barrels', path: E(0, -.155, .06, .038), lp: [0, -.235], al: 'center', c: [0, -.155], h: .12 },
+      { child: 'r_v1map', name: 'Visual cortex (V1)', short: 'V1', path: E(.175, -.11, .055, .055), lp: [.2, -.21], al: 'center', c: [.175, -.11], h: .6 },
+      { child: 'r_pfccol', name: 'Medial prefrontal cortex', short: 'mPFC', path: E(-.27, -.028, .045, .025), lp: [-.27, -.11], al: 'center', c: [-.27, -.028], h: .8 },
+    ];
+    this.regions = this.areas;
+    NODES.r_m1col.at = [-.15, -.08]; NODES.r_barrel.at = [0, -.155]; NODES.r_v1map.at = [.175, -.11]; NODES.r_pfccol.at = [-.27, -.028];
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = C.tissue; ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.5);
+    ctx.beginPath(); ctx.ellipse(.42, 0, .06, .05, 0, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(.33, 0, .075, .145, 0, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.save(); ctx.beginPath(); ctx.ellipse(.33, 0, .075, .145, 0, 0, TAU); ctx.clip(); ctx.strokeStyle = C.ink3; ctx.lineWidth = P(.8);
+    for (let i = -8; i <= 8; i++) { ctx.beginPath(); ctx.moveTo(.25, i * .018); ctx.quadraticCurveTo(.33, i * .018 + .01, .41, i * .018); ctx.stroke(); } ctx.restore();
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(-.385, s * .045, .07, .038, s * .1, 0, TAU); ctx.fillStyle = C.tissue; ctx.fill(); ctx.strokeStyle = C.ink; ctx.stroke(); }
+    for (const s of [1, -1]) {
+      ctx.save(); ctx.scale(1, s); ctx.fillStyle = C.tissue; ctx.fill(this.hemi);
+      if (s === 1) { ctx.save(); ctx.clip(this.hemi); for (const a of this.areas) if (a.h != null) { const [r, g, b] = hsl2rgb(a.h, .45, .6); ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},.28)`; ctx.fill(a.path); } ctx.restore(); }
+      ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.5); ctx.stroke(this.hemi); ctx.restore();
+    }
+    const gl = this.areas.find(a => a.child === choice.r_brain); if (gl) glow(ctx, gl.c[0], gl.c[1], .07, C.accent, .45 + .35 * Math.sin(env.t * 2));
+    ctx.save(); ctx.setLineDash([P(3), P(3)]); ctx.strokeStyle = withA(C.accent, .65); ctx.lineWidth = P(1.1); ctx.stroke(this.areas[0].path); ctx.restore();
+    if (!(hover && hover.child === 'r_coronal')) label(env, 'hippocampus (beneath)', .1, -.035, { size: 10.5, italic: true, align: 'center', color: C.accent });
+    const showMem = choice.r_brain === 'r_coronal' || (hover && hover.child === 'r_coronal');
+    if (showMem) {
+      ctx.save(); ctx.fillStyle = withA(C.accent, .16); ctx.fill(this.areas[0].path); ctx.setLineDash([P(4), P(3)]); ctx.strokeStyle = C.accent; ctx.lineWidth = P(1.4); ctx.stroke(this.areas[0].path);
+      ctx.setLineDash([]); ctx.lineWidth = P(2); ctx.beginPath(); ctx.moveTo(.05, -.22); ctx.lineTo(.05, .22); ctx.stroke(); ctx.restore();
+      const cn = NODES.r_coronal, pp = easeInOut(clamp(cn.popP || 0, 0, 1));
+      if (pp > .01) {
+        const ccx = lerp(cn.popFrom[0], cn.at[0], pp), ccy = lerp(cn.popFrom[1], cn.at[1], pp), h = .5 * cn.w / this.w * pp;
+        ctx.strokeStyle = withA(C.accent, .8); ctx.lineWidth = P(1.2); ctx.beginPath(); ctx.moveTo(.05, -.22); ctx.lineTo(ccx - h, ccy - h); ctx.moveTo(.05, .22); ctx.lineTo(ccx + h, ccy + h); ctx.stroke();
+      }
+      label({ ...env, la: hover ? env.a : env.la }, 'cut here', .05, -.245, { size: 11, color: C.accent, align: 'center' });
+    }
+    drawRegions(env, this.regions, this.id);
+    for (const a of this.areas) if (a.short && !(hover && hover.child === a.child)) label(env, a.short, a.c[0], a.c[1], { size: 11, weight: 600, align: 'center', color: C.ink });
+    label(env, 'olfactory bulbs', -.385, .1, { size: 10.5, italic: true, align: 'center', color: C.ink3 });
+    label(env, 'cerebellum', .33, .17, { size: 10.5, italic: true, align: 'center', color: C.ink3 });
+    label(env, 'front ←', -.47, -.44, { size: 11, color: C.ink3 });
+  } });
+
+def({ id: 'r_v1map', name: 'Visual cortex', short: 'V1 map', w: .0025, size: -2.7, children: ['r_n_v1'],
+  caption: 'Rodent visual cortex has no pinwheels. Neighboring neurons prefer completely different edge angles, a “salt-and-pepper” map that two-photon imaging shows cell by cell.',
+  proc: { text: 'each neuron answers an edge at its own preferred angle within ~100 ms', t: -1, slow: 'stimulus rotated slowly' },
+  init() {
+    const R = rng(211), cells = [];
+    for (let tr = 0; tr < 9000 && cells.length < 430; tr++) { const a = R() * TAU, r = .44 * Math.sqrt(R()), x = Math.cos(a) * r, y = Math.sin(a) * r; if (cells.some(c => Math.hypot(c.x - x, c.y - y) < .03)) continue; cells.push({ x, y, pref: (R() - .5) * Math.PI, sel: .45 + .55 * R() }); }
+    this.cells = cells;
+    const nr = NODES.r_n_v1; ensure(nr);
+    const c0 = cells.reduce((b, c) => Math.hypot(c.x - .04, c.y - .04) < Math.hypot(b.x - .04, b.y - .04) ? c : b); this.c0 = c0;
+    nr.at = [c0.x - nr.somaU[0] * nr.w / this.w, c0.y - nr.somaU[1] * nr.w / this.w];
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, phi = ((env.t * .3) % Math.PI) - Math.PI / 2;
+    ctx.save(); circ(ctx, 0, 0, .46); ctx.fillStyle = 'rgb(22,20,28)'; ctx.fill(); ctx.clip();
+    for (const c of this.cells) {
+      const resp = Math.exp(2.4 * (Math.cos(2 * (c.pref - phi)) - 1)) * c.sel, [r, g, b] = hsl2rgb((c.pref + Math.PI / 2) / Math.PI, .75, .2 + .45 * resp);
+      if (resp > .3) glow(ctx, c.x, c.y, .03, `#${[r, g, b].map(v => (v | 0).toString(16).padStart(2, '0')).join('')}`, resp * .6);
+      circ(ctx, c.x, c.y, .011); ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`; ctx.fill();
+    }
+    ctx.restore();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(2); circ(ctx, 0, 0, .46); ctx.stroke();
+    stimIcon(env, phi, .43, -.43, .045);
+    label(env, 'stimulus', .43, -.37, { align: 'center', size: 11, color: C.ink3 });
+    ctx.lineWidth = P(3); ctx.lineCap = 'round';
+    for (let i = 0; i < 6; i++) { const th = -Math.PI / 2 + Math.PI * i / 6, [r, g, b] = hsl2rgb((th + Math.PI / 2) / Math.PI, .72, .5), cx = -.47 + i * .03, cy = -.45; ctx.strokeStyle = `rgb(${r | 0},${g | 0},${b | 0})`; ctx.beginPath(); ctx.moveTo(cx - Math.cos(th) * .011, cy - Math.sin(th) * .011); ctx.lineTo(cx + Math.cos(th) * .011, cy + Math.sin(th) * .011); ctx.stroke(); }
+    label(env, 'preferred edge angle', -.48, -.405, { size: 11, color: C.ink3 });
+    callout(env, 'the neuron we zoom into', this.c0.x, this.c0.y, .28, .36);
+  } });
+makeNeuron({ ...NODES.n_v1, id: 'r_n_v1', w: .0005, size: -3.9, apLen: 200, axLen: 380, seed: 123,
+  caption: 'One layer 2/3 pyramidal neuron from the imaging window, seen from the side. It\u2019s a bit smaller than ours but built on the same plan.' });
+
+def({ id: 'r_barrel', name: 'Barrel cortex', short: 'Barrels', w: .005, size: -2.5, children: ['r_s1col'],
+  caption: 'Barrel cortex: every whisker on the snout has its own “barrel” of cells in layer 4, laid out in the same rows as the whiskers. Bend one whisker and its barrel lights up.',
+  proc: { text: 'a whisker deflection reaches its barrel in ~10 ms', t: -2, slow: 'shown ~50× slower' },
+  init() {
+    const rows = 'ABCDE', n = [4, 4, 5, 6, 6], B = [];
+    for (let r = 0; r < 5; r++) for (let k = 1; k <= n[r]; k++) B.push({ name: rows[r] + k, r, k, x: .22 - (k - 1) * .085 - r * .012, y: -.22 + r * .11, rx: Math.max(.02, .046 - k * .004), ry: Math.max(.02, .042 - k * .003) });
+    'αβγδ'.split('').forEach((g, i) => B.push({ name: g, r: i + .5, k: 0, x: .31, y: -.165 + i * .11, rx: .035, ry: .03 }));
+    this.B = B; const c2 = B.find(b => b.name === 'C2'); this.c2 = c2;
+    NODES.r_s1col.at = [c2.x, c2.y];
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k, tc = env.t % 2.4;
+    bgFill(env, C.tissue, -.8, -.8, 1.6, 1.6);
+    for (const b of this.B) {
+      const d = Math.hypot(b.x - this.c2.x, b.y - this.c2.y), f = b === this.c2 ? (tc > .25 && tc < 1.2 ? Math.sin((tc - .25) / .95 * Math.PI) : 0) : d < .13 ? .35 * (tc > .4 && tc < 1.3 ? Math.sin((tc - .4) / .9 * Math.PI) : 0) : 0;
+      ctx.beginPath(); ctx.ellipse(b.x, b.y, b.rx, b.ry, 0, 0, TAU); ctx.fillStyle = withA(C.ink3, .35); ctx.fill();
+      if (f > 0) { ctx.fillStyle = withA(C.accent, .75 * f); ctx.fill(); }
+      ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.2); ctx.stroke();
+      if (b.k <= 1 || b === this.c2) label(env, b.name, b.x, b.y, { size: b === this.c2 ? 12 : 10.5, weight: b === this.c2 ? 600 : 400, align: 'center', color: C.ink });
+    }
+    'ABCDE'.split('').forEach((r, i) => label(env, 'row ' + r, .42, -.22 + i * .11, { size: 10.5, mono: true, color: C.ink3, align: 'left' }));
+    // whisker pad inset
+    const ox = -.42, oy = .28, n = [4, 4, 5, 6, 6];
+    ctx.fillStyle = withA(C.panel, .9); ctx.fillRect(ox - .05, oy - .06, .34, .27); ctx.strokeStyle = C.rule; ctx.lineWidth = P(1); ctx.strokeRect(ox - .05, oy - .06, .34, .27);
+    for (let r = 0; r < 5; r++) for (let k = 1; k <= n[r]; k++) {
+      const x = ox + .24 - (k - 1) * .04, y = oy + r * .036, hot = r === 2 && k === 2, bend = hot && tc > .1 && tc < .6 ? .5 * Math.sin((tc - .1) / .5 * Math.PI) : 0;
+      ctx.strokeStyle = hot ? C.accent : C.ink3; ctx.lineWidth = P(hot ? 2 : 1); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(-.3 + bend) * .03, y + Math.sin(-.3 + bend) * .03); ctx.stroke();
+      circ(ctx, x, y, P(2.5)); ctx.fillStyle = hot ? C.accent : C.ink2; ctx.fill();
+    }
+    label(env, 'whisker pad (C2 bent)', ox - .03, oy - .035, { size: 10.5, color: C.ink2 });
+    label(env, 'front ←', -.47, -.45, { size: 11, color: C.ink3 });
+  } });
+makeNeuron({ ...NODES.n_stel, id: 'r_n_stel', seed: 131, size: -4,
+  caption: 'A spiny stellate cell inside barrel C2. Nearly all its input comes from one whisker.' });
+makeColumn({ ...NODES.s1col, id: 'r_s1col', w: .0025, size: -3.1, child: 'r_n_stel', seed: 119, top: -.36, bot: .36,
+  caption: 'One barrel column, about 1.8 mm deep. Layer 4 cells inside the barrel get their input from a single whisker, relayed by the thalamus.',
+  extra(env, tau, cyc, P) {
+    const { ctx } = env, Y = this.Y;
+    ctx.fillStyle = withA(C.ink3, .12); ctx.fillRect(-.75, Y(.4), .67, Y(.6) - Y(.4)); ctx.fillRect(.08, Y(.4), .67, Y(.6) - Y(.4));
+    ctx.strokeStyle = C.ink2; ctx.lineWidth = P(1.2); ctx.beginPath(); for (const x of [-.08, .08]) { ctx.moveTo(x, Y(.4)); ctx.lineTo(x, Y(.6)); } ctx.stroke();
+    label(env, 'barrel C2', 0, Y(.41) + .015, { size: 10.5, weight: 600, align: 'center', color: C.ink });
+    label(env, 'septum', .3, Y(.5), { size: 10, italic: true, align: 'center', color: C.ink3 });
+  } });
+
+makeNeuron({ ...NODES.n_betz, id: 'r_n_l5', name: 'Layer 5 pyramidal cell', short: 'Neuron', w: .0009, size: -3.5, somaH: 28, apLen: 700, apW: 4, basalLen: 150, basalW: 2.2, axLen: 600, axW: 1.4, tAt: 120, seed: 137,
+  caption: 'A large layer 5 pyramidal cell in rat motor cortex, the rodent counterpart of our Betz cells. Its myelinated axon runs down the spinal cord.',
+  proc: { text: 'the spike jumps node to node down a myelinated axon', t: -3, slow: 'shown ~10,000× slower' } });
+makeColumn({ ...NODES.m1col, id: 'r_m1col', w: .0025, size: -2.8, child: 'r_n_l5', seed: 129, top: -.4, bot: .4,
+  caption: 'Rat motor cortex, like ours, has no layer 4. Its large layer 5 cells send axons down the spinal cord to drive the forelimbs, hindlimbs and whiskers.',
+  labels(env) {
+    colLabels(env, -.4, .4);
+    label(env, 'no layer 4 here ("agranular" cortex)', .48, this.Y(.35) - .025, { size: 11, color: C.ink3, align: 'right' });
+    const b = this.cells.find(c => c.type === 'betz' && c.x > .1) || this.cells.find(c => c.type === 'betz');
+    if (b) callout(env, 'large layer 5 cells', b.x + .01, b.y, b.x + .12, b.y - .1);
+    label(env, 'down to the spinal cord ↓', 0, .45, { size: 11, color: C.ink2, align: 'center' });
+  } });
+
+makeNeuron({ ...NODES.n_pfc, id: 'r_n_pfc', w: .0005, size: -3.9, apLen: 220, basalLen: 100, axLen: 350, seed: 141,
+  caption: 'A layer 2/3 pyramidal cell in rat prelimbic cortex. Like its human counterpart, it can keep firing through a delay.' });
+makeColumn({ ...NODES.pfccol, id: 'r_pfccol', w: .002, size: -3, child: 'r_n_pfc', seed: 139, soma: [0, .3], asmL: [1, 2],
+  caption: 'Medial prefrontal cortex (prelimbic area), on the wall between the hemispheres. Rats use it to hold information across a delay, much as we use dorsolateral PFC.',
+  bands: [{ n: '1', lo: 0, hi: .12 }, { n: '2/3', lo: .12, hi: .45 }, { n: '5', lo: .45, hi: .75 }, { n: '6', lo: .75, hi: 1, shade: 1 }],
+  specs: [{ L: 1, n: 45, type: 'pyr', s: .005, ap: .01 }, { L: 2, n: 20, type: 'pyr', s: .008, ap: .01, tuft: 1 }, { L: 3, n: 28, type: 'pyr', s: .005, ap: .4 }, { L: 1, n: 6, type: 'int', s: .004 }, { L: 2, n: 4, type: 'int', s: .004 }] });
+
+def({ id: 'r_coronal', name: 'Coronal section', short: 'Slice', w: .015, size: -2.0, at: [.15, .24], popFrom: [.05, -.08], card: true, children: ['r_hippo'],
+  caption: 'A coronal section through the rat brain at the dashed line. Both hippocampi sit right under a thin sheet of cortex, which is why they’re so easy to record from in rats.',
+  proc: { text: 'theta rhythm, ~8 waves per second, while the rat runs', t: -.9, slow: 'shown ~8× slower' },
+  init() {
+    const half = [[0, -.3], [.25, -.29], [.42, -.2], [.48, 0], [.45, .15], [.35, .24], [.15, .3], [.05, .36]];
+    this.outline = smoothPath([...half, ...half.slice().reverse().map(([x, y]) => [-x, y])]);
+    this.cc = smoothPath([[-.4, -.16], [0, -.2], [.4, -.16], [.4, -.14], [0, -.18], [-.4, -.14]]);
+  },
+  draw(env) {
+    const { ctx } = env, P = n => n / env.k;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 4; ctx.fillStyle = C.panel; ctx.fillRect(-.5, -.5, 1, 1); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(-.5, -.5, 1, 1); ctx.clip();
+    ctx.fillStyle = C.tissue; ctx.fill(this.outline);
+    ctx.save(); ctx.clip(this.outline); ctx.lineWidth = .2; ctx.strokeStyle = withA(C.ink3, .35); ctx.stroke(this.outline); ctx.restore();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = P(1.5); ctx.stroke(this.outline);
+    ctx.beginPath(); ctx.moveTo(0, -.3); ctx.lineTo(0, -.2); ctx.lineWidth = P(1.2); ctx.stroke();
+    ctx.fillStyle = withA(C.panel, .7); ctx.fill(this.cc);
+    ctx.fillStyle = withA(C.ink3, .3); for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * .12, .1, .1, .08, 0, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = C.panel; ctx.fillRect(-.006, .02, .012, .2);
+    const H = NODES.r_hippo, hs = H.w / this.w, th = .5 + .5 * Math.sin(env.t * TAU);
+    glow(ctx, .17, -.08, .1, C.accent, .2 + .45 * th);
+    for (const s of [1, -1]) {
+      ctx.save(); ctx.translate(s * .17, -.08); ctx.scale(s * hs, hs);
+      ctx.strokeStyle = withA(C.ink, .55); ctx.lineCap = 'round'; ctx.lineWidth = .045; ctx.stroke(H.caP);
+      ctx.beginPath(); ctx.arc(.15, .17, .15, Math.PI * .35, Math.PI * 1.65); ctx.lineWidth = .03; ctx.stroke(); ctx.restore();
+    }
+    ctx.restore();
+    ctx.strokeStyle = C.accent; ctx.lineWidth = P(1.5); ctx.strokeRect(-.5, -.5, 1, 1);
+    label(env, 'coronal section · seen from the front', -.48, -.47, { mono: true, size: 10.5, color: C.accent });
+    callout(env, 'hippocampus', .22, -.03, .3, .12);
+    callout(env, 'cortex', .3, -.25, .36, -.38);
+    label(env, 'thalamus', -.12, .1, { size: 10.5, italic: true, align: 'center', color: C.ink2 });
+    label(env, 'midline', 0, .42, { size: 10.5, align: 'center', color: C.ink3 });
+  } });
+def({ ...NODES.hippo, id: 'r_hippo', w: .004, size: -2.4, at: [.17, -.08], children: ['r_ca1'],
+  caption: 'The rat hippocampus runs the same loop as ours: entorhinal cortex → dentate gyrus → CA3 → CA1. Place cells, theta sequences and replay were all discovered here.' });
+makeNeuron({ ...NODES.n_ca1, id: 'r_n_ca1', w: .0005, size: -3.9, apLen: 300, basalLen: 80, seed: 157,
+  caption: 'A rat CA1 pyramidal cell: the original place cell. It fires whenever the rat is in one particular spot.' });
+makeColumn({ ...NODES.ca1, id: 'r_ca1', w: .0012, size: -3.2, child: 'r_n_ca1', seed: 151,
+  caption: 'Rat CA1, layer by layer: the classic place-cell recording site. During a sharp-wave ripple, place cells fire in a fast sequence that replays a path the rat has run.' });
+
+// ---------- methods (log10 seconds, log10 meters) ----------
+const FAM = [
+  { id: 'ephys', name: 'Electrophysiology' }, { id: 'struct', name: 'Structure' }, { id: 'optical', name: 'Optical imaging' },
+  { id: 'macro', name: 'Whole-brain imaging' }, { id: 'perturb', name: 'Perturbation' },
+];
+const M = [
+  { id: 'patch', n: 'Patch clamp', f: 'ephys', t: [-4.3, 3.5], s: [-6.3, -4.7], b: 'A glass pipette sealed onto one cell records its voltage or currents with sub-millisecond precision.' },
+  { id: 'singlech', n: 'Single-channel recording', f: 'ephys', t: [-4.7, 1.3], s: [-8.3, -6.3], b: 'Pull off a tiny patch of membrane and you can watch a single ion channel flicker open and shut.' },
+  { id: 'unit', n: 'Single units', f: 'ephys', t: [-3.7, 4.5], s: [-5.3, -4.4], b: 'A fine electrode next to a neuron picks up its spikes, one cell at a time.' },
+  { id: 'npx', n: 'Neuropixels probes', f: 'ephys', t: [-4.3, 6.5], s: [-5, -2], b: 'Silicon probes with hundreds of recording sites pick up hundreds of neurons across several brain regions at once, for weeks.' },
+  { id: 'lfp', n: 'Field potentials', f: 'ephys', t: [-3, 3.5], s: [-4.5, -3], b: 'The summed electrical activity of many thousands of nearby neurons, mostly their synaptic currents.' },
+  { id: 'ecog', n: 'ECoG', f: 'ephys', t: [-3, 5.5], s: [-3, -1.2], b: 'A grid of electrodes on the brain’s surface, often placed in epilepsy patients, records local population activity.' },
+  { id: 'eeg', n: 'EEG & MEG', f: 'ephys', t: [-3.3, 4], s: [-2, -.7], b: 'Electrodes on the scalp (EEG) or magnetic sensors around the head (MEG) pick up the synchronized activity of millions of neurons.' },
+  { id: 'ca', n: 'Calcium imaging', f: 'optical', t: [-1.7, 7], s: [-6.3, -2.3], b: 'Neurons engineered to glow when calcium rushes in after a spike. Image single spines or thousands of cells, over months.' },
+  { id: 'volt', n: 'Voltage imaging', f: 'optical', t: [-3.6, 2.5], s: [-6, -3.3], b: 'Fluorescent voltage sensors make each spike, and the voltage between spikes, visible as light.' },
+  { id: 'vsd', n: 'VSD imaging', f: 'optical', t: [-3.3, .7], s: [-4, -1.7], b: 'Voltage-sensitive dyes on the cortical surface show waves of activity spreading across millimeters in milliseconds.' },
+  { id: 'isi', n: 'Intrinsic signal imaging', f: 'optical', t: [0, 3.5], s: [-4, -1.8], b: 'Tiny changes in reflected light, driven by blood oxygen, reveal functional maps such as orientation pinwheels.' },
+  { id: 'lm', n: 'Light microscopy', f: 'optical', t: [-2, 6], s: [-6.7, -2.5], b: 'Ordinary light microscopes resolve down to about 200 nm, the diffraction limit: enough for cells, dendrites and spines.' },
+  { id: 'sr', n: 'Super-resolution & expansion', f: 'optical', t: [0, 4], s: [-7.7, -4], b: 'STED, STORM, or physically swelling the tissue (expansion microscopy) push light microscopy down to about 20 nm.' },
+  { id: 'fmri', n: 'fMRI', f: 'macro', t: [0, 4], s: [-3.3, -.7], b: 'Blood-oxygen signals follow neural activity a few seconds late, across the whole brain, at millimeter resolution.' },
+  { id: 'pet', n: 'PET', f: 'macro', t: [1.5, 4], s: [-2.3, -.5], b: 'Radioactive tracers map metabolism, blood flow or particular receptors across the brain.' },
+  { id: 'dmri', n: 'Diffusion MRI', f: 'macro', t: [2.6, 3.8], s: [-3, -.8], b: 'Water diffuses more easily along fiber bundles, so diffusion MRI can trace the brain’s long-range wiring.' },
+  { id: 'dg', n: '2-DG imaging', f: 'macro', t: [2.5, 4.3], s: [-4, -1.3], b: 'A radioactive glucose analog builds up in active tissue; sections cut afterwards show where activity was.' },
+  { id: 'em', n: 'Electron microscopy', f: 'struct', t: [1, 3.7], s: [-8.7, -3], b: 'Electrons resolve detail down to a few nanometers. Serial sections through a cubic millimeter now yield complete wiring diagrams.' },
+  { id: 'cryo', n: 'Cryo-EM & crystallography', f: 'struct', t: [0, 3], s: [-10, -7.3], b: 'Freeze or crystallize a protein and solve its shape atom by atom. This is how we know what ion channels look like.' },
+  { id: 'tract', n: 'Tract tracing', f: 'struct', t: [4, 6.3], s: [-5.5, -1], b: 'Tracers injected into one area travel along axons over days, revealing where its connections go.' },
+  { id: 'md', n: 'Molecular dynamics', f: 'struct', t: [-10, -5], s: [-10, -7.5], b: 'Simulations of every atom, in femtosecond steps, show ions and water moving through a channel. Time runs off the chart’s left edge.' },
+  { id: 'opto', n: 'Optogenetics', f: 'perturb', t: [-3, 4], s: [-5, -2], b: 'Light-gated ion channels let you switch genetically chosen neurons on or off with millisecond timing.' },
+  { id: 'chemo', n: 'Chemogenetics', f: 'perturb', t: [2.5, 5.5], s: [-4, -1.5], b: 'Designer receptors that respond only to a synthetic drug quiet or excite chosen neurons for hours.' },
+  { id: 'ustim', n: 'Microstimulation', f: 'perturb', t: [-3.5, 1], s: [-4, -2.3], b: 'Small currents passed through an electrode activate the neurons near its tip.' },
+  { id: 'tms', n: 'TMS', f: 'perturb', t: [-2, 3.3], s: [-2, -.7], b: 'A magnetic pulse from a coil held to the scalp briefly drives or disrupts a patch of cortex.' },
+  { id: 'lesion', n: 'Lesions', f: 'perturb', t: [4, 8.5], s: [-3.3, -.5], b: 'Removing or silencing a region, then seeing what is lost: the oldest method in neuroscience.' },
+];
+const byId = Object.fromEntries(M.map(m => [m.id, m]));
+const famColor = f => C['c-' + f];
+
+// ---------- formatting ----------
+function nice(v) { return v >= 10 ? String(Math.round(v)) : String(Math.round(v * 10) / 10); }
+function fmtLen(lg) {
+  const m = Math.pow(10, lg);
+  if (m < 1e-9 * .95) return nice(m / 1e-10) + ' Å';
+  for (const [u, n] of [[1, 'm'], [1e-2, 'cm'], [1e-3, 'mm'], [1e-6, 'µm'], [1e-9, 'nm']]) if (m >= u * .95) return nice(m / u) + ' ' + n;
+  return nice(m / 1e-9) + ' nm';
+}
+function fmtTime(lg) {
+  const s = Math.pow(10, lg);
+  const U = [[3.156e7, 'years'], [2.63e6, 'months'], [86400, 'days'], [3600, 'hours'], [60, 'min'], [1, 's'], [1e-3, 'ms'], [1e-6, 'µs'], [1e-9, 'ns'], [1e-12, 'ps'], [1e-15, 'fs']];
+  for (const [u, n] of U) if (s >= u * .95) { const v = s / u; return nice(v) + ' ' + (v < 1.5 && n.endsWith('s') && n.length > 2 ? n.slice(0, -1) : n); }
+  return '<1 fs';
+}
+
+// ---------- canvas + camera (follows the active path through the tree) ----------
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let S = 600, dirty = true;
+for (const n of Object.values(NODES)) ensure(n);
+const PARENT = {};
+for (const n of Object.values(NODES)) for (const c of n.children) PARENT[c] = PARENT[c] ? '*' : n.id;
+let PATH = [], PO = [], z = L10(NODES.cns.w), zBot = -9, zTop = L10(NODES.cns.w * 1.08), species = 'human';
+const SPECIES = {
+  human: { root: 'cns', fork: 'brain', presets: { vision: { cns: 'brain', brain: 'v1map' }, movement: { cns: 'brain', brain: 'smstrip', smstrip: 'm1col' }, touch: { cns: 'brain', brain: 'smstrip', smstrip: 's1col' }, planning: { cns: 'brain', brain: 'frontal' }, memory: { cns: 'brain', brain: 'coronal' }, muscle: { cns: 'h_arm' }, skin: { cns: 'h_hand' } },
+    labels: { vision: 'Vision · V1', movement: 'Movement · M1', touch: 'Touch · S1', planning: 'Planning · prefrontal', memory: 'Memory · hippocampus', muscle: 'Muscle · neuromuscular junction', skin: 'Skin · fingertip touch' } },
+  rat: { root: 'r_body', fork: 'r_brain', presets: { vision: { r_body: 'r_brain', r_brain: 'r_v1map' }, movement: { r_body: 'r_brain', r_brain: 'r_m1col' }, touch: { r_body: 'r_brain', r_brain: 'r_barrel' }, planning: { r_body: 'r_brain', r_brain: 'r_pfccol' }, memory: { r_body: 'r_brain', r_brain: 'r_coronal' }, muscle: { r_body: 'r_leg' }, skin: { r_body: 'r_pad' } },
+    labels: { vision: 'Vision · V1', movement: 'Movement · M1', touch: 'Touch · barrel cortex', planning: 'Planning · medial PFC', memory: 'Memory · hippocampus', muscle: 'Muscle · hindlimb NMJ', skin: 'Whiskers · follicle' } },
+};
+let PRESETS = SPECIES.human.presets;
+choice.r_brain = choice.r_brain || 'r_v1map'; choice.cns = choice.cns || 'brain'; choice.r_body = choice.r_body || 'r_brain';
+function setSpecies(sp) {
+  species = sp; const S0 = SPECIES[sp]; PRESETS = S0.presets; zTop = L10(NODES[S0.root].w * 1.08);
+  $('#species').value = sp; for (const o of $('#path').options) o.textContent = S0.labels[o.value];
+  setPath();
+}
+
+function buildPath() {
+  const R0 = NODES[SPECIES[species].root], p = [R0]; let n = R0;
+  while (n.children.length) { n = NODES[n.children.length > 1 ? (choice[n.id] || n.children[0]) : n.children[0]]; p.push(n); }
+  return p;
+}
+function setPath() {
+  PATH = buildPath(); PO = [[0, 0]];
+  for (let i = 1; i < PATH.length; i++) { const p = PATH[i - 1], c = PATH[i]; PO.push([PO[i - 1][0] + c.at[0] * p.w, PO[i - 1][1] + c.at[1] * p.w]); }
+  zBot = L10(PATH[PATH.length - 1].w * .85);
+  buildLadder(); buildLvlLabels(); lastDom = -1; lastChartZ = null;
+  const pr = Object.entries(PRESETS).find(([, p]) => Object.entries(p).every(([f, c]) => choice[f] === c));
+  if (pr) $('#path').value = pr[0];
+}
+function camAt(W) {
+  const n = PATH.length;
+  if (W >= PATH[0].w) return PO[0];
+  if (W <= PATH[n - 1].w) return PO[n - 1];
+  for (let i = 0; i < n - 1; i++) { const a = PATH[i], b = PATH[i + 1]; if (W <= a.w && W > b.w) { const f = (W - b.w) / (a.w - b.w); return [PO[i + 1][0] + (PO[i][0] - PO[i + 1][0]) * f, PO[i + 1][1] + (PO[i][1] - PO[i + 1][1]) * f]; } }
+}
+function domLevel(W) { let d = 0; for (let i = 0; i < PATH.length; i++) if (L10(W / PATH[i].w) < .25) d = i; return d; }
+const levelXf = (i, W, cam) => ({ k: PATH[i].w * S / W, ox: S / 2 + (PO[i][0] - cam[0]) * S / W, oy: S / 2 + (PO[i][1] - cam[1]) * S / W });
+
+function resize() {
+  const w = $('#cwrap').clientWidth;
+  S = Math.max(240, Math.min(w, Math.round(window.innerHeight * .74)));
+  cv.style.width = S + 'px'; cv.style.height = S + 'px';
+  cv.width = Math.round(S * DPR); cv.height = Math.round(S * DPR);
+  $('#ladder').style.height = S + 'px';
+  dirty = true; layoutLadder();
+}
+
+function render(t) {
+  const W = Math.pow(10, z), cam = camAt(W);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.fillStyle = C.panel; ctx.fillRect(0, 0, S, S);
+  let prev = null;
+  for (let i = 0; i < PATH.length; i++) {
+    const L = PATH[i], r = L10(W / L.w), ch = PATH[i + 1];
+    if (i > 0 && r > .8) break;
+    let { k, ox, oy } = levelXf(i, W, cam);
+    let a = i === 0 ? 1 : clamp((.8 - r) / .45, 0, 1);
+    let back = i === 0 ? 0 : clamp((.42 - r) / .37, 0, 1);
+    if (L.card) {
+      const p = easeInOut(clamp(L.popP || 0, 0, 1));
+      if (p < .002) break;
+      if (prev) { ox = lerp(prev.ox + L.popFrom[0] * prev.k, ox, p); oy = lerp(prev.oy + L.popFrom[1] * prev.k, oy, p); k *= Math.max(p, .01); }
+      a = Math.min(1, p * 2); back = clamp((.1 - r) / .1, 0, 1);
+    }
+    prev = { k, ox, oy };
+    if (ch && L10(W / ch.w) < .03) continue;
+    if (back > 0) { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = back; ctx.fillStyle = C.panel; ctx.fillRect(0, 0, S, S); }
+    const rIn = ch ? L10(2.5 * ch.w / L.w) : -9;
+    const la = a * clamp((.3 - r) / .2, 0, 1) * clamp((r - (rIn - .3)) / .3, 0, 1);
+    const env = { ctx, k, ox, oy, a, t, S, r, la };
+    ctx.setTransform(DPR * k, 0, 0, DPR * k, DPR * ox, DPR * oy); ctx.globalAlpha = a;
+    ctx.save(); try { L.draw(env); } catch (err) { if (!L.err) { L.err = 1; console.error('draw failed: ' + L.id + ': ' + err.message + ' @ ' + (err.stack || '').split('\n')[1]); } } ctx.restore();
+  }
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1;
+  drawScaleBar(W); drawFootprint(W);
+}
+function drawScaleBar(W) {
+  const target = W * .2, p = Math.pow(10, Math.floor(L10(target)));
+  const len = [5, 2, 1].map(m => m * p).find(v => v <= target) || p, px = len / W * S;
+  const x = 14, y = S - 16;
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.lineCap = 'butt';
+  ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 5); ctx.stroke();
+  ctx.font = `500 11px ${FM}`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.lineWidth = 4; ctx.strokeStyle = C.panel; ctx.lineJoin = 'round'; ctx.strokeText(fmtLen(L10(len)), x + 2, y - 7);
+  ctx.fillStyle = C.ink; ctx.fillText(fmtLen(L10(len)), x + 2, y - 7);
+}
+function drawFootprint(W) {
+  const fp = $('#footprint');
+  const m = sel && byId[sel];
+  if (!m || hiddenFam.has(m.f)) { fp.hidden = true; return; }
+  const col = famColor(m.f), rp = Math.pow(10, m.s[0]) / W * S, cp = Math.pow(10, m.s[1]) / W * S;
+  ctx.save(); ctx.strokeStyle = col;
+  if (rp >= 6 && rp <= S * .7) {
+    ctx.globalAlpha = .55; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = S / 2 - Math.ceil(S / 2 / rp) * rp; x <= S; x += rp) { ctx.moveTo(x, 0); ctx.lineTo(x, S); }
+    for (let y = S / 2 - Math.ceil(S / 2 / rp) * rp; y <= S; y += rp) { ctx.moveTo(0, y); ctx.lineTo(S, y); }
+    ctx.stroke(); ctx.globalAlpha = .9; ctx.lineWidth = 2.5; ctx.strokeRect(S / 2, S / 2, rp, rp);
+  }
+  if (cp >= 10 && cp <= S * .96) { ctx.globalAlpha = 1; ctx.lineWidth = 2.5; ctx.setLineDash([7, 5]); ctx.strokeRect(S / 2 - cp / 2, S / 2 - cp / 2, cp, cp); }
+  ctx.restore();
+  const rTxt = rp < 6 ? `finest detail <b>${fmtLen(m.s[0])}</b>, too small to draw at this zoom` : rp > S ? `finest detail <b>${fmtLen(m.s[0])}</b>, bigger than this whole view` : `finest detail <b>${fmtLen(m.s[0])}</b> = one grid square`;
+  const cTxt = cp > S * .96 ? `widest view <b>${fmtLen(m.s[1])}</b>, beyond this frame` : cp < 10 ? `widest view <b>${fmtLen(m.s[1])}</b>, a speck at this zoom` : `widest view <b>${fmtLen(m.s[1])}</b> = dashed box`;
+  const html = `<b>${m.n}</b> here: ${rTxt}; ${cTxt}.`;
+  if (fp.innerHTML !== html) fp.innerHTML = html;
+  fp.hidden = false;
+}
+
+// ---------- forks: hover a region, zoom in to choose it ----------
+function computeHover(cx, cy) {
+  const W = Math.pow(10, z), cam = camAt(W); let h = null;
+  PATH.forEach((F, i) => {
+    if (!F.regions || W < F.w * .97 || L10(W / F.w) > .8) return;
+    const { k, ox, oy } = levelXf(i, W, cam), ux = (cx - ox) / k, uy = (cy - oy) / k;
+    for (const R of F.regions) if (inside(R.path, ux, uy)) h = { fork: F.id, child: R.child };
+  });
+  hover = h; cv.style.cursor = h ? 'pointer' : 'zoom-in';
+}
+function commitHover() {
+  if (!hover) return false;
+  const F = NODES[hover.fork]; if (Math.pow(10, z) < F.w * .97) return false;
+  if (choice[F.id] !== hover.child) { choice[F.id] = hover.child; setPath(); }
+  return true;
+}
+
+// ---------- interaction: zoom ----------
+let anim = null, diving = false, paused = false, simT = 0, lastNow = performance.now();
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function setZ(v) { z = clamp(v, zBot, zTop); dirty = true; }
+function flyTo(zt, dur, done) {
+  diving = false; updDiveBtn();
+  zt = clamp(zt, zBot, zTop);
+  if (reduce) { setZ(zt); done && done(); return; }
+  anim = { z0: z, z1: zt, t0: performance.now(), d: dur ?? clamp(Math.abs(zt - z) * 420, 450, 4200), done };
+}
+function stopMotion() { anim = null; if (diving) { diving = false; updDiveBtn(); } }
+cv.addEventListener('wheel', e => { e.preventDefault(); stopMotion(); if (e.deltaY < 0) commitHover(); setZ(z + e.deltaY * (e.deltaMode ? .05 : .0016)); hideHint(); }, { passive: false });
+const ptrs = new Map(); let pinch0 = null, downAt = null;
+cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); downAt = { x: e.clientX, y: e.clientY, moved: false }; stopMotion(); hideHint(); if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z }; } });
+cv.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) { if (e.pointerType === 'mouse') computeHover(e.offsetX, e.offsetY); return; }
+  const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) downAt.moved = true;
+  if (ptrs.size === 2 && pinch0) { const [a, b] = [...ptrs.values()]; setZ(pinch0.z - L10(Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0.d)); }
+  else if (ptrs.size === 1) { const dy = e.clientY - prev[1]; if (dy < 0) commitHover(); setZ(z + dy * .012); }
+});
+const endPtr = e => {
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = null;
+  if (e.type === 'pointerup' && downAt && !downAt.moved) {
+    if (e.pointerType !== 'mouse') computeHover(e.offsetX, e.offsetY);
+    if (hover && commitHover()) flyTo(L10(NODES[hover.child].w));
+  }
+  downAt = null;
+};
+cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
+cv.addEventListener('pointerleave', () => { if (!ptrs.size) { hover = null; cv.style.cursor = 'zoom-in'; } });
+const keyZoom = e => {
+  const d = { ArrowDown: .15, ArrowUp: -.15, '+': .15, '=': .15, '-': -.15, PageDown: .6, PageUp: -.6 }[e.key];
+  if (d != null) { e.preventDefault(); stopMotion(); setZ(z - d); hideHint(); }
+  if (e.key === 'Home') { e.preventDefault(); flyTo(zTop); } if (e.key === 'End') { e.preventDefault(); flyTo(zBot); }
+};
+cv.addEventListener('keydown', keyZoom);
+function hideHint() { $('#hint').hidden = true; }
+
+$('#btn-dive').addEventListener('click', () => {
+  if (diving) { diving = false; updDiveBtn(); return; }
+  anim = null; if (z <= zBot + .05) setZ(zTop);
+  diving = true; updDiveBtn(); hideHint();
+});
+$('#btn-top').addEventListener('click', () => flyTo(zTop));
+$('#btn-motion').addEventListener('click', e => { paused = !paused; e.currentTarget.setAttribute('aria-pressed', paused); e.currentTarget.textContent = paused ? 'Resume motion' : 'Pause motion'; });
+if (reduce) { paused = true; $('#btn-motion').setAttribute('aria-pressed', 'true'); $('#btn-motion').textContent = 'Resume motion'; }
+function updDiveBtn() { $('#btn-dive span').textContent = diving ? 'Pause dive' : 'Dive'; }
+$('#species').addEventListener('change', e => { stopMotion(); setSpecies(e.target.value); setZ(zTop); lastChartZ = null; });
+$('#path').addEventListener('change', e => {
+  const p = PRESETS[e.target.value], apply = () => { Object.assign(choice, p); setPath(); };
+  const top = PATH.find(n => p[n.id] && choice[n.id] !== p[n.id]);
+  if (top && z < L10(top.w) - .01) flyTo(L10(top.w), undefined, apply); else apply();
+});
+
+// ---------- ladder (the active path) ----------
+const ladder = $('#ladder');
+const zToPct = v => (zTop - v) / (zTop - zBot) * 100;
+function buildLadder() {
+  ladder.querySelectorAll('.lad-item').forEach(b => b.remove());
+  PATH.forEach((L, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'lad-item'; b.dataset.i = i;
+    b.innerHTML = `<span><span class="nm">${L.short}</span><span class="sz">${fmtLen(L10(L.w))}</span></span><span class="tick"></span>`;
+    b.addEventListener('click', e => { e.stopPropagation(); flyTo(L10(L.w)); });
+    b.addEventListener('pointerdown', e => e.stopPropagation());
+    ladder.appendChild(b);
+  });
+  layoutLadder();
+}
+function layoutLadder() { ladder.querySelectorAll('.lad-item').forEach(b => { b.style.top = zToPct(L10(PATH[b.dataset.i].w)) + '%'; }); }
+let ladDrag = false;
+const ladZ = e => { const r = ladder.getBoundingClientRect(); return zTop - clamp((e.clientY - r.top) / r.height, 0, 1) * (zTop - zBot); };
+ladder.addEventListener('pointerdown', e => { ladDrag = true; ladder.setPointerCapture(e.pointerId); stopMotion(); setZ(ladZ(e)); });
+ladder.addEventListener('pointermove', e => { if (ladDrag) setZ(ladZ(e)); });
+ladder.addEventListener('pointerup', () => ladDrag = false);
+ladder.addEventListener('keydown', keyZoom);
+
+// ---------- chart ----------
+const svg = $('#chart'), NS = 'http://www.w3.org/2000/svg';
+const CH = { W: 640, H: 560, ml: 58, mr: 84, mt: 12, mb: 46 }, X0 = -10, X1 = 9, Y0 = -10.2, Y1 = .6;
+const X = v => CH.ml + (v - X0) / (X1 - X0) * (CH.W - CH.ml - CH.mr), Y = v => CH.mt + (Y1 - v) / (Y1 - Y0) * (CH.H - CH.mt - CH.mb);
+const el = (tag, attrs = {}, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+let sel = null, hov = null; const hiddenFam = new Set();
+const gGrid = el('g'), gBand = el('g'), gBox = el('g'), gLab = el('g'), gMark = el('g'), gAx = el('g'), gLvl = el('g');
+for (let v = Math.ceil(Y0); v <= Y1; v++) {
+  el('line', { x1: CH.ml, x2: CH.W - CH.mr, y1: Y(v), y2: Y(v), class: 'grid' }, gGrid);
+  const t = el('text', { x: CH.ml - 6, y: Y(v) + 3.5, 'text-anchor': 'end', class: 'ax' }, gAx); t.textContent = fmtLen(v);
+}
+const tnames = [[-9, 'ns'], [-6, 'µs'], [-3, 'ms'], [0, 's'], [L10(60), 'min'], [L10(3600), 'hour'], [L10(86400), 'day'], [L10(2.63e6), 'month'], [L10(3.156e7), 'year']];
+for (let v = X0; v <= X1; v++) el('line', { x1: X(v), x2: X(v), y1: Y(Y0), y2: Y(Y0) + 4, stroke: 'var(--ink3)' }, gAx);
+for (const [v, n] of tnames) {
+  el('line', { x1: X(v), x2: X(v), y1: CH.mt, y2: Y(Y0), class: 'grid' }, gGrid);
+  const t = el('text', { x: X(v), y: Y(Y0) + 16, 'text-anchor': 'middle', class: 'ax' }, gAx); t.textContent = n;
+}
+el('rect', { x: CH.ml, y: CH.mt, width: CH.W - CH.ml - CH.mr, height: Y(Y0) - CH.mt, fill: 'none', stroke: 'var(--rule)' }, gGrid);
+{ const t = el('text', { x: (CH.ml + CH.W - CH.mr) / 2, y: CH.H - 8, 'text-anchor': 'middle', class: 'axn' }, gAx); t.textContent = 'time: from finest resolution to longest span →'; }
+{ const t = el('text', { transform: `translate(12 ${(CH.mt + Y(Y0)) / 2}) rotate(-90)`, 'text-anchor': 'middle', class: 'axn' }, gAx); t.textContent = 'size: smallest detail to largest region →'; }
+let lvlText = [];
+function buildLvlLabels() {
+  gLvl.replaceChildren();
+  lvlText = PATH.map(L => {
+    const t = el('text', { x: CH.W - CH.mr + 8, y: Y(L.size) + 4, class: 'lvln', tabindex: 0, role: 'button' }, gLvl); t.textContent = L.short;
+    el('line', { x1: CH.W - CH.mr, x2: CH.W - CH.mr + 4, y1: Y(L.size), y2: Y(L.size), stroke: 'var(--ink3)' }, gLvl);
+    const go = () => flyTo(L10(L.w));
+    t.addEventListener('click', go); t.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    return t;
+  });
+}
+const band = el('rect', { x: CH.ml, width: CH.W - CH.ml - CH.mr, fill: 'var(--accent-soft)' }, gBand);
+const bandTop = el('line', { x1: CH.ml, x2: CH.W - CH.mr, stroke: 'var(--accent)', 'stroke-width': 1.5 }, gBand);
+const bandBot = el('line', { x1: CH.ml, x2: CH.W - CH.mr, stroke: 'var(--accent)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }, gBand);
+const bandLab = el('text', { x: CH.ml + 5, class: 'ax', style: 'fill:var(--accent)' }, gBand); bandLab.textContent = 'in view';
+const mark = el('circle', { r: 5.5, fill: 'var(--accent)', stroke: 'var(--panel)', 'stroke-width': 2 }, gMark);
+const markRing = el('circle', { r: 10, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 1.2, opacity: .6 }, gMark);
+gMark.style.pointerEvents = 'none';
+const boxes = {};
+[...M].sort((a, b) => (b.t[1] - b.t[0]) * (b.s[1] - b.s[0]) - (a.t[1] - a.t[0]) * (a.s[1] - a.s[0])).forEach(m => {
+  const x0 = X(Math.max(m.t[0], X0)), x1 = X(m.t[1]), y0 = Y(m.s[1]), y1 = Y(m.s[0]);
+  const g = el('g', { class: 'mbox' }, gBox);
+  const r = el('rect', { x: x0 + 1, y: y0 + 1, width: x1 - x0 - 2, height: y1 - y0 - 2, rx: Math.min(9, (y1 - y0) / 2 - 1), style: `stroke:var(--c-${m.f});fill:var(--c-${m.f})`, 'fill-opacity': .07, 'stroke-width': 2, tabindex: 0, role: 'button', 'aria-label': m.n }, g);
+  r.addEventListener('pointerenter', e => { hov = m.id; showTip(m, e); updChart(); });
+  r.addEventListener('pointermove', e => showTip(m, e));
+  r.addEventListener('pointerleave', () => { hov = null; $('#tip').hidden = true; updChart(); });
+  r.addEventListener('focus', () => { hov = m.id; updChart(); });
+  r.addEventListener('blur', () => { hov = null; updChart(); });
+  r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(m.id); } });
+  boxes[m.id] = { g, r, m, x0, x1, y0, y1 };
+});
+(function placeLabels() {
+  scratch.font = `10.5px ${FB}`;
+  const placed = [], order = [...M].sort((a, b) => (a.t[1] - a.t[0]) * (a.s[1] - a.s[0]) - (b.t[1] - b.t[0]) * (b.s[1] - b.s[0]));
+  const ov = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+  for (const m of order) {
+    const b = boxes[m.id], w = scratch.measureText(m.n).width, h = 11, pad = 6;
+    const cand = [[b.x0 + pad, b.y0 + pad], [b.x1 - pad - w, b.y0 + pad], [b.x0 + pad, b.y1 - pad - h], [b.x1 - pad - w, b.y1 - pad - h], [b.x0 + 2, b.y0 - h - 3], [b.x0 + 2, b.y1 + 3], [(b.x0 + b.x1 - w) / 2, (b.y0 + b.y1 - h) / 2]];
+    let best = null, bs = 1e9;
+    cand.forEach(([x, y], ci) => {
+      const r = [x, y, x + w, y + h];
+      let s = placed.reduce((acc, p) => acc + ov(r, p) * 3, 0) + ci * 4;
+      if (x < CH.ml || x + w > CH.W - CH.mr || y < CH.mt || y + h > Y(Y0)) s += 5000;
+      for (const o of Object.values(boxes)) if (o.m !== m) s += ov(r, [o.x0, o.y0, o.x0 + 3, o.y1]) * 2 + ov(r, [o.x1 - 3, o.y0, o.x1, o.y1]) * 2 + ov(r, [o.x0, o.y0, o.x1, o.y0 + 3]) * 2 + ov(r, [o.x0, o.y1 - 3, o.x1, o.y1]) * 2;
+      if (s < bs) { bs = s; best = r; }
+    });
+    placed.push(best);
+    const t = el('text', { x: best[0], y: best[1] + 9, class: 'mlab' }, gLab); t.textContent = m.n; boxes[m.id].lab = t;
+  }
+})();
+function showTip(m, e) {
+  const tip = $('#tip'), wrap = $('#chart-wrap').getBoundingClientRect();
+  tip.innerHTML = `<b>${m.n}</b><span>${fmtLen(m.s[0])} – ${fmtLen(m.s[1])} · ${m.id === 'md' ? 'fs' : fmtTime(m.t[0])} – ${fmtTime(m.t[1])}</span>`;
+  tip.hidden = false;
+  tip.style.left = Math.min(e.clientX - wrap.left + 14, wrap.width - 250) + 'px'; tip.style.top = (e.clientY - wrap.top + 14) + 'px';
+}
+const svgY = e => { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); };
+const yToZ = y => Y1 - (y - CH.mt) / (Y(Y0) - CH.mt) * (Y1 - Y0);
+let cDrag = null;
+svg.addEventListener('pointerdown', e => {
+  const p = svgY(e); if (p.x < CH.ml || p.x > CH.W - CH.mr || p.y < CH.mt || p.y > Y(Y0)) return;
+  cDrag = { y: e.clientY, moved: false, target: e.target, id: e.pointerId };
+});
+svg.addEventListener('pointermove', e => {
+  if (!cDrag) return;
+  if (!cDrag.moved && Math.abs(e.clientY - cDrag.y) > 5) { cDrag.moved = true; svg.setPointerCapture(cDrag.id); stopMotion(); $('#tip').hidden = true; }
+  if (cDrag.moved) setZ(yToZ(svgY(e).y) + .65);
+});
+svg.addEventListener('pointerup', e => {
+  if (!cDrag) return; const d = cDrag; cDrag = null;
+  if (d.moved) return;
+  const hit = Object.values(boxes).find(b => b.r === d.target);
+  if (hit) select(hit.m.id); else flyTo(yToZ(svgY(e).y) + .65);
+});
+function select(id) {
+  sel = sel === id ? null : id; renderDetail(); updChart(); dirty = true;
+  if (sel) flyTo(clamp(byId[sel].s[1] - .25, zBot, zTop));
+}
+const legend = $('#legend');
+for (const f of FAM) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.setAttribute('aria-pressed', 'true');
+  b.innerHTML = `<i style="background:var(--c-${f.id})"></i>${f.name}`;
+  b.addEventListener('click', () => { hiddenFam.has(f.id) ? hiddenFam.delete(f.id) : hiddenFam.add(f.id); b.setAttribute('aria-pressed', !hiddenFam.has(f.id)); updChart(); renderDetail(); dirty = true; });
+  legend.appendChild(b);
+}
+function inView() {
+  const top = z, bot = z - 1.3;
+  return M.filter(m => !hiddenFam.has(m.f)).map(m => ({ m, ov: Math.min(m.s[1], top) - Math.max(m.s[0], bot) })).filter(o => o.ov > 0).sort((a, b) => b.ov - a.ov || (a.m.s[1] - a.m.s[0]) - (b.m.s[1] - b.m.s[0]));
+}
+let lastChartZ = null, lastDom = -1;
+function updChart() {
+  const top = z, bot = z - 1.3, yt = Y(clamp(top, Y0, Y1)), yb = Y(clamp(bot, Y0, Y1));
+  band.setAttribute('y', yt); band.setAttribute('height', Math.max(0, yb - yt));
+  bandTop.setAttribute('y1', yt); bandTop.setAttribute('y2', yt); bandBot.setAttribute('y1', yb); bandBot.setAttribute('y2', yb);
+  bandLab.setAttribute('y', yt - 4);
+  const d = domLevel(Math.pow(10, z)), L = PATH[d];
+  for (const n of [mark, markRing]) { n.setAttribute('cx', X(L.proc.t)); n.setAttribute('cy', Y(L.size)); }
+  lvlText.forEach((t, i) => t.classList.toggle('on', i === d));
+  const vis = new Set(inView().map(o => o.m.id)), focus = hov || sel;
+  for (const b of Object.values(boxes)) {
+    const id = b.m.id, hid = hiddenFam.has(b.m.f), op = hid ? 0 : focus ? (id === focus ? 1 : .18) : vis.has(id) ? 1 : .28;
+    b.g.style.display = hid ? 'none' : '';
+    b.r.style.opacity = op; b.lab.style.opacity = hid ? 0 : op;
+    b.r.setAttribute('fill-opacity', id === focus ? .2 : vis.has(id) ? .1 : .05);
+    b.r.setAttribute('stroke-width', id === focus ? 3 : 2);
+  }
+}
+function renderDetail() {
+  const det = $('#detail');
+  if (sel && !hiddenFam.has(byId[sel].f)) {
+    const m = byId[sel], fam = FAM.find(f => f.id === m.f);
+    det.innerHTML = `<div class="card">
+      <div class="card-top"><h4>${m.n}</h4><span class="fam"><i style="background:var(--c-${m.f})"></i>${fam.name}</span></div>
+      <p>${m.b}</p>
+      <dl class="ranges"><dt>sizes</dt><dd>${fmtLen(m.s[0])} → ${fmtLen(m.s[1])}</dd><dt>times</dt><dd>${m.id === 'md' ? 'femtoseconds' : fmtTime(m.t[0])} → ${fmtTime(m.t[1])}</dd></dl>
+      <div class="card-actions"><button class="btn primary" type="button" id="fly">Fly through its range</button><button class="btn" type="button" id="clr">Clear selection</button></div></div>`;
+    $('#fly').addEventListener('click', () => { const zs = clamp(m.s[1] - .2, zBot, zTop), ze = clamp(m.s[0] + 1.1, zBot, zTop); setZ(zs); anim = null; flyTo(ze, Math.max(1500, Math.abs(zs - ze) * 1500)); });
+    $('#clr').addEventListener('click', () => select(sel));
+    return;
+  }
+  const list = inView(), L = PATH[domLevel(Math.pow(10, z))];
+  det.innerHTML = `<h3>In view at ${L.name.toLowerCase()} scale · ${list.length} method${list.length === 1 ? '' : 's'}</h3><div class="mlist">${list.map(({ m }) => `<button class="chip" type="button" data-id="${m.id}"><i style="background:var(--c-${m.f})"></i>${m.n}</button>`).join('') || '<span style="color:var(--ink3)">Nothing reaches this scale yet. Try another family.</span>'}</div>`;
+  det.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => select(b.dataset.id)));
+}
+function updDom() {
+  const W = Math.pow(10, z), d = domLevel(W), L = PATH[d];
+  $('#fov').textContent = fmtLen(z);
+  if (d !== lastDom) {
+    lastDom = d;
+    $('#lvl-idx').textContent = `Level ${d + 1} / ${PATH.length}`; $('#lvl-name').textContent = L.name;
+    $('#caption').textContent = L.caption;
+    $('#process').innerHTML = `<span class="dot"></span><span>Animating: ${L.proc.text}</span><span class="slow">${L.proc.slow}</span>`;
+    ladder.querySelectorAll('.lad-item').forEach(b => b.classList.toggle('on', +b.dataset.i === d));
+    if (location.hash.slice(1) !== L.id) history.replaceState(null, '', location.pathname + location.search + '#' + L.id);
+  }
+  $('#lad-thumb').style.top = zToPct(z) + '%';
+  ladder.setAttribute('aria-valuenow', Math.round(100 - zToPct(z))); ladder.setAttribute('aria-valuetext', `${L.name}, field of view ${fmtLen(z)}`);
+  if (!sel) { const key = inView().map(o => o.m.id).join(); if (key !== renderDetail.key || d !== renderDetail.d) { renderDetail.key = key; renderDetail.d = d; renderDetail(); } }
+}
+
+// ---------- main loop ----------
+function homeDist() { let d = 9; for (const L of PATH) d = Math.min(d, Math.abs(z - L10(L.w))); return d; }
+function frame(now) {
+  const dt = clamp((now - lastNow) / 1000, 0, .1); lastNow = now;
+  if (!paused) simT += dt;
+  for (let i = 1; i < PATH.length; i++) {
+    const L = PATH[i]; if (!L.card) continue;
+    const W = Math.pow(10, z), tgt = W <= PATH[i - 1].w * .93 ? 1 : 0;
+    L.popP = reduce || W < L.w * 1.4 ? tgt : clamp((L.popP || 0) + Math.sign(tgt - (L.popP || 0)) * dt * 2.4, 0, 1);
+  }
+  if (anim) { const u = clamp((now - anim.t0) / anim.d, 0, 1); setZ(lerp(anim.z0, anim.z1, easeInOut(u))); if (u >= 1) { const dn = anim.done; anim = null; dn && dn(); } }
+  if (diving) { setZ(z - dt * .55 * (.25 + .75 * Math.min(1, homeDist() / .35))); if (z <= zBot + 1e-3) { diving = false; updDiveBtn(); } }
+  render(simT);
+  if (z !== lastChartZ) { lastChartZ = z; updChart(); updDom(); }
+  requestAnimationFrame(frame);
+}
+// start: a bare #level token deep-links (it also picks the path that leads there)
+const startId = location.hash.slice(1);
+const qs = new URLSearchParams(location.search);
+if (NODES[startId]) { let n = startId; while (PARENT[n] && PARENT[n] !== '*') { const p = PARENT[n]; if (NODES[p].children.length > 1) choice[p] = n; n = p; } if (n === 'r_body') species = 'rat'; }
+if (SPECIES[qs.get('species')]) species = qs.get('species');
+setSpecies(species);
+if (NODES[startId]) z = L10(NODES[startId].w);
+if (qs.get('path') && PRESETS[qs.get('path')]) { Object.assign(choice, PRESETS[qs.get('path')]); setPath(); }
+if (qs.get('z')) z = +qs.get('z');
+if (qs.get('sel') && byId[qs.get('sel')]) sel = qs.get('sel');
+new ResizeObserver(resize).observe($('#cwrap'));
+resize(); updChart(); updDom(); renderDetail();
+requestAnimationFrame(frame);
+})();
+</script>

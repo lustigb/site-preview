@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<style>.wip-note{font-family:var(--font-ui);font-size:.85rem;color:#8a6d0b;background:#fbeec2;border:1px solid #e3c86a;border-radius:var(--radius);padding:6px 12px;margin:18px 0 0;display:inline-block}.soon-link{color:inherit}.soon-link .soon-tag{font-family:var(--font-ui);font-size:.75rem;color:var(--muted)}</style><base href="../"><meta name="robots" content="noindex, nofollow">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receptive Fields · Explainers · Brian Lustig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,700&display=swap">
+<link rel="stylesheet" href="styles/base.css">
+<link id="theme" rel="stylesheet" href="styles/a-notebook.css">
+</head>
+<body>
+
+<div class="header-bar">
+<header class="site-header">
+  <a class="wordmark" href="live/index.html">Brian Sciences</a>
+  <nav>
+    <a href="live/research.html">Research</a>
+    <a href="live/projects.html">Projects</a>
+    <a href="live/about.html">About</a>
+  </nav>
+</header>
+</div>
+
+<main class="dc">
+<p class="wip-note">This page is still being written.</p>
+  <section class="page-head">
+    <p class="meta"><a href="live/explainers.html">← Explainers</a></p>
+    <h1>Receptive Fields</h1>
+    <p class="intro">A receptive field is the patch of the world, like a spot on the skin or a region of what you see, that a neuron responds to. Mapping, recording, or characterizing the input that drives a sensory neuron defines that neuron's receptive field.</p>
+  </section>
+  <section class="dc-section">
+    <figure class="yt"><div class="yt-box"><iframe src="https://www.youtube-nocookie.com/embed/8VdFf3egwfg" title="YouTube video" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div><figcaption>Hubel &amp; Wiesel: a cortical neuron in V1. YouTube upload by Ali Moeeny.</figcaption></figure>
+  </section>
+  <section class="dc-section">
+    <figure class="yt"><div class="yt-box"><iframe src="https://www.youtube-nocookie.com/embed/OGxVfKJqX5E" title="YouTube video" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div><figcaption>Simple and complex cells, with explanations. YouTube upload by Ryan Abbott.</figcaption></figure>
+  </section>
+  <section class="dc-section">
+    <h2>Builds on</h2>
+    <p class="chain"><span class="soon-link">Sensory Receptors<span class="soon-tag"> (coming soon)</span></span><span class="soon-link">Spikes and Firing Rate<span class="soon-tag"> (coming soon)</span></span></p>
+  </section>
+  <section class="dc-section">
+    <h2>Leads to</h2>
+    <p class="chain"><span class="soon-link">Sensory Pathways<span class="soon-tag"> (coming soon)</span></span><span class="soon-link">Barrel Cortex<span class="soon-tag"> (coming soon)</span></span><span class="soon-link">Hierarchy and Invariance<span class="soon-tag"> (coming soon)</span></span><a class="chip" href="live/explainer-place-cells.html">Place Cells</a></p>
+  </section>
+  <section class="dc-section">
+    <h2>Used in my work</h2>
+    <p class="chain"><a class="chip" href="live/paper-lustig2013-vsd.html">Lustig 2013 VSD barrel cortex</a></p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <p>© 2026 Brian Lustig</p>
+</footer>
+<script>
+  // Click any figure image to view it large; close with the x, a click outside, or Esc.
+  (function () {
+    const imgs = document.querySelectorAll(".dc-figure img, .person-figure img, .signature.photo img:not(#home-photo)");
+    if (!imgs.length) return;
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.innerHTML = '<button class="lightbox-close" aria-label="Close">&times;</button><div class="lightbox-body"><img alt=""><div class="lightbox-caption"></div></div>';
+    document.body.appendChild(box);
+    const big = box.querySelector("img");
+    const cap = box.querySelector(".lightbox-caption");
+    const close = () => box.classList.remove("open");
+    imgs.forEach(img => {
+      img.classList.add("zoomable");
+      img.addEventListener("click", () => {
+        big.src = img.dataset.full || img.currentSrc || img.src;          // data-full = higher-resolution file, if given
+        const fc = img.closest("figure")?.querySelector("figcaption");     // a figure's legend shows under the image
+        cap.innerHTML = fc ? fc.innerHTML : "";
+        cap.hidden = !fc;
+        box.classList.add("open");
+      });
+    });
+    box.addEventListener("click", e => { if (e.target === box || e.target.classList.contains("lightbox-close")) close(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+  })();
+</script>
+<script src="js/viewtoggle.js"></script>  
+</body>
+</html>

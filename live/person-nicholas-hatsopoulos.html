@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<style>.wip-note{font-family:var(--font-ui);font-size:.85rem;color:#8a6d0b;background:#fbeec2;border:1px solid #e3c86a;border-radius:var(--radius);padding:6px 12px;margin:18px 0 0;display:inline-block}.soon-link{color:inherit}.soon-link .soon-tag{font-family:var(--font-ui);font-size:.75rem;color:var(--muted)}</style><base href="../"><meta name="robots" content="noindex, nofollow">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nicholas Hatsopoulos · People · Brian Lustig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,700&display=swap">
+<link rel="stylesheet" href="styles/base.css">
+<link id="theme" rel="stylesheet" href="styles/a-notebook.css">
+</head>
+<body>
+
+<div class="header-bar">
+<header class="site-header">
+  <a class="wordmark" href="live/index.html">Brian Sciences</a>
+  <nav>
+    <a href="live/research.html">Research</a>
+    <a href="live/projects.html">Projects</a>
+    <a href="live/about.html">About</a>
+  </nav>
+</header>
+</div>
+
+<main class="dc">
+  <section class="page-head person-head">
+    <p class="meta"><a href="live/people.html">← People</a></p>
+    <div class="person-top">
+      <div class="avatar big"><img src="img/people/nicholas-hatsopoulos.png" alt=""></div>
+      <div>
+        <h1>Nicholas Hatsopoulos</h1>
+        <p class="ptags"><span class="ptag">mentor</span><span class="ptag">primates</span></p>
+        <p class="site-line">Find them at: <a href="https://hatsopouloslab.uchicago.edu/">https://hatsopouloslab.uchicago.edu/</a></p>
+      </div>
+    </div>
+  </section>
+  <section class="dc-section">
+    <h2>How I know Nicho</h2>
+    <p>PhD advisor, University of Chicago</p>
+    <p>Nicho was my sponsor and University of Chicago advisor as part of the Janelia–University of Chicago Interdisciplinary Scientist Training Program (ISTP). I'm grateful for his mentorship and for providing a scientific home for me during my time in Chicago.</p>
+  </section>
+  <section class="dc-section">
+    <h2>Work highlights</h2>
+    <ul class="paper-list"><li><a href="https://doi.org/10.1038/416141a">Instant neural control of a movement signal</a><span class="pl-authors">Serruya MD, Hatsopoulos NG, Paninski L, Fellows MR, Donoghue JP (2002)</span></li><li><a href="https://doi.org/10.1152/jn.1998.79.1.159">Neural discharge and local field potential oscillations in primate motor cortex during voluntary movements</a><span class="pl-authors">Donoghue JP, Sanes JN, Hatsopoulos NG, Gaál G (1998)</span></li></ul>
+    <p class="site-line">More of Nicho's work: <a href="https://scholar.google.com/citations?user=6Lm9z-sAAAAJ&hl=en">Google Scholar ↗</a></p>
+  </section>
+  <section class="dc-section">
+    <h2>Where Nicho is now</h2>
+    <p>He is a professor at the University of Chicago.</p>
+    <p class="site-line"><a href="https://hatsopouloslab.uchicago.edu/">https://hatsopouloslab.uchicago.edu/</a></p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <p>© 2026 Brian Lustig</p>
+</footer>
+<script>
+  // Click any figure image to view it large; close with the x, a click outside, or Esc.
+  (function () {
+    const imgs = document.querySelectorAll(".dc-figure img, .person-figure img, .signature.photo img:not(#home-photo)");
+    if (!imgs.length) return;
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.innerHTML = '<button class="lightbox-close" aria-label="Close">&times;</button><div class="lightbox-body"><img alt=""><div class="lightbox-caption"></div></div>';
+    document.body.appendChild(box);
+    const big = box.querySelector("img");
+    const cap = box.querySelector(".lightbox-caption");
+    const close = () => box.classList.remove("open");
+    imgs.forEach(img => {
+      img.classList.add("zoomable");
+      img.addEventListener("click", () => {
+        big.src = img.dataset.full || img.currentSrc || img.src;          // data-full = higher-resolution file, if given
+        const fc = img.closest("figure")?.querySelector("figcaption");     // a figure's legend shows under the image
+        cap.innerHTML = fc ? fc.innerHTML : "";
+        cap.hidden = !fc;
+        box.classList.add("open");
+      });
+    });
+    box.addEventListener("click", e => { if (e.target === box || e.target.classList.contains("lightbox-close")) close(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+  })();
+</script>
+<script src="js/viewtoggle.js"></script>  
+</body>
+</html>

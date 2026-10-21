@@ -1,0 +1,14 @@
+/* A — Lab Notebook: serif, airy, muted green-grey (Filip-inspired). Light + dark. */
+:root {
+  --bg: #f3f5f0; --surface: #eaede5; --ink: #1a1f1c; --muted: #5d6b62; --line: #cfd6cb;
+  --accent: #2f7d5b; --link: #2f7d5b; --radius: 2px;
+  /* Site font (chosen 2026-10-20 with the font lab, #19): Public Sans everywhere, titles at weight 400. */
+  --font-body: "Public Sans", system-ui, sans-serif; --font-display: "Public Sans", system-ui, sans-serif;
+  --font-ui: "Public Sans", system-ui, sans-serif; --display-weight: 400;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0d110f; --surface: #141a16; --ink: #e8eee9; --muted: #8fa095; --line: #26302a; --accent: #6fd8a4; --link: #6fd8a4; }
+}
+
+/* Titles and headings in the regular weight, as in the font lab (#19 Public Sans 400) */
+h1, h2, h3, .wordmark, .door h3, .paper-card h3, .project h3 { font-weight: 400; }

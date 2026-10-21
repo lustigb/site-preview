@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anna Roe · People · Brian Lustig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,700&display=swap">
+<link rel="stylesheet" href="styles/base.css">
+<link id="theme" rel="stylesheet" href="styles/a-notebook.css">
+<style>.uc-float { position: fixed; top: 12px; left: 12px; z-index: 30; } .site-header .wordmark { margin-right: 0; } .uc-badge { font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6d0b; background: #fbeec2; border: 1px solid #e3c86a; border-radius: 999px; padding: 2px 9px; margin-left: 10px; margin-right: auto; align-self: center; }</style>
+</head>
+<body>
+
+<div class="header-bar">
+<header class="site-header">
+  <a class="wordmark" href="index.html">Brian Sciences</a><span class="uc-badge">Under construction</span>
+  <nav>
+    <a href="research.html">Research</a>
+    <a href="projects.html">Projects</a>
+    <a href="about.html">About</a>
+  </nav>
+</header>
+</div>
+
+<main class="dc">
+  <section class="page-head person-head">
+    <p class="meta"><a href="people.html">← People</a></p>
+    <div class="person-top">
+      <div class="avatar big"><img src="img/people/anna-roe.png" alt=""></div>
+      <div>
+        <h1>Anna Roe</h1>
+        <p class="ptags"><span class="ptag">mentor</span><span class="ptag">collaborator</span><span class="ptag">primates</span></p>
+        <p class="site-line">Find them at: <a href="https://med.nyu.edu/faculty/anna-w-roe">https://med.nyu.edu/faculty/anna-w-roe</a></p>
+      </div>
+    </div>
+  </section>
+  <section class="dc-section">
+    <h2>How I know Anna</h2>
+    <p>Research mentor, Vanderbilt (2009–12)</p>
+    <p>I was lucky enough to work with Anna Roe as a research assistant at Vanderbilt, after my undergraduate work there.</p><p>Anna is an amazing scientist. She started with amazing work in vision, and she was a pioneer of <a href="explainer-intrinsic-signal-optical-imaging.html">intrinsic signal optical imaging</a>. Working with her taught me a lot about the fundamentals of imaging, which are important for every imaging modality in science.</p><p>Anna is also incredible because she crosses sensory modalities. She studies the brain from the position of the <a href="explainer-cortical-columns.html">cortical column</a> as a universal structure, which is why she branched into both visual and somatosensory cortex.</p><p>This ties back to some of her most famous early work: her paper, where visual input was rewired into auditory cortex (Roe AW, Pallas SL, Hahm JO, Sur M (1990). <a href="https://doi.org/10.1126/science.2237432">A map of visual space induced in primary auditory cortex</a>). It showed that cortex maps and forms its fields based on the input it receives. This is a huge finding, and it leads to a lot of important ideas, especially for development, plasticity, and even brain-machine interfaces.</p><p>I am grateful that, as a research assistant, she gave me the freedom to push my enthusiasm for optogenetics, and its obvious pairing with the artificial dura and optical windows in monkeys.</p><p>Looking forward, she continues to trailblaze by exploring the cortical representation of the fovea. I think this is super cool and important, especially when you think about how vision itself is active sensing: a <a href="explainer-sensorimotor-loop.html">loop</a> between the senses, movement, and the environment.</p>
+  </section>
+  <section class="dc-section">
+    <h2>Work highlights</h2>
+    <ul class="paper-list"><li><a href="https://doi.org/10.1126/science.2462279">Experimentally induced visual projections into auditory thalamus and cortex</a><span class="pl-authors">Sur M, Garraghty PE, Roe AW (1988)</span></li><li><a href="https://doi.org/10.1523/JNEUROSCI.15-05-03689.1995">Visual topography in primate V2: multiple representation across functional stripes</a><span class="pl-authors">Roe AW, Ts&#x27;o DY (1995)</span></li></ul>
+    <p class="site-line">More of Anna's work: <a href="https://scholar.google.com/citations?user=yoDf0BQAAAAJ&hl=en">Google Scholar ↗</a></p>
+  </section>
+  <section class="dc-section">
+    <h2>Where Anna is now</h2>
+    <p>She now runs her lab as a research professor at NYU and Director of Translational Neuroscience at the Nathan Kline Institute in New York.</p>
+    <p class="site-line"><a href="https://med.nyu.edu/faculty/anna-w-roe">https://med.nyu.edu/faculty/anna-w-roe</a></p>
+  </section>
+  <section class="dc-section">
+    <h2>Papers together</h2>
+    <ul><li><a href="paper-ruiz2013-optogenetics-windows.html">Optogenetics through windows on the brain in the nonhuman primate</a></li><li><a href="paper-lustig2013-vsd.html">Voltage-sensitive dye imaging reveals shifting spatiotemporal spread of whisker-induced activity in rat barrel cortex</a></li></ul>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <p>© 2026 Brian Lustig</p>
+</footer>
+<script>
+  // Click any figure image to view it large; close with the x, a click outside, or Esc.
+  (function () {
+    const imgs = document.querySelectorAll(".dc-figure img, .person-figure img, .signature.photo img:not(#home-photo)");
+    if (!imgs.length) return;
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.innerHTML = '<button class="lightbox-close" aria-label="Close">&times;</button><div class="lightbox-body"><img alt=""><div class="lightbox-caption"></div></div>';
+    document.body.appendChild(box);
+    const big = box.querySelector("img");
+    const cap = box.querySelector(".lightbox-caption");
+    const close = () => box.classList.remove("open");
+    imgs.forEach(img => {
+      img.classList.add("zoomable");
+      img.addEventListener("click", () => {
+        big.src = img.dataset.full || img.currentSrc || img.src;          // data-full = higher-resolution file, if given
+        const fc = img.closest("figure")?.querySelector("figcaption");     // a figure's legend shows under the image
+        cap.innerHTML = fc ? fc.innerHTML : "";
+        cap.hidden = !fc;
+        box.classList.add("open");
+      });
+    });
+    box.addEventListener("click", e => { if (e.target === box || e.target.classList.contains("lightbox-close")) close(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+  })();
+</script>
+<script src="js/fontlab.js"></script><script src="js/viewtoggle.js"></script>  
+</body>
+</html>

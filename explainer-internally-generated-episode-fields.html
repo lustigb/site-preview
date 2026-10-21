@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Internally Generated Episode Fields · Explainers · Brian Lustig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,700&display=swap">
+<link rel="stylesheet" href="styles/base.css">
+<link id="theme" rel="stylesheet" href="styles/a-notebook.css">
+<style>.uc-float { position: fixed; top: 12px; left: 12px; z-index: 30; } .site-header .wordmark { margin-right: 0; } .uc-badge { font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6d0b; background: #fbeec2; border: 1px solid #e3c86a; border-radius: 999px; padding: 2px 9px; margin-left: 10px; margin-right: auto; align-self: center; }</style>
+</head>
+<body>
+
+<div class="header-bar">
+<header class="site-header">
+  <a class="wordmark" href="index.html">Brian Sciences</a><span class="uc-badge">Under construction</span>
+  <nav>
+    <a href="research.html">Research</a>
+    <a href="projects.html">Projects</a>
+    <a href="about.html">About</a>
+  </nav>
+</header>
+</div>
+
+<main class="dc">
+  <section class="page-head">
+    <p class="meta"><a href="explainers.html">← Explainers</a></p>
+    <h1>Internally Generated Episode Fields</h1>
+    <p class="soon">Explainer coming soon.</p>
+  </section>
+  <section class="dc-section">
+    <h2>Builds on</h2>
+    <p class="chain"><a class="chip" href="explainer-spatiotemporal-receptive-fields.html">Spatiotemporal Receptive Fields</a><a class="chip" href="explainer-theta-sequences.html">Theta Sequences</a></p>
+  </section>
+  <section class="dc-section">
+    <h2>Leads to</h2>
+    <p class="chain"><a class="chip" href="explainer-hippocampus-as-a-recording-medium.html">Hippocampus as a Recording Medium</a><a class="chip" href="explainer-episodic-memory.html">Episodic Memory</a></p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <p>© 2026 Brian Lustig</p>
+</footer>
+<script>
+  // Click any figure image to view it large; close with the x, a click outside, or Esc.
+  (function () {
+    const imgs = document.querySelectorAll(".dc-figure img, .person-figure img, .signature.photo img:not(#home-photo)");
+    if (!imgs.length) return;
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.innerHTML = '<button class="lightbox-close" aria-label="Close">&times;</button><div class="lightbox-body"><img alt=""><div class="lightbox-caption"></div></div>';
+    document.body.appendChild(box);
+    const big = box.querySelector("img");
+    const cap = box.querySelector(".lightbox-caption");
+    const close = () => box.classList.remove("open");
+    imgs.forEach(img => {
+      img.classList.add("zoomable");
+      img.addEventListener("click", () => {
+        big.src = img.dataset.full || img.currentSrc || img.src;          // data-full = higher-resolution file, if given
+        const fc = img.closest("figure")?.querySelector("figcaption");     // a figure's legend shows under the image
+        cap.innerHTML = fc ? fc.innerHTML : "";
+        cap.hidden = !fc;
+        box.classList.add("open");
+      });
+    });
+    box.addEventListener("click", e => { if (e.target === box || e.target.classList.contains("lightbox-close")) close(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+  })();
+</script>
+<script src="js/fontlab.js"></script><script src="js/viewtoggle.js"></script>  
+</body>
+</html>

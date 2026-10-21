@@ -1,0 +1,988 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reverse Game of Life</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+  /* Colours and fonts copied from the main site (personalwebsite/site/styles/a-notebook.css). */
+  :root{
+    --ground:#f3f5f0; --panel:#eaede5; --hair:#cfd6cb;
+    --ink:#1a1f1c; --muted:#5d6b62; --faint:#7d8a81;
+    --hi:#1a1f1c; --accent:#2f7d5b; --cell:#2f7d5b; --todo:#a8650a; --miss:#d23b2f; --extra:#2f63d2; --s1:#14875a; --s2:#c95d0e;
+    --serif:"Source Serif 4",Georgia,serif;
+    --sans:"Inter",system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    --measure:64ch;
+  }
+  /* Follows the device's light/dark setting, same dark palette as the main site. */
+  @media (prefers-color-scheme: dark){
+    :root{ --ground:#0d110f; --panel:#141a16; --hair:#26302a;
+      --ink:#e8eee9; --muted:#8fa095; --faint:#6f7f75;
+      --hi:#ffffff; --accent:#6fd8a4; --cell:#6fd8a4; --todo:#e6b53c; --miss:#ff6b5e; --extra:#6f9bff; --s1:#2fae78; --s2:#d9782a; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--serif); font-size:18px; line-height:1.6; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--measure); margin:0 auto; padding:0 16px}
+  h1,h2,.ey,.note,.visual{font-family:var(--sans)}
+  h1{font-family:var(--serif); font-size:clamp(2.4rem,6vw,3.8rem); line-height:1.05; font-weight:600; margin:.1em 0 .3em}
+  h2{font-family:var(--serif); font-size:clamp(1.4rem,3.6vw,2rem); font-weight:600; line-height:1.1; margin:0 0 .6em}
+  .ey{font-family:var(--mono); text-transform:uppercase; letter-spacing:.24em; font-size:.7rem; color:var(--faint)}
+  header{padding:72px 0 16px}
+  .dek{font-size:1.25rem; color:var(--muted); margin:.2em 0 0}
+  section{padding:40px 0; border-top:1px solid var(--hair)}
+  /* Draft scaffolding: everything amber is a placeholder to be replaced. */
+  .note{font-size:.9rem; color:var(--todo); border-left:3px solid var(--todo); padding:.2em 0 .2em .9em; margin:0 0 1em}
+  .note ul{margin:.3em 0 0; padding-left:1.2em}
+  .visual{border:1px dashed var(--todo); border-radius:8px; padding:28px 18px; text-align:center;
+    color:var(--todo); font-size:.85rem; margin:1.2em 0}
+  code{font-family:var(--mono); font-size:.85em}
+  .cap,figcaption{font-family:var(--sans); font-size:.85rem; color:var(--muted); margin:.6em 0 0}
+  button{font-family:var(--sans); font-size:.85rem; color:var(--ink); background:var(--panel);
+    border:1px solid var(--hair); border-radius:4px; padding:6px 14px; cursor:pointer}
+  button:hover{border-color:var(--accent)}
+
+  /* Rule pictures */
+  /* Wider than the text column so all five cards fit on one row on a laptop. */
+  .rules{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:1.4em 0 .4em;
+    width:min(1000px, calc(100vw - 32px)); margin-left:50%; transform:translateX(-50%)}
+  .rule{background:var(--panel); border:1px solid var(--hair); border-radius:6px; padding:14px 12px 12px; font-family:var(--sans)}
+  .rule svg{display:block; width:100%; height:auto}
+  .rule h3{font-size:.95rem; margin:.6em 0 .2em; color:var(--ink)}
+  .rule p{font-size:.82rem; line-height:1.45; color:var(--muted); margin:0}
+  .rule .dead{fill:var(--ground); stroke:var(--hair)}
+  .rule .live{fill:var(--cell); stroke:var(--hair)}
+  .rule .ghost{opacity:.22}
+  .rule .focus{fill:none; stroke:var(--ink); stroke-width:3}
+  .rule .num{font:600 11px var(--sans); fill:var(--faint); text-anchor:middle; dominant-baseline:central}
+  .rule .lbl{font:600 11px var(--sans); fill:var(--muted); text-anchor:middle}
+  .rule .arrow{stroke:var(--muted); stroke-width:2; fill:none}
+
+  /* Clickable demo */
+  .demo{margin:1.8em 0 0}
+  .demo canvas{display:block; width:100%; touch-action:none; cursor:crosshair; border-radius:4px}
+  .controls{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px}
+  .gen{font-family:var(--mono); font-size:.8rem; color:var(--faint); margin-left:auto}
+
+  /* Rules checklist */
+  .checklist{width:100%; border-collapse:collapse; font-family:var(--sans); font-size:.92rem; margin:.4em 0 0}
+  .checklist th{text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; color:var(--faint); font-weight:600}
+  .checklist th,.checklist td{padding:9px 10px; border-bottom:1px solid var(--hair)}
+  .checklist td:last-child{font-weight:600; color:var(--accent)}
+
+  /* Decision tree: wide version on larger screens, a tall indented version of the same tree on phones */
+  .tree-wrap{margin:1.6em 0 0}
+  .tree{display:block; width:100%; height:auto; font-family:var(--sans)}
+  .tree-tall{display:none; max-width:360px; margin:0 auto}
+  @media (max-width:620px){ .tree-wide{display:none} .tree-tall{display:block} }
+  .tree text{font-size:13px; text-anchor:middle; dominant-baseline:central}
+  .tree .edges path{stroke:var(--hair); stroke-width:2; fill:none}
+  .tree .elabels text{font-size:11px; fill:var(--faint); font-weight:600}
+  .tree .q rect{fill:var(--panel); stroke:var(--muted)} .tree .q text{fill:var(--ink); font-weight:600}
+  .tree .leaf rect{fill:var(--ground); stroke:var(--hair)} .tree .leaf text{fill:var(--muted)}
+  .tree .leaf.on rect{fill:var(--cell); stroke:var(--cell)} .tree .leaf.on text{fill:var(--ground); font-weight:600}
+
+  /* Worked examples (before the demo) */
+  .examples{display:flex; flex-direction:column; gap:14px; margin:1.2em 0 2em}
+  .ex{display:flex; align-items:flex-start; gap:10px 18px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--hair);
+    border-radius:6px; padding:12px 14px; font-family:var(--sans)}
+  .ex .who{width:150px; font-size:.85rem} .ex .who b{display:block; color:var(--ink); font-size:.95rem}
+  .ex .who span{color:var(--muted)}
+  .ex svg{width:56px; height:56px; display:block}
+  .ex svg.big{width:72px; height:72px}
+  .ex rect.c{stroke:var(--hair); stroke-width:.06} .ex rect.c0{fill:var(--ground)} .ex rect.c1{fill:var(--cell)}
+  .ex .to{color:var(--muted)} .ex .more{font-size:.8rem; color:var(--faint)}
+  .ex .none{width:56px; height:56px; border:1px dashed var(--muted); border-radius:4px; display:grid; place-items:center; color:var(--muted); font-size:.75rem}
+  .ex .lines{display:flex; flex-direction:column; gap:8px}
+  .ex .line{display:flex; align-items:center; gap:8px}
+  .ex-toggle button[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--ground); font-weight:600}
+
+  /* "How the search works" expandable */
+  details.how{margin:1.4em 0 0; border:1px solid var(--hair); border-radius:6px; padding:10px 14px; background:var(--panel)}
+  details.how summary{cursor:pointer; font-family:var(--sans); font-weight:600; font-size:.95rem}
+  details.how p, details.how li{font-size:.95rem}
+  details.how ol{padding-left:1.3em}
+
+  /* Section 5: key view + catalog figures */
+  .key{margin:1.4em 0 0; background:var(--panel); border:1px solid var(--hair); border-radius:6px; padding:14px}
+  .key-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-family:var(--sans); font-size:.75rem; color:var(--faint); margin-bottom:12px}
+  .key-row .who{width:110px; font-size:.82rem; color:var(--ink); font-weight:600}
+  .key-row .who span{display:block; font-weight:400; color:var(--muted)}
+  .key-row figure{margin:0; text-align:center}
+  .key-row svg{width:76px; height:76px; display:block}
+  .key-row .to{font-size:1rem; color:var(--muted)}
+  .key rect.c{stroke:var(--hair); stroke-width:.05}
+  .key rect.off{fill:var(--ground)} .key rect.on{fill:var(--ink)}
+  .key rect.miss{fill:var(--miss)} .key rect.extra{fill:var(--extra)}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-family:var(--sans); font-size:.8rem; color:var(--muted)}
+  .sw{display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:-1px; margin-right:5px}
+  .sw.on{background:var(--ink)} .sw.miss{background:var(--miss)} .sw.extra{background:var(--extra)}
+  .catalogs{display:grid; grid-template-columns:1fr; gap:22px; margin:1.6em 0 0}
+  .catalogs figure{margin:0}
+  /* MATLAB figures have white backgrounds; frame them so they sit cleanly in dark mode too. */
+  .catalogs img{width:100%; display:block; background:#fff; border:1px solid var(--hair); border-radius:4px; padding:6px}
+
+  /* Section 5b: charts + edge diagrams. Series colours validated with the dataviz palette checker. */
+  h3.sub{font-family:var(--serif); font-size:1.35rem; font-weight:600; margin:2.2em 0 .4em}
+  .chart{margin:1.8em 0 0}
+  .chart .ctitle{font-family:var(--sans); font-weight:600; font-size:.95rem}
+  .chart .csub{font-family:var(--sans); font-size:.82rem; color:var(--muted)}
+  .chart svg{display:block; width:100%; height:auto; margin-top:8px; font-family:var(--sans); overflow:visible}
+  .clegend{display:flex; gap:16px; flex-wrap:wrap; font-family:var(--sans); font-size:.8rem; color:var(--muted); margin-top:6px}
+  .sw.s1{background:var(--s1)} .sw.s2{background:var(--s2)}
+  .chart .s1{fill:var(--s1)} .chart .s2{fill:var(--s2)}
+  .chart .grid line{stroke:var(--hair); stroke-width:1}
+  .chart .axis text{font-size:11px; fill:var(--faint)}
+  .chart .val{font-size:11px; fill:var(--ink); text-anchor:middle; font-weight:600}
+  .chart .cat{font-size:11px; fill:var(--muted); text-anchor:middle}
+  .chart [data-tip]{cursor:default}
+  .chart .hit{fill:transparent}
+  .chart .hit:hover + .bar, .chart g.col:hover .bar{opacity:.8}
+  .tip{position:fixed; z-index:10; pointer-events:none; background:var(--ink); color:var(--ground); font-family:var(--sans);
+    font-size:.8rem; padding:6px 9px; border-radius:4px; max-width:260px}
+  .edges{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:16px; margin:2em 0 0}
+  .edges figure{margin:0}
+  .edges svg{width:100%; max-width:200px; display:block; margin:0 auto 8px}
+  .edges rect.c{stroke:var(--hair); stroke-width:.04}
+  .edges rect.off{fill:var(--ground)} .edges rect.on{fill:var(--ink)}
+  .edges rect.nb{fill:var(--s2); opacity:.55} .edges rect.me{fill:var(--s1)}
+  .edges rect.pad{fill:var(--panel)} .edges .frame{fill:none; stroke:var(--s1); stroke-width:.12; stroke-dasharray:.3 .2}
+
+  /* Section 7: typer frame (wider than the text column, like the rule cards) */
+  .typer{margin:1.4em 0 0; width:min(1000px, calc(100vw - 32px)); margin-left:50%; transform:translateX(-50%)}
+  .typer iframe{width:100%; height:360px; border:1px solid var(--hair); border-radius:6px; display:block; background:var(--ground)}
+  .typer a{color:var(--accent)}
+
+  /* Draw-and-search demo */
+  .finder{margin:1.4em 0 0}
+  .finder-top{display:flex; flex-wrap:wrap; gap:22px; align-items:flex-start}
+  .finder .lab{font-family:var(--sans); font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; color:var(--faint); margin-bottom:6px}
+  .finder svg.target{width:210px; height:210px; display:block; touch-action:none; cursor:crosshair}
+  .finder-opts{flex:1; min-width:220px; font-family:var(--sans); font-size:.88rem}
+  .finder-opts label{display:inline-block; margin:0 14px 10px 0; color:var(--muted)}
+  .finder-opts select{font:inherit; color:var(--ink); background:var(--panel); border:1px solid var(--hair); border-radius:4px; padding:3px 6px}
+  .finder .status{font-family:var(--sans); font-size:.88rem; color:var(--ink); margin:.8em 0 0}
+  .finder rect.c{stroke:var(--hair); stroke-width:.06}
+  .finder rect.c0{fill:var(--panel)} .finder rect.c1{fill:var(--cell)}
+  .chains{margin-top:18px; display:flex; flex-direction:column; gap:10px}
+  .chain{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-family:var(--sans); font-size:.75rem; color:var(--faint)}
+  .chain figure{margin:0; text-align:center}
+  .chain svg{width:64px; height:64px; display:block}
+  .chain .to{font-size:1rem; color:var(--muted)}
+</style>
+</head>
+<body><nav aria-label="Site" style="font:13px/1.4 -apple-system,system-ui,sans-serif;color:#969db2;max-width:900px;margin:0 auto;padding:10px 20px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px;font-weight:600;text-decoration:none" href="../../index.html">Brian Sciences</a><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../../project-reverse-game-of-life.html">About this project · more projects →</a></nav>
+
+
+<header class="wrap">
+  <div class="ey">Draft · Reverse Game of Life</div>
+  <h1>Reverse Game of Life</h1>
+  <p class="dek">[Title and one-line subtitle TBD]</p>
+</header>
+
+<main class="wrap">
+
+<section id="s1">
+  <div class="ey">1</div>
+  <h2>What is Conway's Game of Life?</h2>
+  <div class="note">Quick FAQ explainer. As simple and as visual as possible: the game and the rules are clear.
+    <ul><li>Our own interactive demo, or link to other people's demos?</li></ul></div>
+  <div class="note">Draft labels below are placeholders for your wording.</div>
+
+  
+  <div class="rules" id="rules"></div>
+  <p class="cap">Every cell updates at the same time, using its neighbors from the step before.</p>
+
+  
+  <figure class="demo" id="life-demo">
+    <canvas aria-label="Game of Life grid: click cells to toggle them"></canvas>
+    <div class="controls">
+      <button data-act="step">Step</button>
+      <button data-act="play">Play</button>
+      <button data-act="random">Random</button>
+      <button data-act="clear">Clear</button>
+      <span class="gen">Step 0</span>
+    </div>
+    <figcaption>Click or drag to draw cells, then press Step or Play.</figcaption>
+  </figure>
+
+  
+  <div class="note">Summary: the whole game is these few simple rules, applied to every square, one step at a time.</div>
+  <table class="checklist">
+    <thead><tr><th>Check</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Dead, with exactly 3 live neighbors</td><td>Comes alive</td></tr>
+      <tr><td>Alive, with fewer than 2 live neighbors</td><td>Dies</td></tr>
+      <tr><td>Alive, with 2 or 3 live neighbors</td><td>Stays alive</td></tr>
+      <tr><td>Alive, with more than 3 live neighbors</td><td>Dies</td></tr>
+    </tbody>
+  </table>
+
+  
+  <div class="tree-wrap">
+  <svg class="tree tree-wide" viewBox="0 0 720 300" role="img" aria-label="Decision tree for one cell">
+    <g class="edges">
+      <path d="M360 44 L170 100"/><path d="M360 44 L550 100"/>
+      <path d="M170 134 L70 190"/><path d="M170 134 L250 190"/>
+      <path d="M250 224 L190 260"/><path d="M250 224 L310 260"/>
+      <path d="M550 134 L440 190"/><path d="M550 134 L550 190"/><path d="M550 134 L660 190"/>
+    </g>
+    <g class="elabels">
+      <text x="248" y="68">dead</text><text x="472" y="68">alive</text>
+      <text x="104" y="160">no</text><text x="226" y="160">yes</text>
+      <text x="208" y="246">yes</text><text x="294" y="246">no</text>
+      <text x="480" y="166">0 or 1</text><text x="566" y="166">2 or 3</text><text x="626" y="166">4 or more</text>
+    </g>
+    <g class="q">
+      <rect x="250" y="10" width="220" height="34" rx="5"/><text x="360" y="27">Is the cell alive?</text>
+      <rect x="70" y="100" width="200" height="34" rx="5"/><text x="170" y="117">Any live neighbors?</text>
+      <rect x="440" y="100" width="220" height="34" rx="5"/><text x="550" y="117">How many live neighbors?</text>
+      <rect x="160" y="190" width="180" height="34" rx="5"/><text x="250" y="207">Exactly 3?</text>
+    </g>
+    <g class="leaf">
+      <rect x="15" y="190" width="110" height="34" rx="17"/><text x="70" y="207">Stays dead</text>
+      <rect x="255" y="260" width="110" height="34" rx="17"/><text x="310" y="277">Stays dead</text>
+      <rect x="390" y="190" width="100" height="34" rx="17"/><text x="440" y="207">Dies</text>
+      <rect x="610" y="190" width="100" height="34" rx="17"/><text x="660" y="207">Dies</text>
+    </g>
+    <g class="leaf on">
+      <rect x="130" y="260" width="120" height="34" rx="17"/><text x="190" y="277">Comes alive</text>
+      <rect x="495" y="190" width="110" height="34" rx="17"/><text x="550" y="207">Stays alive</text>
+    </g>
+  </svg>
+  
+  <svg class="tree tree-tall" viewBox="0 0 340 470" role="img" aria-label="Decision tree for one cell">
+    <g class="edges">
+      <path d="M30 44 V303 M30 73 H80 M30 303 H80"/>
+      <path d="M100 90 V165 M100 119 H150 M100 165 H150"/>
+      <path d="M170 182 V257 M170 211 H220 M170 257 H220"/>
+      <path d="M100 320 V441 M100 349 H180 M100 395 H180 M100 441 H180"/>
+    </g>
+    <g class="elabels">
+      <text x="55" y="64">dead</text><text x="55" y="294">alive</text>
+      <text x="125" y="110">no</text><text x="125" y="156">yes</text>
+      <text x="195" y="202">yes</text><text x="195" y="248">no</text>
+      <text x="140" y="340">0 or 1</text><text x="140" y="386">2 or 3</text><text x="140" y="432">4 or more</text>
+    </g>
+    <g class="q">
+      <rect x="10" y="10" width="170" height="34" rx="5"/><text x="95" y="27">Is the cell alive?</text>
+      <rect x="80" y="56" width="170" height="34" rx="5"/><text x="165" y="73">Any live neighbors?</text>
+      <rect x="150" y="148" width="120" height="34" rx="5"/><text x="210" y="165">Exactly 3?</text>
+      <rect x="80" y="286" width="210" height="34" rx="5"/><text x="185" y="303">How many live neighbors?</text>
+    </g>
+    <g class="leaf">
+      <rect x="150" y="102" width="110" height="34" rx="17"/><text x="205" y="119">Stays dead</text>
+      <rect x="220" y="240" width="110" height="34" rx="17"/><text x="275" y="257">Stays dead</text>
+      <rect x="180" y="332" width="110" height="34" rx="17"/><text x="235" y="349">Dies</text>
+      <rect x="180" y="424" width="110" height="34" rx="17"/><text x="235" y="441">Dies</text>
+    </g>
+    <g class="leaf on">
+      <rect x="220" y="194" width="110" height="34" rx="17"/><text x="275" y="211">Comes alive</text>
+      <rect x="180" y="378" width="110" height="34" rx="17"/><text x="235" y="395">Stays alive</text>
+    </g>
+  </svg>
+  </div>
+</section>
+
+<section id="s2">
+  <div class="ey">2</div>
+  <h2>The question: can we run it backward?</h2>
+  <div class="note">Visual explanation of the question: find starter seeds that make any arbitrary image or pattern.
+    <ul><li>Original idea: a pixel board you draw on; the algorithm chugs and finds an N-step-back seed (exists in MATLAB: <code>reverseGameOfLife.m</code>).</li>
+    <li>Could it work for any black-and-white image?</li></ul></div>
+  <div class="note">Draft labels below are placeholders for your wording.</div>
+
+  
+  <p class="cap">Five patterns on a 5 × 5 grid with wrap-around edges. A computer can try all 33,554,432 possible
+    starting patterns, so these counts are exact.</p>
+  <div class="controls ex-toggle" id="ex-steps">
+    <button data-steps="1" aria-pressed="true">1 step back</button>
+    <button data-steps="2" aria-pressed="false">2 steps back</button>
+  </div>
+  <div class="examples" id="examples"></div>
+
+  
+  <figure class="finder" id="seed-finder">
+    <div class="finder-top">
+      <div>
+        <div class="lab">Draw a target</div>
+        <svg class="target" viewBox="0 0 6 6"></svg>
+      </div>
+      <div class="finder-opts">
+        <label>Grid <select data-opt="n"><option value="5">5 × 5</option><option value="6" selected>6 × 6</option></select></label>
+        <label>Steps back <select data-opt="steps"><option>1</option><option>2</option><option>3</option></select></label>
+        <div class="controls">
+          <button data-act="find">Find seeds</button>
+          <button data-act="random">Random</button>
+          <button data-act="clear">Clear</button>
+        </div>
+        <p class="status" aria-live="polite">Draw a pattern, then press Find seeds.</p>
+      </div>
+    </div>
+    <div class="chains"></div>
+    <figcaption>Edges wrap around. Each row shows one seed found and the steps it takes to reach your target.</figcaption>
+  </figure>
+
+  <details class="how">
+    <summary>How the search works</summary>
+    <p>The obvious way is to try every possible seed and see which ones turn into your target. On a 6 × 6 grid
+      that is 2<sup>36</sup>, about 69 billion seeds: too many for a web page.</p>
+    <p>The trick is that each row of the target depends on only three rows of the seed: the same row, the one
+      above, and the one below. So the search builds the seed one row at a time:</p>
+    <ol>
+      <li>Before searching, it works out what every possible stack of three rows turns into. On a 6-wide grid
+        that is 2<sup>18</sup> = 262,144 stacks, done once.</li>
+      <li>It picks the seed's first two rows (4,096 choices, tried one after another).</li>
+      <li>For each next row, it only tries rows that make the row above come out right in the target. Usually
+        that leaves just a few options, and often none, so dead ends are dropped right away.</li>
+      <li>When all six rows are placed, it checks the last two target rows, which wrap around to the top.</li>
+    </ol>
+    <p>Because no possibility is skipped, the count is exact when the search finishes, and "no seed exists"
+      is a proof, not a guess.</p>
+    <p>For more steps back, it repeats the same search from every seed it found: seeds of seeds. The number
+      of branches can explode, so the search stops after 4 seconds and reports what it found so far.</p>
+  </details>
+</section>
+
+<section id="s3">
+  <div class="ey">3</div>
+  <h2>Why one or two steps back isn't enough</h2>
+  <div class="note">1- or 2-step seeds seemed a bit underwhelming. The fun is going back far enough that you really can't see or guess the final outcome.</div>
+  <div class="visual">VISUAL [TBD]</div>
+</section>
+
+<section id="s4">
+  <div class="ey">4</div>
+  <h2>So: make a font</h2>
+  <div class="note">That leads to the idea of making a font.</div>
+  <div class="visual">VISUAL [TBD]</div>
+</section>
+
+<section id="s5">
+  <div class="ey">5</div>
+  <h2>The search: getting N steps back</h2>
+  <div class="note">Show the work, with as many images along the way as we can. Visual explainers of the search algorithms. How and why it gets super hard.</div>
+  <div class="note">Draft labels below are placeholders for your wording. Images are the original MATLAB figures,
+    in place as placeholders; order and selection TBD.</div>
+
+  
+  <h3 class="sub">Local search: genetic algorithm + simulated annealing</h3>
+  <div class="note">
+    <ul>
+      <li>Genetic algorithm: 300 random seeds; score = wrong pixels after N steps; keep the best 30, breed the rest
+        (mix two parents cell by cell, flip ~3% of cells); ~400 generations.</li>
+      <li>It gets letters to ~7–10 wrong pixels, then stalls: by ~generation 200 the seeds are near-copies of each other.
+        Works best as a starting point.</li>
+      <li>Simulated annealing polishes the GA's best seed: flip 1–2 cells, keep improvements, sometimes keep worse
+        moves (the "temperature"), cooling over time. Does most of the real work: 7–10 → 0–4 wrong pixels.</li>
+      <li>Results: 93/94 exact at 1 step, 70/94 at 2, 35/94 at 3.</li>
+      <li>Side experiment: chaining two 1-step solves to get a 2-step seed failed (1/94 exact).</li>
+    </ul></div>
+  <div class="visual">VISUAL: small animated explainer of GA (population, breeding) + SA (flip, accept/reject, cooling) [TBD]</div>
+
+  <h3 class="sub">Hitting the wall</h3>
+  <div class="note">
+    <ul>
+      <li>Tested every change of 1, 2, 3 and 4 cells around the best seeds: none improved. Stuck in a dip at least 5 flips deep.</li>
+      <li>Ten fresh restarts found very different seeds with the same error count, so it looked like a hard floor.</li>
+      <li>Show: the E key view below and the old 3-step catalog (30/94 at the time, with error pixels).</li>
+    </ul></div>
+
+  
+  <figure class="key" id="key-E">
+    <div class="key-row" data-chain="ga"></div>
+    <div class="key-row" data-chain="sat"></div>
+    <div class="legend">
+      <span><i class="sw on"></i>correct</span><span><i class="sw miss"></i>missing (should be on)</span>
+      <span><i class="sw extra"></i>extra (should be off)</span>
+    </div>
+    <figcaption>How to read the catalogs: the letter E, 3 steps back. Top: the best seed local search (GA + SA)
+      found grows into an E with 4 wrong pixels, labeled "e4" in the catalogs. Bottom: the SAT solver's seed grows
+      into the exact E (found in 1,503 seconds).</figcaption>
+  </figure>
+
+  
+  <div class="catalogs">
+    <figure><img src="assets_raw/golFont_seeds.png" alt="Catalog of 10 by 10 seeds for every character" loading="lazy">
+      <figcaption>The 1-step seeds: plant one, run one step, get the letter.</figcaption></figure>
+    <figure><img src="assets_raw/golFont_results.png" alt="Catalog of letters grown from 1-step seeds" loading="lazy">
+      <figcaption>1 step back, local search: 90 of 94 exact at the time (now 94 of 94).</figcaption></figure>
+    <figure><img src="assets_raw/golFont_2step_results.png" alt="Catalog of letters grown from 2-step seeds" loading="lazy">
+      <figcaption>2 steps back, local search: 70 of 94 exact. The SAT solver later got all 94.</figcaption></figure>
+    <figure><img src="assets_raw/golFont_3step_results.png" alt="Catalog of letters grown from 3-step seeds" loading="lazy">
+      <figcaption>3 steps back, local search: 30 of 94 exact in this figure. The SAT solver later got all 94.</figcaption></figure>
+  </div>
+
+  <h3 class="sub">SAT solving: turn it into a logic puzzle (Z3)</h3>
+  <div class="note">
+    <ul>
+      <li>Stop guessing: one true/false variable per cell per step (N+1 layers of 10 × 10). The Life rule becomes a logical
+        constraint on every cell; the last layer is fixed to the letter.</li>
+      <li>The solver answers one of three ways: here's an exact seed / impossible (a proof: Garden of Eden) / out of time.</li>
+      <li>Z3: general-purpose solver from Microsoft Research.</li>
+      <li>Result: exact seeds for every letter local search couldn't solve. 2 steps and 3 steps both 94/94. The "hard
+        floor" was local search getting stuck, not the problem. Hardest: &amp; at 3 steps, 40 minutes.</li>
+    </ul></div>
+  <div class="visual">VISUAL: the layers (seed → step 1 → … → letter) with one cell's rule drawn as a constraint [TBD]</div>
+
+  <h3 class="sub">Kissat: a specialist solver</h3>
+  <div class="note">
+    <ul>
+      <li>Z3 handles many kinds of problems; this one is purely true/false, which dedicated SAT solvers are built for.
+        Kissat is one of the top solvers in the annual SAT competitions (used through the PySAT library).</li>
+      <li>Rules rewritten in the standard clause format with my own neighbor-counting encoding. The ready-made one in
+        PySAT gave false "solved" answers (half-built: treated 3 neighbors as 4); mine was tested for every count 0–8.</li>
+      <li>About 40–50× faster on the same problems (&amp;: 2,401 s → 48 s). Made 4 steps practical.</li>
+      <li>4 steps back: 94/94 exact (finished 2026-10-17). Most letters 10 s – 7 min; the hardest: E 30 min, 3 12 min,
+        h 10 min.</li>
+    </ul></div>
+  <div class="visual">VISUAL: Z3 vs Kissat time for the same letters; 4-step catalog [TBD]</div>
+
+  
+  <h3 class="sub">Why it gets harder</h3>
+  <div class="note">Draft. Possible order: more squares → more steps → the edges. Could also move up into section 2.
+    The solve-time chart is Z3 only (1–3 steps); could add the 4-step Kissat times.</div>
+
+  <figure class="chart" id="ch-space">
+    <div class="ctitle">Possible seeds for each grid size</div>
+    <div class="csub">Every extra square doubles the count: an n × n grid has 2<sup>n×n</sup>. Hover a bar for details.</div>
+    <svg></svg>
+    <figcaption>Checking a billion seeds per second, 6 × 6 takes about 69 seconds; 10 × 10 (the font) would take
+      about 40 trillion years.</figcaption>
+  </figure>
+
+  <figure class="chart" id="ch-reach">
+    <div class="ctitle">Patterns that can be reached, by steps back</div>
+    <div class="csub">5 × 5 grid with wrap-around edges, all 33,554,432 patterns checked (exact).</div>
+    <svg></svg>
+    <figcaption>Only a quarter of all patterns have any seed one step back; by six steps, 3%.</figcaption>
+  </figure>
+
+  <figure class="chart" id="ch-exact">
+    <div class="ctitle">Letters solved exactly, by steps back</div>
+    <div class="csub">The 94-character font on a 10 × 10 grid.</div>
+    <div class="clegend"><span><i class="sw s1"></i>local search alone (GA + SA)</span><span><i class="sw s2"></i>with the SAT solver</span></div>
+    <svg></svg>
+  </figure>
+
+  <figure class="chart" id="ch-time">
+    <div class="ctitle">SAT solve time per letter, by steps back</div>
+    <div class="csub">Median seconds, log scale. Z3 engine, run on the letters local search couldn't solve.</div>
+    <svg></svg>
+    <figcaption>Each step back multiplied the time by about 20 to 65 times. (The later Kissat engine is about 40 to
+      50 times faster, which is what made 4 steps possible.)</figcaption>
+  </figure>
+
+  
+  <div class="edges">
+    <figure><svg id="dg-wrap" viewBox="0 0 8 8"></svg>
+      <figcaption><b>Wrap-around edges.</b> The grid has no edge: a cell on the border counts neighbors on the
+        opposite side, like a world map that wraps.</figcaption></figure>
+    <figure><svg id="dg-tight" viewBox="0 0 8 8"></svg>
+      <figcaption><b>Tight: 8 × 8.</b> The letter on its own 8 × 8 grid, with no room around it.</figcaption></figure>
+    <figure><svg id="dg-pad" viewBox="0 0 10 10"></svg>
+      <figcaption><b>Padded: 10 × 10.</b> The same 8 × 8 letter with an empty border around it.</figcaption></figure>
+  </div>
+
+  <figure class="chart" id="ch-border">
+    <div class="ctitle">A bigger grid was easier</div>
+    <div class="csub">Exact letters with local search (GA + SA). The padded grid has far more possible seeds, but the
+      empty border gives the pattern room to move.</div>
+    <div class="clegend"><span><i class="sw s2"></i>tight 8 × 8</span><span><i class="sw s1"></i>padded 10 × 10</span></div>
+    <svg></svg>
+  </figure>
+  <div class="tip" id="tip" hidden></div>
+</section>
+
+<section id="s6">
+  <div class="ey">6</div>
+  <h2>Gardens of Eden: the impossible patterns</h2>
+  <div class="note">Gardens of Eden, or impossible things. Harder to find or prove, maybe.</div>
+  <div class="visual">VISUAL [TBD]</div>
+</section>
+
+<section id="s7">
+  <div class="ey">7</div>
+  <h2>Type with it</h2>
+  <div class="note">Not just the list of seeds: the interactive demo for typing in the N-steps-back Game of Life fonts. Maybe a downloadable font package.</div>
+  
+  <figure class="typer">
+    <iframe src="typer.html" title="Game of Life typer" loading="lazy" id="typer-frame"></iframe>
+    <figcaption>Type anything, then press Play. <a href="typer.html" target="_blank">Open the typer on its own page ↗</a></figcaption>
+  </figure>
+  <div class="visual">DOWNLOAD: font package [idea]</div>
+</section>
+
+</main>
+
+
+<script type="text/plain" id="seed-search">
+let n, mask, T, keyStart, keyList, order;
+
+function build(size) {
+  n = size; mask = (1 << n) - 1;
+  const N3 = 1 << (3 * n);
+  // T[a,b,c] = next state of middle row b, given row a above and row c below.
+  T = new Uint8Array(N3);
+  for (let idx = 0; idx < N3; idx++) {
+    const a = idx >> (2 * n), b = (idx >> n) & mask, c = idx & mask;
+    let out = 0;
+    for (let j = 0; j < n; j++) {
+      let s = 0;
+      for (let d = -1; d <= 1; d++) {
+        const k = (j + d + n) % n;
+        s += ((a >> k) & 1) + ((c >> k) & 1) + (d ? (b >> k) & 1 : 0);
+      }
+      if (s === 3 || (((b >> j) & 1) && s === 2)) out |= 1 << j;
+    }
+    T[idx] = out;
+  }
+  // Inverse table: for rows (a, b) and wanted output row, the list of rows c that produce it.
+  keyStart = new Uint32Array(N3 + 1);
+  const keyOf = idx => ((idx >> n) << n) | T[idx];
+  for (let idx = 0; idx < N3; idx++) keyStart[keyOf(idx) + 1]++;
+  for (let k = 0; k < N3; k++) keyStart[k + 1] += keyStart[k];
+  keyList = new Uint8Array(N3);
+  const fill = keyStart.slice(0, N3);
+  for (let idx = 0; idx < N3; idx++) keyList[fill[keyOf(idx)]++] = idx & mask;
+  // Try starting row pairs in a shuffled order, so the example seeds shown are varied.
+  order = Array.from({ length: 1 << (2 * n) }, (_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+}
+
+let deadline, stopped, calls;
+
+// Calls cb(seedRows) for every 1-step predecessor of target rows t; stops early if cb returns false.
+function predecessors(t, cb) {
+  const p = new Array(n), n2 = 2 * n;
+  function extend(i) {
+    if ((++calls & 16383) === 0 && Date.now() > deadline) stopped = true;
+    if (stopped) return false;
+    if (i === n) {                                   // close the wrap: last row and first row
+      if (T[(p[n - 2] << n2) | (p[n - 1] << n) | p[0]] !== t[n - 1]) return true;
+      if (T[(p[n - 1] << n2) | (p[0] << n) | p[1]] !== t[0]) return true;
+      return cb(p.slice());
+    }
+    const key = (p[i - 2] << n2) | (p[i - 1] << n) | t[i - 1];
+    for (let q = keyStart[key]; q < keyStart[key + 1]; q++) {
+      p[i] = keyList[q];
+      if (!extend(i + 1)) return false;
+    }
+    return true;
+  }
+  for (const s of order) { p[0] = s >> n; p[1] = s & mask; if (!extend(2)) return false; }
+  return true;
+}
+
+// Every seed that reaches `rows` in exactly `steps` steps (each seed has one future, so no duplicates).
+function findSeeds(size, rows, steps, budgetMs, maxExamples) {
+  if (size !== n) build(size);
+  deadline = Date.now() + budgetMs; stopped = false; calls = 0;
+  const t0 = Date.now(), path = [rows], examples = [];
+  let count = 0;
+  (function back(t, depth) {
+    if (depth === 0) { count++; if (examples.length < maxExamples) examples.push(path.slice().reverse()); return true; }
+    return predecessors(t, p => { path.push(p); const ok = back(p, depth - 1); path.pop(); return ok; });
+  })(rows, steps);
+  return { count, complete: !stopped, examples, ms: Date.now() - t0 };
+}
+
+self.onmessage = e => { const m = e.data; self.postMessage(findSeeds(m.n, m.rows, m.steps, m.budgetMs, m.maxExamples)); };
+</script>
+
+<script>
+// ---------- Section 1a: rule pictures ----------
+// Each rule is a 3x3 neighborhood before the step; the middle cell is the one we follow.
+// Grids are row-major, 1 = alive. `after` is the middle cell's next state.
+const RULES = [
+  { title: "Neighbors", text: "Every cell has 8 neighbors. Each step, it counts how many are alive.",
+    grid: [0,0,0, 0,0,0, 0,0,0], numbers: true },
+  { title: "Birth", text: "A dead cell with exactly 3 live neighbors comes alive.",
+    grid: [1,1,0, 0,0,1, 0,0,0], after: 1, label: "3 neighbors" },
+  { title: "Survival", text: "A live cell with 2 or 3 live neighbors stays alive.",
+    grid: [0,1,0, 0,1,0, 0,0,1], after: 1, label: "2 neighbors" },
+  { title: "Loneliness", text: "A live cell with fewer than 2 live neighbors dies.",
+    grid: [0,0,0, 0,1,0, 1,0,0], after: 0, label: "1 neighbor" },
+  { title: "Overcrowding", text: "A live cell with more than 3 live neighbors dies.",
+    grid: [1,0,1, 0,1,0, 1,1,0], after: 0, label: "4 neighbors" },
+];
+
+function ruleSVG(r) {
+  const s = 24, g = 3 * s;                       // cell size, grid size
+  const cells = (grid, x0, ghostOthers, mid) => grid.map((v, i) => {
+    const x = x0 + (i % 3) * s, y = Math.floor(i / 3) * s, isMid = i === 4;
+    const alive = isMid && mid !== undefined ? mid : v;
+    return `<rect x="${x}" y="${y}" width="${s}" height="${s}" class="${alive ? "live" : "dead"}${ghostOthers && !isMid ? " ghost" : ""}"/>`;
+  }).join("");
+  const focus = x0 => `<rect x="${x0 + s}" y="${s}" width="${s}" height="${s}" class="focus"/>`;
+
+  if (r.numbers) {                               // single grid, neighbors numbered 1..8
+    const x0 = 58;
+    let nums = "", n = 0;
+    for (let i = 0; i < 9; i++) if (i !== 4) {
+      n++; nums += `<text x="${x0 + (i % 3) * s + s / 2}" y="${Math.floor(i / 3) * s + s / 2}" class="num">${n}</text>`;
+    }
+    return `<svg viewBox="0 0 188 ${g + 20}">${cells(r.grid, x0)}${nums}${focus(x0)}
+      <text x="94" y="${g + 15}" class="lbl">the middle cell's neighbors</text></svg>`;
+  }
+  const xb = 4, xa = 188 - 4 - g;                // before grid, after grid
+  return `<svg viewBox="0 0 188 ${g + 20}">
+    ${cells(r.grid, xb)}${focus(xb)}
+    <path d="M${xb + g + 8} ${g / 2} H${xa - 8} M${xa - 14} ${g / 2 - 6} L${xa - 8} ${g / 2} L${xa - 14} ${g / 2 + 6}" class="arrow"/>
+    ${cells(r.grid, xa, true, r.after)}${focus(xa)}
+    <text x="${xb + g / 2}" y="${g + 15}" class="lbl">${r.label}</text>
+    <text x="${xa + g / 2}" y="${g + 15}" class="lbl">next step</text></svg>`;
+}
+
+document.getElementById("rules").innerHTML = RULES.map(r =>
+  `<div class="rule">${ruleSVG(r)}<h3>${r.title}</h3><p>${r.text}</p></div>`).join("");
+
+// ---------- Section 1b: clickable demo ----------
+(function () {
+  const root = document.getElementById("life-demo");
+  const canvas = root.querySelector("canvas"), ctx = canvas.getContext("2d");
+  const genLabel = root.querySelector(".gen"), playBtn = root.querySelector('[data-act="play"]');
+  const COLS = 32, ROWS = 20;
+  let cells = new Uint8Array(COLS * ROWS), gen = 0, timer = null, cell = 10, colors = {};
+
+  // Start with a glider so Play does something straight away.
+  [[1,0],[2,1],[0,2],[1,2],[2,2]].forEach(([x, y]) => cells[(y + 3) * COLS + x + 3] = 1);
+
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    colors = { live: cs.getPropertyValue("--cell").trim(), dead: cs.getPropertyValue("--panel").trim(),
+               line: cs.getPropertyValue("--hair").trim() };
+  }
+  function resize() {
+    const dpr = window.devicePixelRatio || 1, w = canvas.parentElement.clientWidth;
+    cell = w / COLS;
+    canvas.style.height = cell * ROWS + "px";
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(cell * ROWS * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+  function draw() {
+    ctx.fillStyle = colors.dead; ctx.fillRect(0, 0, COLS * cell, ROWS * cell);
+    ctx.fillStyle = colors.live;
+    for (let i = 0; i < cells.length; i++) if (cells[i])
+      ctx.fillRect((i % COLS) * cell, Math.floor(i / COLS) * cell, cell, cell);
+    ctx.strokeStyle = colors.line; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = 0; x <= COLS; x++) { ctx.moveTo(x * cell, 0); ctx.lineTo(x * cell, ROWS * cell); }
+    for (let y = 0; y <= ROWS; y++) { ctx.moveTo(0, y * cell); ctx.lineTo(COLS * cell, y * cell); }
+    ctx.stroke();
+    genLabel.textContent = "Step " + gen;
+  }
+  // One step of B3/S23 with wrap-around edges (same rules as the project's solvers).
+  function step() {
+    const next = new Uint8Array(cells.length);
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
+        if (dx || dy) n += cells[((y + dy + ROWS) % ROWS) * COLS + (x + dx + COLS) % COLS];
+      const alive = cells[y * COLS + x];
+      next[y * COLS + x] = (n === 3 || (alive && n === 2)) ? 1 : 0;
+    }
+    cells = next; gen++; draw();
+  }
+  function stop() { clearInterval(timer); timer = null; playBtn.textContent = "Play"; }
+
+  root.querySelector(".controls").addEventListener("click", e => {
+    const act = e.target.dataset.act;
+    if (act === "step") { stop(); step(); }
+    if (act === "play") { if (timer) stop(); else { timer = setInterval(step, 120); playBtn.textContent = "Pause"; } }
+    if (act === "random") { cells = cells.map(() => Math.random() < 0.3 ? 1 : 0); gen = 0; draw(); }
+    if (act === "clear") { stop(); cells.fill(0); gen = 0; draw(); }
+  });
+
+  // Click toggles a cell; dragging paints with whatever the first cell became.
+  let paint = null;
+  const cellAt = e => {
+    const r = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / cell), y = Math.floor((e.clientY - r.top) / cell);
+    return (x >= 0 && x < COLS && y >= 0 && y < ROWS) ? y * COLS + x : -1;
+  };
+  canvas.addEventListener("pointerdown", e => {
+    const i = cellAt(e); if (i < 0) return;
+    canvas.setPointerCapture(e.pointerId);
+    paint = cells[i] ? 0 : 1; cells[i] = paint; draw();
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (paint === null) return;
+    const i = cellAt(e); if (i >= 0 && cells[i] !== paint) { cells[i] = paint; draw(); }
+  });
+  canvas.addEventListener("pointerup", () => paint = null);
+
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); draw(); });
+  window.addEventListener("resize", resize);
+  readColors(); resize();
+})();
+
+// ---------- Section 2a: worked examples (exact, from analysis/examples_5x5.json and _2step.json) ----------
+(function () {
+  // Rows are 5-bit integers; bit c of a row is column c. Each chain runs seed → ... → (target, not stored).
+  const EXAMPLES = [
+    { name: "Heart", target: [0,10,31,14,4],
+      1: { count: 0, chains: [] },
+      2: { count: 0, chains: [] } },
+    { name: "Diagonal line", target: [1,2,4,8,16],
+      1: { count: 1, chains: [[[1,2,4,8,16]]], note: "its only past is itself" },
+      2: { count: 1, chains: [[[1,2,4,8,16],[1,2,4,8,16]]], note: "still only itself" } },
+    { name: "Smiley", target: [0,10,0,17,14],
+      1: { count: 2, chains: [[[17,27,10,21,10]],[[17,4,4,0,31]]] },
+      2: { count: 7, chains: [[[0,21,27,17,14],[17,4,4,0,31]],[[0,21,31,17,14],[17,4,4,0,31]],[[0,4,10,0,31],[17,4,4,0,31]]],
+           note: "all through the same 1-step seed: the other one has no past" } },
+    { name: "Ring", target: [0,14,10,14,0],
+      1: { count: 3, chains: [[[0,4,14,4,0]],[[27,25,0,19,27]],[[27,19,0,25,27]]] },
+      2: { count: 52, chains: [[[1,4,6,8,0],[0,4,14,4,0]],[[29,4,18,4,27],[0,4,14,4,0]],[[19,9,2,21,27],[0,4,14,4,0]]] } },
+    { name: "Blinker", target: [0,0,14,0,0],
+      1: { count: 5121, chains: [[[29,17,27,18,14]],[[23,9,25,18,15]],[[26,1,30,9,31]]] },
+      2: { count: 12168, chains: [[[25,21,23,19,17],[0,4,4,4,0]],[[31,21,17,7,21],[0,4,4,4,0]],[[29,7,16,30,25],[0,4,16,6,0]]],
+           note: "through only 477 of its 5,121 one-step seeds" } },
+  ];
+  const grid = (rows, cls = "") => {
+    let s = `<svg class="${cls}" viewBox="0 0 5 5">`;
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++)
+      s += `<rect class="c c${(rows[r] >> c) & 1}" x="${c}" y="${r}" width="1" height="1"/>`;
+    return s + "</svg>";
+  };
+  const label = d => (d.count === 0 ? "no seed exists"
+    : `exactly ${d.count.toLocaleString()} seed${d.count === 1 ? "" : "s"}`) + (d.note ? `: ${d.note}` : "");
+  // One line per seed: seed → (step 1 →) target.
+  const line = cells => `<div class="line">${cells.join('<span class="to">→</span>')}</div>`;
+  const root = document.getElementById("examples");
+  function render(steps) {
+    root.innerHTML = EXAMPLES.map(e => { const d = e[steps], end = grid(e.target, "big"); return `
+      <div class="ex">
+        <div class="who"><b>${e.name}</b><span>${label(d)}</span></div>
+        <div class="lines">
+          ${d.count === 0 ? line(['<div class="none">none</div>', end])
+            : d.chains.map(ch => line([...ch.map(st => grid(st)), end])).join("")}
+          ${d.count > d.chains.length ? `<div class="more">+ ${(d.count - d.chains.length).toLocaleString()} more</div>` : ""}
+        </div>
+      </div>`; }).join("");
+  }
+  document.getElementById("ex-steps").addEventListener("click", e => {
+    const s = +e.target.dataset.steps; if (!s) return;
+    e.currentTarget.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === e.target));
+    render(s);
+  });
+  render(1);
+})();
+
+// ---------- Section 5: key view for the letter E, 3 steps back (analysis/key_example_E.json) ----------
+(function () {
+  // Row strings, "1" = alive. Each chain: seed, step 1, step 2, step 3.
+  const E = {"target":["0000000000","0111111100","0011000100","0011010000","0011110000","0011010000","0011000100","0111111100","0000000000","0000000000"],"ga":[["1101110101","1010011010","0110011001","1001000110","1101010010","1110010110","1000101001","1011000101","0001111001","1010111100"],["0000000000","0000000010","0011110000","0001010110","0001000000","0011010110","0000111000","0110000100","0000000001","0010000100"],["0000000000","0001100000","0011011110","0000011000","0001000000","0011010100","0100110010","0000011000","0110000010","0000000000"],["0000000000","0011111100","0011000100","0011010000","0011010000","0011011000","0011000100","0110111100","0000000000","0000000000"]],"sat":[["0000111110","0001100010","1011110010","0100100011","1000100010","0010000001","1000111010","1010000010","1101111011","0100000100"],["0001111010","0010000010","1110010110","0110000110","1101000010","1101100110","1001010110","0010000010","0001111010","0111000000"],["0100110100","0010000010","1001001000","0001001000","0001100000","0001001000","1001001000","0010000010","0100110100","0000000000"],["0000000000","0111111100","0011000100","0011010000","0011110000","0011010000","0011000100","0111111100","0000000000","0000000000"]]};
+  const grid = (rows, cls) => {
+    let s = '<svg viewBox="0 0 10 10">';
+    rows.forEach((row, r) => [...row].forEach((v, c) => s += `<rect class="c ${cls(v, r, c)}" x="${c}" y="${r}" width="1" height="1"/>`));
+    return s + "</svg>";
+  };
+  const plain = v => v === "1" ? "on" : "off";
+  // Error view: compare the grown state with the target.
+  const errs = got => (v, r, c) => { const want = E.target[r][c]; return v === want ? plain(v) : (want === "1" ? "miss" : "extra"); };
+  const count = got => got.reduce((n, row, r) => n + [...row].filter((v, c) => v !== E.target[r][c]).length, 0);
+  const fig = (svg, cap) => `<figure>${svg}<figcaption>${cap}</figcaption></figure>`;
+  const ARROW = '<span class="to">→</span>';
+  const ROWS = { ga: ["Local search", "best attempt"], sat: ["SAT solver", "exact"] };
+  for (const el of document.querySelectorAll("#key-E .key-row")) {
+    const ch = E[el.dataset.chain], last = ch[ch.length - 1], n = count(last);
+    el.innerHTML = `<div class="who">${ROWS[el.dataset.chain][0]}<span>${ROWS[el.dataset.chain][1]}</span></div>` +
+      [fig(grid(ch[0], plain), "seed"), fig(grid(ch[1], plain), "step 1"), fig(grid(ch[2], plain), "step 2"),
+       fig(grid(last, errs(last)), n ? `step 3: e${n}` : "step 3: exact")].join(ARROW);
+  }
+})();
+
+// ---------- Section 5b: why it gets harder (charts + edge diagrams) ----------
+(function () {
+  const tip = document.getElementById("tip");
+  document.addEventListener("pointermove", e => {
+    const t = e.target.closest && e.target.closest("[data-tip]");
+    if (!t) { tip.hidden = true; return; }
+    tip.innerHTML = t.dataset.tip; tip.hidden = false;
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px"; tip.style.top = (e.clientY + 14) + "px";
+  });
+
+  // Column with a 4px rounded data-end, square at the baseline.
+  const col = (x, w, y, base) => { const r = Math.min(4, (base - y) / 2, w / 2);
+    return `M${x} ${base}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + w - r}Q${x + w} ${y} ${x + w} ${y + r}V${base}Z`; };
+
+  // Grouped column chart. scale: value -> 0..1 of the plot height. ticks: [[value, label]].
+  function columns(id, { cats, series, scale, ticks, label, tipFor }) {
+    const W = 600, H = 230, L = 46, R = 8, T = 18, B = 34, ph = H - T - B, pw = W - L - R;
+    const band = pw / cats.length, k = series.length, bw = Math.min(24, (band * 0.7 - 2 * (k - 1)) / k);
+    let s = '<g class="grid axis">';
+    for (const [v, lab] of ticks) { const y = T + ph * (1 - scale(v));
+      s += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${lab}</text>`; }
+    s += "</g>";
+    cats.forEach((c, i) => {
+      const cx = L + band * (i + 0.5), x0 = cx - (k * bw + 2 * (k - 1)) / 2;
+      series.forEach((sr, j) => {
+        const v = sr.vals[i]; if (v == null) return;
+        const x = x0 + j * (bw + 2), y = T + ph * (1 - scale(v)), base = T + ph;
+        s += `<g class="col" data-tip="${tipFor(c, sr, v, i)}"><rect class="hit" x="${x - 4}" y="${T}" width="${bw + 8}" height="${ph}"/>` +
+             `<path class="bar ${sr.cls}" d="${col(x, bw, Math.min(y, base - 1), base)}"/>` +
+             (label ? `<text class="val" x="${x + bw / 2}" y="${y - 5}">${label(v, sr, i)}</text>` : "") + "</g>";
+      });
+      s += `<text class="cat" x="${cx}" y="${H - B + 16}">${c}</text>`;
+    });
+    const svg = document.querySelector(`#${id} svg`);
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.innerHTML = s;
+  }
+  const pct = v => (v * 100 >= 10 ? Math.round(v * 100) : (v * 100).toFixed(1)) + "%";
+  const sci = e => `10<tspan dy="-5" font-size="8">${e}</tspan>`;
+
+  // Data: 2^(n*n) possible seeds (exact arithmetic). Time at 1e9 seeds/s for the tooltip.
+  const sizes = [3, 4, 5, 6, 7, 8, 9, 10];
+  const fmtTime = s => s < 1 ? "under a second" : s < 120 ? Math.round(s) + " seconds" : s < 7200 ? Math.round(s / 60) + " minutes"
+    : s < 172800 ? Math.round(s / 3600) + " hours" : s < 3.156e7 * 2 ? Math.round(s / 86400) + " days" : (s / 3.156e7).toExponential(1).replace("e+", " × 10^") + " years";
+  const big = n => { const x = Math.pow(2, n * n); return x < 1e12 ? x.toLocaleString() : x.toExponential(2).replace("e+", " × 10^"); };
+  columns("ch-space", {
+    cats: sizes.map(n => `${n}×${n}`), series: [{ cls: "s1", vals: sizes.map(n => n * n * Math.LOG10E * Math.LN2) }],
+    scale: v => v / 32, ticks: [[0, "1"], [10, sci(10)], [20, sci(20)], [30, sci(30)]],
+    label: (v, sr, i) => [5, 6, 10].includes(sizes[i]) ? (sizes[i] === 10 ? "1.3 × 10³⁰" : sizes[i] === 6 ? "69 billion" : "33.5 million") : "",
+    tipFor: (c, sr, v, i) => `<b>${c}</b>: ${big(sizes[i])} seeds<br>at a billion per second: ${fmtTime(Math.pow(2, sizes[i] ** 2) / 1e9)}`,
+  });
+
+  // Data: analysis/torus_5.json "reachable_after_steps" / 2^25 (exhaustive, 5x5 wrap-around).
+  const reach = [33554432, 8520996, 4653861, 2962061, 2025336, 1450136, 1077011];
+  columns("ch-reach", {
+    cats: reach.map((_, i) => i === 0 ? "0 (any)" : i), series: [{ cls: "s1", vals: reach.map(r => r / 33554432) }],
+    scale: v => v, ticks: [[0, "0%"], [0.25, "25%"], [0.5, "50%"], [0.75, "75%"], [1, "100%"]],
+    label: v => pct(v),
+    tipFor: (c, sr, v, i) => `<b>${i} step${i === 1 ? "" : "s"} back</b>: ${reach[i].toLocaleString()} of 33,554,432 patterns (${pct(v)})`,
+  });
+
+  // Data: exactMatch sums in asciiGolSeeds.mat / _2step.mat / _3step.mat (local search), and
+  // local search + _Nstep_SAT.mat (SAT covered every remaining letter: 94/94 at each depth).
+  columns("ch-exact", {
+    cats: ["1 step", "2 steps", "3 steps"],
+    series: [{ name: "local search alone", cls: "s1", vals: [93, 70, 35] }, { name: "with the SAT solver", cls: "s2", vals: [94, 94, 94] }],
+    scale: v => v / 94, ticks: [[0, "0"], [47, "47"], [94, "94"]], label: v => v,
+    tipFor: (c, sr, v) => `<b>${c}</b>, ${sr.name}: ${v} of 94 letters exact`,
+  });
+
+  // Data: median of solveTimes in asciiGolSeeds_{1,2,3}step_SAT.mat (21, 24, 59 letters; Z3 engine).
+  const med = [0.3, 19.4, 454.9], nLet = [21, 24, 59];
+  columns("ch-time", {
+    cats: ["1 step", "2 steps", "3 steps"], series: [{ cls: "s1", vals: med.map(Math.log10) }],
+    scale: v => (v + 1) / 4, ticks: [[-1, "0.1 s"], [0, "1 s"], [1, "10 s"], [2, "100 s"], [3, "1000 s"]],
+    label: (v, sr, i) => med[i] < 60 ? med[i] + " s" : (med[i] / 60).toFixed(1) + " min",
+    tipFor: (c, sr, v, i) => `<b>${c}</b>: median ${med[i]} s over ${nLet[i]} letters`,
+  });
+
+  // Data: asciiGolSeeds_8x8.mat (9/20, 1 step, 20-letter test set) vs asciiGolSeeds.mat on the same 20 (20/20);
+  // asciiGolSeeds_8x8_2step.mat (34/94) vs asciiGolSeeds_2step.mat (70/94).
+  columns("ch-border", {
+    cats: ["1 step (20-letter test set)", "2 steps (all 94)"],
+    series: [{ name: "tight 8 × 8", cls: "s2", vals: [9 / 20, 34 / 94], raw: ["9 of 20", "34 of 94"] },
+             { name: "padded 10 × 10", cls: "s1", vals: [20 / 20, 70 / 94], raw: ["20 of 20", "70 of 94"] }],
+    scale: v => v, ticks: [[0, "0%"], [0.5, "50%"], [1, "100%"]], label: v => pct(v),
+    tipFor: (c, sr, v, i) => `<b>${c}</b>, ${sr.name}: ${sr.raw[i]} exact`,
+  });
+
+  // Diagrams. Font glyph 'A' (font8x8_basic) as 8 row strings.
+  const A = ["00110000", "01111000", "11001100", "11001100", "11111100", "11001100", "11001100", "00000000"];
+  const cells = (n, cls) => { let s = ""; for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+    s += `<rect class="c ${cls(r, c)}" x="${c}" y="${r}" width="1" height="1"/>`; return s; };
+  // Wrap-around: corner cell (0,0) and its 8 neighbors, which wrap to the other three corners' sides.
+  const nb = new Set(); for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (dr || dc) nb.add(((dr + 8) % 8) * 8 + (dc + 8) % 8);
+  document.getElementById("dg-wrap").innerHTML = cells(8, (r, c) => r === 0 && c === 0 ? "me" : nb.has(r * 8 + c) ? "nb" : "off");
+  document.getElementById("dg-tight").innerHTML = cells(8, (r, c) => A[r][c] === "1" ? "on" : "off");
+  document.getElementById("dg-pad").innerHTML = cells(10, (r, c) => (r < 1 || r > 8 || c < 1 || c > 8) ? "pad" : A[r - 1][c - 1] === "1" ? "on" : "off") +
+    `<rect class="frame" x="1" y="1" width="8" height="8"/>`;
+})();
+
+// ---------- Section 2b: draw a target, find its seeds ----------
+(function () {
+  const root = document.getElementById("seed-finder");
+  const svg = root.querySelector("svg.target"), status = root.querySelector(".status"), chainsEl = root.querySelector(".chains");
+  const nSel = root.querySelector('[data-opt="n"]'), stepSel = root.querySelector('[data-opt="steps"]');
+  const workerURL = URL.createObjectURL(new Blob([document.getElementById("seed-search").textContent], { type: "text/javascript" }));
+  const BUDGET_MS = 4000, MAX_EXAMPLES = 6;
+  let n = +nSel.value, rows = new Array(n).fill(0), worker = null;
+
+  // Start with a blinker (three in a row) so Find seeds works straight away.
+  rows[2] = 0b01110;
+
+  // Rows are n-bit integers; bit c of rows[r] is the cell in row r, column c.
+  const gridSVG = (rs, size) => {
+    let s = "";
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++)
+      s += `<rect class="c c${(rs[r] >> c) & 1}" x="${c}" y="${r}" width="1" height="1"/>`;
+    return s;
+  };
+  function drawTarget() {
+    svg.setAttribute("viewBox", `0 0 ${n} ${n}`);
+    svg.innerHTML = gridSVG(rows, n);
+  }
+
+  let paint = null;
+  const cellAt = e => {
+    const b = svg.getBoundingClientRect();
+    const c = Math.floor((e.clientX - b.left) / b.width * n), r = Math.floor((e.clientY - b.top) / b.height * n);
+    return (r >= 0 && r < n && c >= 0 && c < n) ? [r, c] : null;
+  };
+  const setCell = ([r, c], v) => { rows[r] = v ? rows[r] | (1 << c) : rows[r] & ~(1 << c); };
+  svg.addEventListener("pointerdown", e => {
+    const rc = cellAt(e); if (!rc) return;
+    svg.setPointerCapture(e.pointerId);
+    paint = (rows[rc[0]] >> rc[1]) & 1 ? 0 : 1; setCell(rc, paint); drawTarget();
+  });
+  svg.addEventListener("pointermove", e => {
+    if (paint === null) return;
+    const rc = cellAt(e); if (rc && ((rows[rc[0]] >> rc[1]) & 1) !== paint) { setCell(rc, paint); drawTarget(); }
+  });
+  svg.addEventListener("pointerup", () => paint = null);
+
+  nSel.addEventListener("change", () => {
+    const old = rows; n = +nSel.value;
+    rows = Array.from({ length: n }, (_, r) => (old[r] || 0) & ((1 << n) - 1));
+    drawTarget(); chainsEl.innerHTML = "";
+  });
+
+  function showResult(res, steps) {
+    const k = res.count.toLocaleString(), s = steps === 1 ? "1 step" : steps + " steps";
+    if (res.complete && res.count === 0)
+      status.innerHTML = `<strong>No seed exists.</strong> Every possibility was checked: nothing turns into this pattern in ${s}.`;
+    else if (res.complete)
+      status.innerHTML = `<strong>Exactly ${k} seed${res.count === 1 ? "" : "s"}</strong> turn${res.count === 1 ? "s" : ""} into this pattern in ${s}.`;
+    else if (res.count === 0)
+      status.innerHTML = `No seed found in ${BUDGET_MS / 1000} seconds. The search didn't finish, so one may still exist.`;
+    else
+      status.innerHTML = `<strong>At least ${k} seeds</strong> turn into this pattern in ${s} (stopped after ${BUDGET_MS / 1000} seconds).`;
+    chainsEl.innerHTML = res.examples.map(ch => `<div class="chain">${ch.map((st, i) =>
+      `${i ? '<span class="to">→</span>' : ""}<figure><svg viewBox="0 0 ${n} ${n}">${gridSVG(st, n)}</svg>
+       <figcaption>${i === 0 ? "seed" : i === ch.length - 1 ? "target" : "step " + i}</figcaption></figure>`).join("")}</div>`).join("");
+  }
+
+  root.querySelector(".controls").addEventListener("click", e => {
+    const act = e.target.dataset.act;
+    if (act === "random") { rows = rows.map(() => { let x = 0; for (let c = 0; c < n; c++) if (Math.random() < 0.35) x |= 1 << c; return x; }); drawTarget(); }
+    if (act === "clear") { rows.fill(0); drawTarget(); chainsEl.innerHTML = ""; status.textContent = "Draw a pattern, then press Find seeds."; }
+    if (act === "find") {
+      if (worker) worker.terminate();
+      const steps = +stepSel.value;
+      status.textContent = "Searching…"; chainsEl.innerHTML = "";
+      worker = new Worker(workerURL);
+      worker.onmessage = m => { showResult(m.data, steps); worker.terminate(); worker = null; };
+      worker.postMessage({ n, rows: rows.slice(), steps, budgetMs: BUDGET_MS, maxExamples: MAX_EXAMPLES });
+    }
+  });
+
+  drawTarget();
+})();
+
+// Section 7: the typer frame grows to fit the typer (it reports its height; more lines on a phone).
+addEventListener("message", e => {
+  const f = document.getElementById("typer-frame");
+  if (e.source === f.contentWindow && e.data && e.data.typerHeight) f.style.height = e.data.typerHeight + 2 + "px";   // + its 1px border, top and bottom
+});
+</script>
+
+<p style="font:13px/1.4 -apple-system,system-ui,sans-serif;color:#969db2;max-width:900px;margin:0 auto;padding:10px 20px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;justify-content:center;padding:28px 20px 40px">From&nbsp;<a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../../index.html">Brian Sciences</a>: more <a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../../projects.html">projects</a> and <a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../../research.html">research</a>.</p>
+</body>
+</html>
