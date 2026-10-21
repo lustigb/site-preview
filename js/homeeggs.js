@@ -81,6 +81,7 @@
       frame.remove();
       busy = false;
       window.shankWind?.resume();
+      dispatchEvent(new Event('homeegg-done'));            // titlecode.js clears its locked keycaps on this
     }
     addEventListener('message', onMessage);
     if (alreadyReady) start();
