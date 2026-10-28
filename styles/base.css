@@ -443,6 +443,9 @@ body:has(#projgrid) .people-controls { margin-bottom: 18px; }
 .sim-paper { font-family: var(--font-ui); font-size: 0.85rem; color: var(--muted); margin: 0 0 6px; }
 .sim-play { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; }
 .play-button.off { background: none; color: var(--muted); border: 1px dashed var(--line); cursor: default; }
+.play-button.dev { background: none; color: var(--accent); border: 1px solid var(--accent); }   /* works, still in development */
+.sim-legend { font-family: var(--font-ui); font-size: 0.85rem; color: var(--muted); }
+.sim-legend .play-button { padding: 1px 8px; font-size: 0.8rem; margin: 0 2px; }
 .sim-more { margin-top: 10px; }
 .sim-more summary { cursor: pointer; list-style: none; font-family: var(--font-ui); font-size: 0.9rem; color: var(--accent); }
 .sim-more summary::-webkit-details-marker { display: none; }
