@@ -121,6 +121,12 @@
     .mod figure > div{padding-left:8px !important; padding-right:8px !important}
   }
   .mod figure:has(> script) > div{box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent)}
+  /* Hover highlight on everything clickable (a mouse only, so it never sticks after a tap on a phone). Each box
+     lays an invisible .hit rectangle over its cards and buttons; tint + outline that rectangle on hover. */
+  @media (hover:hover){
+    .setmatrix .hit:hover, .setbuild .hit:hover, .setcomplete .hit:hover, .setisset .hit:hover{
+      fill:color-mix(in srgb, var(--accent) 12%, transparent); stroke:var(--accent); stroke-width:2; stroke-opacity:.7}
+  }
 </style>
 
 <nav aria-label="Site" style="font:13px/1.4 -apple-system,system-ui,sans-serif;color:#b4bacb;background:#15171d;margin:0;padding:10px max(20px, calc((100% - 860px) / 2));display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px;font-weight:600;text-decoration:none" href="../index.html">Brian Sciences</a><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../project-setplayer.html">About this project · more projects →</a></nav>
