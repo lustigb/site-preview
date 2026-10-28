@@ -433,3 +433,32 @@ body:has(#projgrid) .people-controls { margin-bottom: 18px; }
 .paper-list li { margin: 0 0 18px; }
 .paper-list .pl-authors { display: block; font-family: var(--font-ui); font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
 .paper-list .pl-note { display: block; font-style: italic; margin-top: 4px; }
+
+/* Task Sims page: one entry per sim = thumbnail + title + play links, with an expandable "More details" */
+.sim { border-top: 1px solid var(--line); padding: 18px 0 8px; }
+.sim-row { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+.sim-thumb { width: 100%; display: block; border-radius: var(--radius); box-shadow: 0 1px 4px rgb(0 0 0 / 0.15); }
+.sim h2 { font-size: 1.05rem; line-height: 1.35; margin: 0 0 4px; }
+.sim-desc { font-size: 0.95rem; margin: 0 0 2px; }
+.sim-paper { font-family: var(--font-ui); font-size: 0.85rem; color: var(--muted); margin: 0 0 6px; }
+.sim-play { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; }
+.play-button.off { background: none; color: var(--muted); border: 1px dashed var(--line); cursor: default; }
+.sim-more { margin-top: 10px; }
+.sim-more summary { cursor: pointer; list-style: none; font-family: var(--font-ui); font-size: 0.9rem; color: var(--accent); }
+.sim-more summary::-webkit-details-marker { display: none; }
+.sim-more summary::before { content: "▸ "; }
+.sim-more[open] summary::before { content: "▾ "; }
+.sim-more .dc-figure { max-width: 420px; margin: 10px 0 0; }
+.sim-more h3 { font-size: 0.95rem; margin: 14px 0 4px; }
+@media (max-width: 600px) { .sim-row { grid-template-columns: 1fr; gap: 10px; } .sim-thumb { order: -1; } }
+/* Project page header like the paper pages: title + intro on the left, picture beside them on the right.
+   Opt-in per page (Brian: depends on the page): add class sim-hero to that page's header figure. */
+.dc:has(.sim-hero) .page-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 36px; align-items: start; }
+.dc:has(.sim-hero) .page-head > * { grid-column: 1; }
+.dc:has(.sim-hero) .page-head > .dc-figure.sim-hero { grid-column: 2; grid-row: 1 / span 6; margin: 0; }
+.dc:has(.sim-hero) .page-head .dc-figure.sim-hero img { max-height: 340px; max-width: min(460px, 42vw); }
+@media (max-width: 760px) {
+  .dc:has(.sim-hero) .page-head { grid-template-columns: 1fr; }
+  .dc:has(.sim-hero) .page-head > .dc-figure.sim-hero { grid-column: 1; grid-row: auto; margin: 20px 0 0; }
+  .dc:has(.sim-hero) .page-head .dc-figure.sim-hero img { max-width: 100%; }
+}
