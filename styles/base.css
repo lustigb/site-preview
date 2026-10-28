@@ -371,7 +371,7 @@ a.secret-link, a.secret-link:hover, a.secret-link:visited { color: inherit; text
   body:has(.home-page) .site-footer { display: none; }
   .home-page .hero { padding: 10px 0 24px; gap: 10px; margin-bottom: 0; }
   .home-page .hero .signature { width: auto; height: min(40svh, 93vw); max-height: none; }
-  .home-page .hero h1 { font-size: clamp(2rem, 9.5vw, 2.6rem); margin-bottom: 0; }
+  .home-page .hero h1 { font-size: clamp(2rem, 9.5vw, 2.6rem); margin-bottom: 14px; }   /* room below the code letters' bigger touch targets */
   .home-page .doors { padding: 20px 0 0; margin-bottom: 0; }
   .home-page .door-grid { gap: 8px; }
   .home-page .door { padding: 9px 14px; }

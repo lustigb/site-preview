@@ -12,7 +12,7 @@
 (function () {
   const h1 = document.querySelector(".home-page .hero h1");
   if (!h1 || h1.textContent.trim() !== "Brian Sciences") return;
-  const CODE = ["a", "b", "c1"], HOLD_MS = 700, WINDOW_MS = 5000;   // idle time allowed between letters (paused while a letter is being held)
+  const CODE = ["a", "b", "c1"], HOLD_MS = 450, WINDOW_MS = 5000;   // idle time allowed between letters (paused while a letter is being held)
   const AUTO = "c2";                                  // the second c: not part of the code; fills in by itself on success
   const KEYS = { 0: "b", 3: "a", 7: "c1", 11: "c2" }; // B(0) r i a(3) n _ S c(7) i e n c(11) e s
   const text = h1.textContent;
@@ -30,13 +30,15 @@
   });
   const st = document.createElement("style");
   st.textContent = `.home-page .hero h1{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
-    .tc-key{display:inline-block;position:relative;transform-origin:50% 90%;transition:color .6s ease}
+    .tc-key{display:inline-block;position:relative;transform-origin:50% 90%;transition:color .6s ease, transform .15s ease}
+    .tc-key:not(.tc-auto)::before{content:"";position:absolute;inset:-14px -9px -18px}   /* bigger target for a finger */
+    .tc-key.tc-holding{transform:scale(1.3);z-index:2}                                    /* magnified while held */
     .tc-box{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
     .tc-box path{fill:transparent;stroke:var(--ink,#1a1f1c);stroke-width:2.5px;stroke-linecap:round;stroke-linejoin:round;
       stroke-dasharray:var(--L);stroke-dashoffset:var(--L);transition:stroke-dashoffset .15s ease, opacity .6s ease, fill .6s ease;opacity:1}
     .tc-key.tc-holding .tc-box path{stroke-dashoffset:0;transition:stroke-dashoffset ${HOLD_MS}ms linear}
     .tc-key.tc-in .tc-box path{stroke-dashoffset:0;fill:color-mix(in srgb, var(--ink,#1a1f1c) 7%, transparent);transition:fill .3s ease}
-    .tc-key.tc-auto.tc-in .tc-box path{transition:stroke-dashoffset .35s ease-out, fill .3s ease .25s}
+    .tc-key.tc-auto.tc-in .tc-box path{transition:stroke-dashoffset .25s ease-out, fill .3s ease .2s}
     .tc-key.tc-in.tc-undo .tc-box path{stroke-dashoffset:var(--L);fill:transparent;transition:stroke-dashoffset .3s ease-in, fill .2s ease}
     .tc-wiggle{animation:tc-w .45s ease-in-out}
     .tc-nudge{animation:tc-n .35s ease-in-out}
@@ -114,13 +116,13 @@
         keys.forEach((s, i) => setTimeout(() => anim(s, "tc-wiggle"), i * 120));   // until eggs are wired
         setTimeout(finish, 1500);
       }
-    }), auto ? 400 : 0);
+    }), auto ? 300 : 0);
   }
 
   // Right code: a circuit-board trace grows out of each keycap up to the probe photo (straight up, a 45°
   // jog over to its own spot along the photo's bottom edge, straight up again, with a pad at each end).
   // When all four have arrived, done() is called and the animation starts.
-  const TRACE_MS = 900;
+  const TRACE_MS = 500;
   let traceSvg = null;
   function drawTraces(done) {
     const photo = document.querySelector(".home-page .hero .signature");
@@ -157,11 +159,11 @@
       traceSvg.appendChild(path);
       const L = path.getTotalLength();
       path.style.strokeDasharray = L; path.style.strokeDashoffset = L;
-      path.style.transition = `stroke-dashoffset ${TRACE_MS}ms ease-in ${i * 60}ms`;
+      path.style.transition = `stroke-dashoffset ${TRACE_MS}ms ease-in ${i * 40}ms`;
       [[e.x0, e.y0], [e.x1, yTop]].forEach(([cx, cy], j) => {                     // pads at both ends
         const dot = document.createElementNS(ns, "circle");
         dot.setAttribute("cx", cx); dot.setAttribute("cy", cy); dot.setAttribute("r", 3);
-        dot.setAttribute("style", `fill:var(--ink,#1a1f1c);opacity:0;transition:opacity .2s ease ${j ? TRACE_MS + i * 60 : 0}ms`);
+        dot.setAttribute("style", `fill:var(--ink,#1a1f1c);opacity:0;transition:opacity .2s ease ${j ? TRACE_MS + i * 40 : 0}ms`);
         traceSvg.appendChild(dot);
       });
     });
@@ -169,7 +171,7 @@
     void traceSvg.getBoundingClientRect();
     traceSvg.querySelectorAll("path").forEach(p => p.style.strokeDashoffset = 0);
     traceSvg.querySelectorAll("circle").forEach(c => c.style.opacity = 1);
-    setTimeout(done, TRACE_MS + 3 * 60 + 150);
+    setTimeout(done, TRACE_MS + 3 * 40 + 100);
   }
   function removeTraces() {
     const svg = traceSvg; traceSvg = null; if (!svg) return;
