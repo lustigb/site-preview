@@ -1,0 +1,178 @@
+/* Reverse Game of Life Font write-up: its own styles, scoped to .gol (moved from gameoflife/blogpost/gol_blog.html,
+   2026-10-28). Colours/fonts match the site; variables are set on .gol so they can't clash with the site's. */
+
+  /* Colours and fonts copied from the main site (personalwebsite/site/styles/a-notebook.css). */
+  .gol{
+    --ground:#f3f5f0; --panel:#eaede5; --hair:#cfd6cb;
+    --ink:#1a1f1c; --muted:#5d6b62; --faint:#7d8a81;
+    --hi:#1a1f1c; --accent:#2f7d5b; --cell:#2f7d5b; --todo:#a8650a; --miss:#d23b2f; --extra:#2f63d2; --s1:#14875a; --s2:#c95d0e;
+    --serif:"Source Serif 4",Georgia,serif;
+    --sans:"Inter",system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    --measure:64ch;
+  }
+  /* Follows the device's light/dark setting, same dark palette as the main site. */
+  @media (prefers-color-scheme: dark){
+    .gol{ --ground:#0d110f; --panel:#141a16; --hair:#26302a;
+      --ink:#e8eee9; --muted:#8fa095; --faint:#6f7f75;
+      --hi:#ffffff; --accent:#6fd8a4; --cell:#6fd8a4; --todo:#e6b53c; --miss:#ff6b5e; --extra:#6f9bff; --s1:#2fae78; --s2:#d9782a; }
+  }
+  .gol, .gol *{box-sizing:border-box}
+  .gol{background:var(--ground); color:var(--ink);
+    font-family:var(--serif); font-size:18px; line-height:1.6; -webkit-font-smoothing:antialiased}
+  .gol .wrap{max-width:var(--measure); margin:0 auto; padding:0 16px}
+  .gol h1, .gol h2, .gol .ey, .gol .note, .gol .visual{font-family:var(--sans)}
+  .gol h1{font-family:var(--serif); font-size:clamp(2.4rem,6vw,3.8rem); line-height:1.05; font-weight:600; margin:.1em 0 .3em}
+  .gol h2{font-family:var(--serif); font-size:clamp(1.4rem,3.6vw,2rem); font-weight:600; line-height:1.1; margin:0 0 .6em}
+  .gol .ey{font-family:var(--mono); text-transform:uppercase; letter-spacing:.24em; font-size:.7rem; color:var(--faint)}
+  .gol header{padding:72px 0 16px}
+  .gol .dek{font-size:1.25rem; color:var(--muted); margin:.2em 0 0}
+  .gol section{padding:40px 0; border-top:1px solid var(--hair)}
+  /* Draft scaffolding: everything amber is a placeholder to be replaced. */
+  .gol .note{font-size:.9rem; color:var(--todo); border-left:3px solid var(--todo); padding:.2em 0 .2em .9em; margin:0 0 1em}
+  .gol .note ul{margin:.3em 0 0; padding-left:1.2em}
+  .gol .visual{border:1px dashed var(--todo); border-radius:8px; padding:28px 18px; text-align:center;
+    color:var(--todo); font-size:.85rem; margin:1.2em 0}
+  .gol code{font-family:var(--mono); font-size:.85em}
+  .gol .cap, .gol figcaption{font-family:var(--sans); font-size:.85rem; color:var(--muted); margin:.6em 0 0}
+  .gol button{font-family:var(--sans); font-size:.85rem; color:var(--ink); background:var(--panel);
+    border:1px solid var(--hair); border-radius:4px; padding:6px 14px; cursor:pointer}
+  .gol button:hover{border-color:var(--accent)}
+
+  /* Rule pictures */
+  /* Wider than the text column so all five cards fit on one row on a laptop. */
+  .gol .rules{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:1.4em 0 .4em;
+    width:min(1000px, calc(100vw - 32px)); margin-left:50%; transform:translateX(-50%)}
+  .gol .rule{background:var(--panel); border:1px solid var(--hair); border-radius:6px; padding:14px 12px 12px; font-family:var(--sans)}
+  .gol .rule svg{display:block; width:100%; height:auto}
+  .gol .rule h3{font-size:.95rem; margin:.6em 0 .2em; color:var(--ink)}
+  .gol .rule p{font-size:.82rem; line-height:1.45; color:var(--muted); margin:0}
+  .gol .rule .dead{fill:var(--ground); stroke:var(--hair)}
+  .gol .rule .live{fill:var(--cell); stroke:var(--hair)}
+  .gol .rule .ghost{opacity:.22}
+  .gol .rule .focus{fill:none; stroke:var(--ink); stroke-width:3}
+  .gol .rule .num{font:600 11px var(--sans); fill:var(--faint); text-anchor:middle; dominant-baseline:central}
+  .gol .rule .lbl{font:600 11px var(--sans); fill:var(--muted); text-anchor:middle}
+  .gol .rule .arrow{stroke:var(--muted); stroke-width:2; fill:none}
+
+  /* Clickable demo */
+  .gol .demo{margin:1.8em 0 0}
+  .gol .demo canvas{display:block; width:100%; touch-action:none; cursor:crosshair; border-radius:4px}
+  .gol .controls{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px}
+  .gol .gen{font-family:var(--mono); font-size:.8rem; color:var(--faint); margin-left:auto}
+
+  /* Rules checklist */
+  .gol .checklist{width:100%; border-collapse:collapse; font-family:var(--sans); font-size:.92rem; margin:.4em 0 0}
+  .gol .checklist th{text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; color:var(--faint); font-weight:600}
+  .gol .checklist th, .gol .checklist td{padding:9px 10px; border-bottom:1px solid var(--hair)}
+  .gol .checklist td:last-child{font-weight:600; color:var(--accent)}
+
+  /* Decision tree: wide version on larger screens, a tall indented version of the same tree on phones */
+  .gol .tree-wrap{margin:1.6em 0 0}
+  .gol .tree{display:block; width:100%; height:auto; font-family:var(--sans)}
+  .gol .tree-tall{display:none; max-width:360px; margin:0 auto}
+  @media (max-width:620px){ .gol .tree-wide{display:none} .gol .tree-tall{display:block} }
+  .gol .tree text{font-size:13px; text-anchor:middle; dominant-baseline:central}
+  .gol .tree .edges path{stroke:var(--hair); stroke-width:2; fill:none}
+  .gol .tree .elabels text{font-size:11px; fill:var(--faint); font-weight:600}
+  .gol .tree .q rect{fill:var(--panel); stroke:var(--muted)} .gol .tree .q text{fill:var(--ink); font-weight:600}
+  .gol .tree .leaf rect{fill:var(--ground); stroke:var(--hair)} .gol .tree .leaf text{fill:var(--muted)}
+  .gol .tree .leaf.on rect{fill:var(--cell); stroke:var(--cell)} .gol .tree .leaf.on text{fill:var(--ground); font-weight:600}
+
+  /* Worked examples (before the demo) */
+  .gol .examples{display:flex; flex-direction:column; gap:14px; margin:1.2em 0 2em}
+  .gol .ex{display:flex; align-items:flex-start; gap:10px 18px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--hair);
+    border-radius:6px; padding:12px 14px; font-family:var(--sans)}
+  .gol .ex .who{width:150px; font-size:.85rem} .gol .ex .who b{display:block; color:var(--ink); font-size:.95rem}
+  .gol .ex .who span{color:var(--muted)}
+  .gol .ex svg{width:56px; height:56px; display:block}
+  .gol .ex svg.big{width:72px; height:72px}
+  .gol .ex rect.c{stroke:var(--hair); stroke-width:.06} .gol .ex rect.c0{fill:var(--ground)} .gol .ex rect.c1{fill:var(--cell)}
+  .gol .ex .to{color:var(--muted)} .gol .ex .more{font-size:.8rem; color:var(--faint)}
+  .gol .ex .none{width:56px; height:56px; border:1px dashed var(--muted); border-radius:4px; display:grid; place-items:center; color:var(--muted); font-size:.75rem}
+  .gol .ex .lines{display:flex; flex-direction:column; gap:8px}
+  .gol .ex .line{display:flex; align-items:center; gap:8px}
+  .gol .ex-toggle button[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--ground); font-weight:600}
+
+  /* "How the search works" expandable */
+  .gol details.how{margin:1.4em 0 0; border:1px solid var(--hair); border-radius:6px; padding:10px 14px; background:var(--panel)}
+  .gol details.how summary{cursor:pointer; font-family:var(--sans); font-weight:600; font-size:.95rem}
+  .gol details.how p, .gol details.how li{font-size:.95rem}
+  .gol details.how ol{padding-left:1.3em}
+
+  /* Section 5: key view + catalog figures */
+  .gol .key{margin:1.4em 0 0; background:var(--panel); border:1px solid var(--hair); border-radius:6px; padding:14px}
+  .gol .key-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-family:var(--sans); font-size:.75rem; color:var(--faint); margin-bottom:12px}
+  .gol .key-row .who{width:110px; font-size:.82rem; color:var(--ink); font-weight:600}
+  .gol .key-row .who span{display:block; font-weight:400; color:var(--muted)}
+  .gol .key-row figure{margin:0; text-align:center}
+  .gol .key-row svg{width:76px; height:76px; display:block}
+  .gol .key-row .to{font-size:1rem; color:var(--muted)}
+  .gol .key rect.c{stroke:var(--hair); stroke-width:.05}
+  .gol .key rect.off{fill:var(--ground)} .gol .key rect.on{fill:var(--ink)}
+  .gol .key rect.miss{fill:var(--miss)} .gol .key rect.extra{fill:var(--extra)}
+  .gol .legend{display:flex; gap:16px; flex-wrap:wrap; font-family:var(--sans); font-size:.8rem; color:var(--muted)}
+  .gol .sw{display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:-1px; margin-right:5px}
+  .gol .sw.on{background:var(--ink)} .gol .sw.miss{background:var(--miss)} .gol .sw.extra{background:var(--extra)}
+  .gol .catalogs{display:grid; grid-template-columns:1fr; gap:22px; margin:1.6em 0 0}
+  .gol .catalogs figure{margin:0}
+  /* MATLAB figures have white backgrounds; frame them so they sit cleanly in dark mode too. */
+  .gol .catalogs img{width:100%; display:block; background:#fff; border:1px solid var(--hair); border-radius:4px; padding:6px}
+
+  /* Section 5b: charts + edge diagrams. Series colours validated with the dataviz palette checker. */
+  .gol h3.sub{font-family:var(--serif); font-size:1.35rem; font-weight:600; margin:2.2em 0 .4em}
+  .gol .chart{margin:1.8em 0 0}
+  .gol .chart .ctitle{font-family:var(--sans); font-weight:600; font-size:.95rem}
+  .gol .chart .csub{font-family:var(--sans); font-size:.82rem; color:var(--muted)}
+  .gol .chart svg{display:block; width:100%; height:auto; margin-top:8px; font-family:var(--sans); overflow:visible}
+  .gol .clegend{display:flex; gap:16px; flex-wrap:wrap; font-family:var(--sans); font-size:.8rem; color:var(--muted); margin-top:6px}
+  .gol .sw.s1{background:var(--s1)} .gol .sw.s2{background:var(--s2)}
+  .gol .chart .s1{fill:var(--s1)} .gol .chart .s2{fill:var(--s2)}
+  .gol .chart .grid line{stroke:var(--hair); stroke-width:1}
+  .gol .chart .axis text{font-size:11px; fill:var(--faint)}
+  .gol .chart .val{font-size:11px; fill:var(--ink); text-anchor:middle; font-weight:600}
+  .gol .chart .cat{font-size:11px; fill:var(--muted); text-anchor:middle}
+  .gol .chart [data-tip]{cursor:default}
+  .gol .chart .hit{fill:transparent}
+  .gol .chart .hit:hover + .bar, .gol .chart g.col:hover .bar{opacity:.8}
+  .gol .tip{position:fixed; z-index:10; pointer-events:none; background:var(--ink); color:var(--ground); font-family:var(--sans);
+    font-size:.8rem; padding:6px 9px; border-radius:4px; max-width:260px}
+  .gol .edges{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:16px; margin:2em 0 0}
+  .gol .edges figure{margin:0}
+  .gol .edges svg{width:100%; max-width:200px; display:block; margin:0 auto 8px}
+  .gol .edges rect.c{stroke:var(--hair); stroke-width:.04}
+  .gol .edges rect.off{fill:var(--ground)} .gol .edges rect.on{fill:var(--ink)}
+  .gol .edges rect.nb{fill:var(--s2); opacity:.55} .gol .edges rect.me{fill:var(--s1)}
+  .gol .edges rect.pad{fill:var(--panel)} .gol .edges .frame{fill:none; stroke:var(--s1); stroke-width:.12; stroke-dasharray:.3 .2}
+
+  /* Section 7: typer frame (wider than the text column, like the rule cards) */
+  .gol .typer{margin:1.4em 0 0; width:min(1000px, calc(100vw - 32px)); margin-left:50%; transform:translateX(-50%)}
+  .gol .typer iframe{width:100%; height:360px; border:1px solid var(--hair); border-radius:6px; display:block; background:var(--ground)}
+  .gol .typer a{color:var(--accent)}
+
+  /* Draw-and-search demo */
+  .gol .finder{margin:1.4em 0 0}
+  .gol .finder-top{display:flex; flex-wrap:wrap; gap:22px; align-items:flex-start}
+  .gol .finder .lab{font-family:var(--sans); font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; color:var(--faint); margin-bottom:6px}
+  .gol .finder svg.target{width:210px; height:210px; display:block; touch-action:none; cursor:crosshair}
+  .gol .finder-opts{flex:1; min-width:220px; font-family:var(--sans); font-size:.88rem}
+  .gol .finder-opts label{display:inline-block; margin:0 14px 10px 0; color:var(--muted)}
+  .gol .finder-opts select{font:inherit; color:var(--ink); background:var(--panel); border:1px solid var(--hair); border-radius:4px; padding:3px 6px}
+  .gol .finder .status{font-family:var(--sans); font-size:.88rem; color:var(--ink); margin:.8em 0 0}
+  .gol .finder rect.c{stroke:var(--hair); stroke-width:.06}
+  .gol .finder rect.c0{fill:var(--panel)} .gol .finder rect.c1{fill:var(--cell)}
+  .gol .chains{margin-top:18px; display:flex; flex-direction:column; gap:10px}
+  .gol .chain{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-family:var(--sans); font-size:.75rem; color:var(--faint)}
+  .gol .chain figure{margin:0; text-align:center}
+  .gol .chain svg{width:64px; height:64px; display:block}
+  .gol .chain .to{font-size:1rem; color:var(--muted)}
+
+  /* Readability (2026-10-28, same as the SET write-up): on wide screens a little bigger text and wider lines. */
+  @media (min-width:1150px){ .gol{font-size:20px} .gol{--measure:70ch} }
+
+
+/* Top of the write-up as a site page: back link + draft line, in the text column */
+.gol .wu-top{padding-top:28px}
+.gol .wu-back{font-family:var(--sans); font-size:.9rem; margin:0 0 8px}
+.gol .wu-top + header{padding-top:24px}
+.gol .rule h3{font-weight:600}
