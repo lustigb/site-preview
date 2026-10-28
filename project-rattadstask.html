@@ -7,7 +7,7 @@
 <title>RatTADStask · Projects · Brian Lustig</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,700&display=swap">
-<link rel="stylesheet" href="styles/base.css?v=2f899d04">
+<link rel="stylesheet" href="styles/base.css?v=675a5097">
 <link id="theme" rel="stylesheet" href="styles/a-notebook.css?v=a922740d">
 <style>.uc-float { position: fixed; top: 12px; left: 12px; z-index: 30; } .site-header .wordmark { margin-right: 0; } .uc-badge { font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6d0b; background: #fbeec2; border: 1px solid #e3c86a; border-radius: 999px; padding: 2px 9px; margin-left: 10px; margin-right: auto; align-self: center; }</style>
 </head>
@@ -30,12 +30,66 @@
     <h1>RatTADStask</h1>
     <p class="intro">A simulation for playing the three-arm delayed sequence task.</p>
     <p class="meta">games · neuro</p>
-    <p><a class="play-button" href="https://lustigb.github.io/rattadstask/">Play in your browser ↗</a></p>
+    <p class="sim-play"><a class="play-button" href="https://lustigb.github.io/rattadstask/">Desktop ↗</a> <a class="play-button dev" href="https://lustigb.github.io/tasksims/">Mobile · in development ↗</a></p>
     <figure class="dc-figure"><img src="img/projects/large/rattadstask.png" alt="" onerror="this.parentElement.remove()"></figure>
   </section>
   <section class="dc-section">
     <h2>What it is</h2>
     <p>A playable 3D model of the three-arm delayed sequence (TADS) maze that my rats run. You play as the rat: run on the wheel until the doors open, choose an arm, and learn the sequence rule the same way the rats do, with water as the only feedback.</p>
+  </section>
+  <section class="dc-section">
+    <div class="sim-howto">
+      <h2>How to play</h2>
+      <p><b>On a laptop:</b> click the game once to start, then press <kbd>H</kbd> at any time to see every control.
+      Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys and turn with the mouse.
+      <kbd>Space</kbd> hops into or out of the wheel, <kbd>W</kbd> runs it, and <kbd>F</kbd> or a click licks.</p>
+      <p><b>Three cameras:</b> the rat's eye, a third-person camera behind the rat, and an overhead view.
+      <kbd>C</kbd> switches the big view between them; <kbd>8</kbd> shows or hides the third-person view in a side panel,
+      and <kbd>9</kbd> does the same for the overhead.</p>
+      <p><b>On a phone:</b> hold it sideways. Left thumb stick to walk and turn, drag on the right to look. Next to the
+      wheel, tap <b>Hop in</b>, then hold the stick forward to run; tap <b>Lick</b> at a port. The phone version is still in development.</p>
+    </div>
+  </section>
+  <section class="dc-section">
+    <h2>Real rat vs. simulation</h2>
+    <p>The same left-to-centre trial, real and simulated, in sync. On the left, a real rat seen from overhead (from the
+      paper's supplementary video, 1× speed). Next to it, the virtual rat replaying that exact path in RatTADStask: I
+      tracked the real rat frame by frame and drove the simulated one along the same route, through the wheel and up
+      the centre arm. Press play to also see what only the simulation can show: the rat's own view and a camera following it.</p>
+    <div class="vs" id="vs">
+      <div class="vs-pair">
+        <figure><video src="media/rattadstask/real_overhead_LtoC.mp4" poster="media/rattadstask/real_overhead_LtoC.jpg" muted playsinline preload="metadata"></video>
+          <figcaption>Real rat</figcaption></figure>
+        <figure><video src="media/rattadstask/sim_overhead_LtoC.mp4" poster="media/rattadstask/sim_overhead_LtoC.jpg" muted playsinline preload="metadata"></video>
+          <figcaption>Simulation, overhead</figcaption></figure>
+      </div>
+      <div class="vs-extra">
+        <figure><video src="media/rattadstask/sim_eye_LtoC.mp4" poster="media/rattadstask/sim_eye_LtoC.jpg" muted playsinline preload="metadata"></video>
+          <figcaption>Simulation, the rat's eye</figcaption></figure>
+        <figure><video src="media/rattadstask/sim_follow_LtoC.mp4" poster="media/rattadstask/sim_follow_LtoC.jpg" muted playsinline preload="metadata"></video>
+          <figcaption>Simulation, following camera</figcaption></figure>
+      </div>
+    </div>
+    <p><button class="play-button vs-play" id="vs-play" type="button">▶ Play</button></p>
+    <script>
+      (function () {   // one button plays all four clips together; the real video is the clock the others follow
+        const box = document.getElementById("vs"), btn = document.getElementById("vs-play");
+        const vids = [...box.querySelectorAll("video")], master = vids[0], others = vids.slice(1);
+        let sync = null;
+        const stop = () => { vids.forEach(v => v.pause()); clearInterval(sync); sync = null; btn.textContent = "▶ Play"; };
+        btn.onclick = () => {
+          if (sync) return stop();
+          box.classList.add("open");                                   // the eye + following views slide open
+          if (master.ended || master.currentTime > 0) vids.forEach(v => { v.currentTime = 0; });
+          vids.forEach(v => v.play());
+          btn.textContent = "❚❚ Pause";
+          sync = setInterval(() => others.forEach(v => {                // keep everyone on the real video's clock
+            if (Math.abs(v.currentTime - master.currentTime) > 0.12) v.currentTime = master.currentTime;
+          }), 250);
+        };
+        master.addEventListener("ended", stop);
+      })();
+    </script>
   </section>
   <section class="dc-section">
     <h2>How it works</h2>
@@ -48,7 +102,8 @@
   <section class="dc-section">
     <h2>Links</h2>
     <ul>
-      <li><a href="https://lustigb.github.io/rattadstask/">Play it in your browser</a> (keyboard and mouse; best on a laptop or desktop)</li>
+      <li><a href="https://lustigb.github.io/rattadstask/">Play it on a laptop or desktop</a> (keyboard and mouse)</li>
+      <li><a href="https://lustigb.github.io/tasksims/">Phone / touchscreen version</a> (in development; part of <a href="project-task-sims.html">Task Sims</a>)</li>
       <li><a href="https://github.com/lustigb/rattadstask">Web build on GitHub</a></li>
     </ul>
   </section>

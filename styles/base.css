@@ -481,3 +481,24 @@ body:has(#projgrid) .people-controls { margin-bottom: 18px; }
 @media (max-width: 640px) { .inspo-figs { grid-template-columns: 1fr; } }
 .construction-line { font-family: var(--font-ui); font-size: 0.82rem; color: #8a6d0b; background: color-mix(in srgb, #fbeec2 45%, var(--bg));
   border-left: 4px solid #d4a72c; padding: 4px 10px; border-radius: 0 var(--radius) var(--radius) 0; display: inline-block; margin-top: 10px; }
+
+/* RatTADStask: real vs simulated clips. Two overheads side by side; on Play a third column slides open with the rat's
+   eye and the following camera (on phones they appear underneath instead). */
+.vs { display: flex; gap: 14px; align-items: flex-start; margin: 10px 0 4px; }
+.vs figure { margin: 0; }
+.vs video { display: block; border-radius: var(--radius); background: #000; }
+.vs figcaption { font-family: var(--font-ui); font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+.vs-pair { display: flex; gap: 14px; flex: none; }
+.vs-pair video { height: min(420px, 60vh); width: auto; }
+.vs-extra { display: flex; flex-direction: column; gap: 10px; flex: 1 1 0; min-width: 0; max-width: 0; opacity: 0; overflow: hidden;
+  transition: max-width .7s ease, opacity .7s ease; }
+.vs.open .vs-extra { max-width: 420px; opacity: 1; }
+.vs-extra video { width: 100%; height: auto; }
+.vs-play { border: 0; cursor: pointer; }
+@media (max-width: 760px) {
+  .vs { flex-direction: column; }
+  .vs-pair { width: 100%; } .vs-pair figure { flex: 1 1 0; min-width: 0; }
+  .vs-pair video { width: 100%; height: 72vw; object-fit: contain; }   /* same height for both overheads */
+  .vs-extra { flex: none; width: 100%; max-width: none; max-height: 0; transition: max-height .7s ease, opacity .7s ease; }
+  .vs.open .vs-extra { max-height: 900px; }
+}
