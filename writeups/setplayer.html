@@ -108,7 +108,7 @@
   }
 
   /* Readability pass (2026-10-28): phones get real-size text (viewport tag above) with slimmer margins; wide
-     screens get a little bigger text and wider boxes; every interactive box gets an "Interactive" cue. */
+     screens get a little bigger text and wider boxes; every interactive box gets a soft blue outline. */
   @media (min-width:1150px){
     body{font-size:20px}
     :root{--measure:70ch}
@@ -120,9 +120,6 @@
     .wrap{padding:0 16px}
     .mod figure > div{padding-left:8px !important; padding-right:8px !important}
   }
-  .mod figure:has(> script)::before{content:"\25B6\00A0 Interactive\00A0\00B7\00A0 click or tap"; display:block; width:max-content;
-    margin:0 auto 10px; font:600 12px/1 system-ui,-apple-system,sans-serif; letter-spacing:.06em; text-transform:uppercase;
-    color:var(--accent); border:1px solid currentColor; border-radius:999px; padding:6px 12px}
   .mod figure:has(> script) > div{box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent)}
 </style>
 
