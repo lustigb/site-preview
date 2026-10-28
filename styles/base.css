@@ -479,3 +479,5 @@ body:has(#projgrid) .people-controls { margin-bottom: 18px; }
 .inspo-figs .dc-figure { margin: 0; }
 .inspo-figs figcaption { font-family: var(--font-ui); font-size: 0.8rem; color: var(--muted); padding: 6px 10px 8px; background: var(--bg); }
 @media (max-width: 640px) { .inspo-figs { grid-template-columns: 1fr; } }
+.construction-line { font-family: var(--font-ui); font-size: 0.82rem; color: #8a6d0b; background: color-mix(in srgb, #fbeec2 45%, var(--bg));
+  border-left: 4px solid #d4a72c; padding: 4px 10px; border-radius: 0 var(--radius) var(--radius) 0; display: inline-block; margin-top: 10px; }
