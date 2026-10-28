@@ -199,6 +199,7 @@
   h1.addEventListener("contextmenu", e => e.preventDefault());
   h1.addEventListener("pointerdown", e => {
     const el = e.target.closest(".tc-key"); if (!el || el === auto || playing || el.classList.contains("tc-in")) return;
+    window.unlockEggAudio?.();                        // a real tap: let an egg with music play sound later
     endHold();
     clearTimeout(windowTimer); windowTimer = null;   // the window only counts idle time: paused while holding
     el.classList.remove("tc-wiggle", "tc-nudge");
@@ -207,5 +208,6 @@
              timer: setTimeout(() => { endHold(); enter(el.dataset.k, el); }, HOLD_MS) };   // completion by timer; rAF only shades
   });
   ["pointerup", "pointercancel"].forEach(ev => h1.addEventListener(ev, () => endHold(true)));
+  h1.addEventListener("pointerup", e => { if (e.target.closest(".tc-key")) window.unlockEggAudio?.(); });   // phones count the lift-off as the tap
   keys.forEach(k => k.addEventListener("pointerleave", () => { if (hold && hold.el === k) endHold(true); }));
 })();

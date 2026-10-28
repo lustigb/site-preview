@@ -153,6 +153,7 @@
 </div>
 
 <script src="art/custom.js"></script>
+<script src="pixelroll.js"></script>
 <script>
 // ?player=1: the home page's egg player (see homeeggs.js in site/js). No panel, no idle eggs; it
 // plays one egg when the parent page asks and tells it when that egg is over.
@@ -1395,6 +1396,33 @@ function draw(egg, st) {
   }
   camera(egg.focus);
 }
+
+// ---- pixelRoll (egg 17): the photo pixelates into an 8-bit stage, a pixel guy dances to the chiptune hook -----
+// Drawing and music live in pixelroll.js (shared with the home page, which plays the music there: see the note
+// at the top of that file). From the lab the egg plays its own music; in the home-page player it stays silent.
+EGGS.pixelRoll = {
+  label: 'pixelRoll', note: 'the photo pixelates into a tiny 8-bit stage: a pixel guy dances to a chiptune hook',
+  mode: 'scene', duration: Math.round((PixelRoll.IN + PixelRoll.SONG + PixelRoll.OUT) * 1000),
+  enter() {
+    const cv = this.cv = document.createElement('canvas');
+    cv.width = PixelRoll.W; cv.height = PixelRoll.H;
+    cv.className = 'layer';
+    cv.style.cssText = 'display:block; image-rendering:pixelated;';
+    document.getElementById('stage').appendChild(cv);
+    this.ctx = cv.getContext('2d');
+    if (!PLAYER) {                                        // lab: you clicked, so sound is allowed here
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      audio.resume();
+      PixelRoll.playMusic(audio, audio.currentTime + PixelRoll.IN);
+    }
+  },
+  render(t) { PixelRoll.draw(this.ctx, t / 1000, document.getElementById('photo')); },
+  exit() {
+    if (this.cv) this.cv.remove();
+    this.cv = null;
+    restorePhoto();
+  },
+};
 
 // ---- Playback -----------------------------------------------------------------------------------
 let speed = 1, current = null, lastName = null, plays = 0;

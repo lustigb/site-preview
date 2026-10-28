@@ -12,6 +12,8 @@
 // after a ~1 s download. An unused prepared player is dropped after PREPARED_MS.
 // While an egg plays, a small pill on the photo says which one it is ("Easter egg 4 of 13"), so people can
 // tell the eggs apart and know how many there are.
+// Sound: phones only allow audio that starts from a tap on THIS page (not the egg's iframe), so titlecode.js calls
+// window.unlockEggAudio() while you press the code letters, and eggs with music (pixelRoll) get it played from here.
 (function () {
   const photo = document.getElementById('home-photo');
   if (!photo) return;
@@ -35,6 +37,25 @@
     tag.style.opacity = 1;
   }
   const hideTag = () => { tag.style.opacity = 0; };
+
+  let eggAudio = null;                                     // AudioContext, unlocked by a tap on a code letter
+  window.unlockEggAudio = function () {
+    try {
+      eggAudio = eggAudio || new (window.AudioContext || window.webkitAudioContext)();
+      eggAudio.resume();
+      const b = eggAudio.createBuffer(1, 1, 22050), s = eggAudio.createBufferSource();   // a silent blip unlocks iOS
+      s.buffer = b; s.connect(eggAudio.destination); s.start(0);
+    } catch (e) { /* no audio: the eggs still play, silently */ }
+    if (!window.PixelRoll && !document.querySelector('script[data-pixelroll]')) {        // the pixelRoll music
+      const sc = document.createElement('script');
+      sc.src = 'egglab/pixelroll.js'; sc.dataset.pixelroll = '1';
+      document.head.appendChild(sc);
+    }
+  };
+  function eggMusic(name) {
+    if (name === 'pixelRoll' && eggAudio && window.PixelRoll)
+      window.PixelRoll.playMusic(eggAudio, eggAudio.currentTime + window.PixelRoll.IN);
+  }
 
   function makeFrame() {
     const frame = document.createElement('iframe');
@@ -88,6 +109,7 @@
       } else if (m.type === 'egglab-playing') {
         lastEgg = m.name;
         showTag(m.number, m.total);
+        eggMusic(m.name);
         clearTimeout(safety);
         safety = setTimeout(done, m.ms + 5000);            // the egg never said done: clean up anyway
       } else if (m.type === 'egglab-done') {
