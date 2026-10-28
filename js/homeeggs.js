@@ -10,6 +10,8 @@
 // window.prepareEgg() loads the player ahead of time, still invisible (titlecode.js calls it when the
 // first letter of the code locks in), so the egg starts the moment the code is finished instead of
 // after a ~1 s download. An unused prepared player is dropped after PREPARED_MS.
+// While an egg plays, a small pill on the photo says which one it is ("Easter egg 4 of 13"), so people can
+// tell the eggs apart and know how many there are.
 (function () {
   const photo = document.getElementById('home-photo');
   if (!photo) return;
@@ -17,6 +19,22 @@
   const PREPARED_MS = 60000;
   let busy = false, lastEgg = null;
   let prepared = null;                                     // { frame, ready, drop } waiting to play
+
+  const tag = document.createElement('div');               // "Easter egg x of N" while one plays
+  tag.className = 'egg-tag';
+  tag.setAttribute('aria-live', 'polite');
+  tag.style.cssText = 'position:absolute; right:8px; bottom:8px; z-index:3; pointer-events:none;'
+                    + 'font:500 12px/1.2 var(--font-ui, system-ui, sans-serif); color:#fff;'
+                    + 'background:rgba(20,22,26,.62); border-radius:999px; padding:4px 10px;'
+                    + 'opacity:0; transition:opacity .4s ease;';
+  if (getComputedStyle(box).position === 'static') box.style.position = 'relative';
+  box.appendChild(tag);
+  function showTag(n, total) {
+    if (!n || !total) return;
+    tag.textContent = `🥚 Easter egg ${n} of ${total}`;
+    tag.style.opacity = 1;
+  }
+  const hideTag = () => { tag.style.opacity = 0; };
 
   function makeFrame() {
     const frame = document.createElement('iframe');
@@ -69,6 +87,7 @@
         start();
       } else if (m.type === 'egglab-playing') {
         lastEgg = m.name;
+        showTag(m.number, m.total);
         clearTimeout(safety);
         safety = setTimeout(done, m.ms + 5000);            // the egg never said done: clean up anyway
       } else if (m.type === 'egglab-done') {
@@ -79,6 +98,7 @@
       clearTimeout(safety);
       removeEventListener('message', onMessage);
       frame.remove();
+      hideTag();
       busy = false;
       window.shankWind?.resume();
       dispatchEvent(new Event('homeegg-done'));            // titlecode.js clears its locked keycaps on this

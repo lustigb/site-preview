@@ -1,17 +1,19 @@
 // Secret code on the home title "Brian Sciences".
-// Only four letters respond: the "a" in Brian, the "B", and the two "c"s in Sciences. Hovering one gives a
+// Only three letters respond: the "a" in Brian, the "B", and the first "c" in Sciences. Hovering one gives a
 // single small wiggle (a hint; phones have no hover). Press and hold: a keycap outline draws itself around the
 // letter side by side (top, right, bottom, left) over about a second, like a progress bar; let go early (or slide off) and it snaps back. When the
-// hold completes it pops and stays a little keycap: entered. Right order: circuit traces grow from the keycaps
-// up to the photo, and when they arrive the animation plays (keycaps and traces stay until it ends). Enter a, b, then the c's left to right (each letter
+// hold completes it pops and stays a little keycap: entered. Right order: the second "c" (not pressable) draws its
+// own keycap in quickly, then circuit traces grow from all four keycaps up to the photo, and when they arrive the
+// animation plays (keycaps and traces stay until it ends). Enter a, b, then the first c (each letter
 // gives you another 5 s), and a random egg-lab animation plays over the probe photo (window.playRandomEgg,
 // from homeeggs.js; the wind interaction stays the baseline whenever no animation is playing). The first
 // letter also calls window.prepareEgg() so the animation is ready by the end. Letters can be locked in any
-// order; all four in the wrong order (or the 30 s running out) fades the keycaps and starts over. Viewing the source to read this is allowed and appreciated.
+// order; all three in the wrong order (or the idle time running out) fades the keycaps and starts over. Viewing the source to read this is allowed and appreciated.
 (function () {
   const h1 = document.querySelector(".home-page .hero h1");
   if (!h1 || h1.textContent.trim() !== "Brian Sciences") return;
-  const CODE = ["a", "b", "c1", "c2"], HOLD_MS = 1000, WINDOW_MS = 5000;   // idle time allowed between letters (paused while a letter is being held)
+  const CODE = ["a", "b", "c1"], HOLD_MS = 700, WINDOW_MS = 5000;   // idle time allowed between letters (paused while a letter is being held)
+  const AUTO = "c2";                                  // the second c: not part of the code; fills in by itself on success
   const KEYS = { 0: "b", 3: "a", 7: "c1", 11: "c2" }; // B(0) r i a(3) n _ S c(7) i e n c(11) e s
   const text = h1.textContent;
   h1.setAttribute("aria-label", text);
@@ -20,7 +22,7 @@
     const s = document.createElement("span");
     s.textContent = ch; s.setAttribute("aria-hidden", "true");
     if (KEYS[i]) {
-      s.dataset.k = KEYS[i]; s.className = "tc-key";
+      s.dataset.k = KEYS[i]; s.className = KEYS[i] === AUTO ? "tc-key tc-auto" : "tc-key";
       // keycap outline: one rounded square, drawn side by side (top, right, bottom, left) as the hold progresses
       s.insertAdjacentHTML("beforeend", '<svg class="tc-box" aria-hidden="true"><path/></svg>');   // sized in layoutBoxes()
     }
@@ -34,6 +36,7 @@
       stroke-dasharray:var(--L);stroke-dashoffset:var(--L);transition:stroke-dashoffset .15s ease, opacity .6s ease, fill .6s ease;opacity:1}
     .tc-key.tc-holding .tc-box path{stroke-dashoffset:0;transition:stroke-dashoffset ${HOLD_MS}ms linear}
     .tc-key.tc-in .tc-box path{stroke-dashoffset:0;fill:color-mix(in srgb, var(--ink,#1a1f1c) 7%, transparent);transition:fill .3s ease}
+    .tc-key.tc-auto.tc-in .tc-box path{transition:stroke-dashoffset .35s ease-out, fill .3s ease .25s}
     .tc-key.tc-in.tc-undo .tc-box path{stroke-dashoffset:var(--L);fill:transparent;transition:stroke-dashoffset .3s ease-in, fill .2s ease}
     .tc-wiggle{animation:tc-w .45s ease-in-out}
     .tc-nudge{animation:tc-n .35s ease-in-out}
@@ -43,7 +46,8 @@
     @keyframes tc-n{0%,100%{transform:rotate(0)}35%{transform:rotate(-4deg)}70%{transform:rotate(3deg)}}`;
   document.head.appendChild(st);
 
-  const keys = [...h1.querySelectorAll(".tc-key")];
+  const keys = [...h1.querySelectorAll(".tc-key")];   // all four keycaps (layout, traces)
+  const auto = keys.find(k => k.dataset.k === AUTO);
   // Size each keycap outline in real pixels around its letter (dash lengths are measured in screen units),
   // starting at the top-left so the sides appear in order: top, right, bottom, left.
   function layoutBoxes() {
@@ -76,7 +80,7 @@
   function reset() { got = []; clearTimeout(windowTimer); windowTimer = null; clearTints(); }
 
   // hover hint: one small nudge on mouse-enter (not while holding)
-  keys.forEach(k => k.addEventListener("pointerenter", e => { if (e.pointerType === "mouse" && !hold) anim(k, "tc-nudge"); }));
+  keys.filter(k => k !== auto).forEach(k => k.addEventListener("pointerenter", e => { if (e.pointerType === "mouse" && !hold) anim(k, "tc-nudge"); }));
 
   // Any of the four letters can be locked in, in any order; each stays a keycap until the 30 s window
   // (from the first one) runs out. Only once all four are in is the order judged: right order -> the
@@ -101,7 +105,8 @@
     }
     playing = true;
     const finish = () => { playing = false; reset(); removeTraces(); };
-    drawTraces(() => {                                           // traces reach the photo -> the egg starts
+    if (auto) { auto.classList.add("tc-in"); anim(auto, "tc-wiggle"); }   // the second c joins in by itself
+    setTimeout(() => drawTraces(() => {                                           // traces reach the photo -> the egg starts
       if (typeof window.playRandomEgg === "function" && window.playRandomEgg()) {
         addEventListener("homeegg-done", finish, { once: true });
         setTimeout(() => { if (playing) finish(); }, 60000);   // safety: never leave the caps on for good
@@ -109,7 +114,7 @@
         keys.forEach((s, i) => setTimeout(() => anim(s, "tc-wiggle"), i * 120));   // until eggs are wired
         setTimeout(finish, 1500);
       }
-    });
+    }), auto ? 400 : 0);
   }
 
   // Right code: a circuit-board trace grows out of each keycap up to the probe photo (straight up, a 45°
@@ -191,7 +196,7 @@
   }
   h1.addEventListener("contextmenu", e => e.preventDefault());
   h1.addEventListener("pointerdown", e => {
-    const el = e.target.closest(".tc-key"); if (!el || playing || el.classList.contains("tc-in")) return;
+    const el = e.target.closest(".tc-key"); if (!el || el === auto || playing || el.classList.contains("tc-in")) return;
     endHold();
     clearTimeout(windowTimer); windowTimer = null;   // the window only counts idle time: paused while holding
     el.classList.remove("tc-wiggle", "tc-nudge");

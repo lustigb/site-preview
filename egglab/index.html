@@ -1968,7 +1968,10 @@ if (PLAYER) {
     const name = EGGS[ev.data.name] && !EGGS[ev.data.name].hidden ? ev.data.name
                : pool[Math.floor(Math.random() * pool.length)];
     play(EGGS[name], 'home');
-    parent.postMessage({ type: 'egglab-playing', name, ms: EGGS[name].duration }, '*');
+    // number = its place among the visible eggs (definition order), so "Easter egg 4 of 13" stays stable
+    const visible = Object.keys(EGGS).filter(n => !EGGS[n].hidden);
+    parent.postMessage({ type: 'egglab-playing', name, ms: EGGS[name].duration,
+                         number: visible.indexOf(name) + 1, total: visible.length }, '*');
   });
 }
 </script>
