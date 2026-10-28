@@ -468,3 +468,8 @@ body:has(#projgrid) .people-controls { margin-bottom: 18px; }
 .sim-howto { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 6px 18px 4px; margin: 18px 0 22px; }
 .sim-howto h2 { margin: 10px 0 4px; border-top: none; padding-top: 0; }
 .sim-howto kbd { font-family: var(--font-ui); font-size: 0.8rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; margin: 0 1px; background: var(--bg); }
+
+/* Public "under construction" callout: big write-ups that are still drafts (project pages, replay paper page) */
+.construction { border: 1px solid #e3c86a; border-left: 5px solid #d4a72c; background: color-mix(in srgb, #fbeec2 45%, var(--bg)); border-radius: var(--radius); padding: 4px 16px 10px; margin: 16px 0 6px; max-width: 46rem; }
+.construction p { margin: 8px 0 0; }
+.construction-tag { font-family: var(--font-ui); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6d0b; font-weight: 600; }
