@@ -1,4 +1,5 @@
 <div style="font:14px/1.45 -apple-system,system-ui,sans-serif;background:#fbeec2;color:#5c4708;border-bottom:2px solid #d4a72c;padding:9px 20px;text-align:center"><b>Draft: very much under construction.</b> Most of the text so far was generated with AI, and it isn't good: I'm replacing it with my own writing. Some of the visuals are closer to ready.</div>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Can Everyone Win? — A Blokus Investigation</title>
 <style>
   :root{
@@ -102,6 +103,9 @@
   .bigstat .big{font-family:var(--sans); font-weight:800; font-size:clamp(2.4rem,6.5vw,3.8rem); color:#fff; letter-spacing:-.02em; line-height:1}
   .bigstat .sub{font-family:var(--mono); color:var(--muted); font-size:.76rem; letter-spacing:.08em; margin-top:8px}
   @media(max-width:680px){ body{font-size:18px} }
+
+  /* Readability (2026-10-28, same as the SET write-up): on wide screens a little bigger text and wider lines. */
+  @media (min-width:1150px){ body{font-size:20px} :root{--measure:70ch} }
 </style>
 
 <nav aria-label="Site" style="font:13px/1.4 -apple-system,system-ui,sans-serif;color:#b4bacb;background:#15171d;margin:0;padding:10px max(20px, calc((100% - 860px) / 2));display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px;font-weight:600;text-decoration:none" href="../../index.html">Brian Sciences</a><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../../project-blokus.html">About this project · more projects →</a></nav>

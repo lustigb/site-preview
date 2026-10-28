@@ -172,6 +172,9 @@
   .chain figure{margin:0; text-align:center}
   .chain svg{width:64px; height:64px; display:block}
   .chain .to{font-size:1rem; color:var(--muted)}
+
+  /* Readability (2026-10-28, same as the SET write-up): on wide screens a little bigger text and wider lines. */
+  @media (min-width:1150px){ body{font-size:20px} :root{--measure:70ch} }
 </style>
 </head>
 <body><nav aria-label="Site" style="font:13px/1.4 -apple-system,system-ui,sans-serif;color:#b4bacb;background:#15171d;margin:0;padding:10px max(20px, calc((100% - 860px) / 2));display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px;font-weight:600;text-decoration:none" href="../../index.html">Brian Sciences</a><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../../project-reverse-game-of-life.html">About this project · more projects →</a></nav>
