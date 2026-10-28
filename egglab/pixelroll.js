@@ -1,6 +1,5 @@
 // Egg 17, "pixelRoll": the probe photo pixelates into a tiny 8-bit stage, a pompadoured pixel guy dances to an
-// 8-bit version of the famous chorus hook for ~8.5 s, then it pixelates back to the photo. (Brian, 2026-10-28;
-// demo page: assets_src/egg_demos/pixelroll_demo.html.)
+// 8-bit version of the famous chorus hook for ~8.5 s, then it pixelates back to the photo. (2026-10-28)
 //
 // Shared by the egg lab (index.html, which draws it and, when you play it from the lab, plays the music) and the
 // home page (site/js/homeeggs.js, which plays the music itself: phones only allow sound that starts from a tap on
