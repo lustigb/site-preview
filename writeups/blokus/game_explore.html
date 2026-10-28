@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blokus — four-fold symmetry</title>
+<style>
+  :root{ --ground:#0f1117; --ink:#e9eaf1; --muted:#9aa3b8;
+    --R:#d94a44; --B:#3f74dd; --Y:#e6b53c; --G:#4ca85f; --board:#e9ebf1; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:22px 14px 40px}
+  .fig{width:100%;max-width:680px}
+  .stage{width:100%;background:#0f1117;border:1px solid #232838;border-radius:14px;padding:10px}
+  svg{display:block;width:100%;height:auto}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .bar{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;justify-content:center}
+  input[type=range]{flex:1;min-width:130px;accent-color:#5a79c8;cursor:pointer}
+  button{font:inherit;color:var(--ink);background:#1d2230;border:1px solid #2c3344;
+    border-radius:8px;padding:7px 13px;cursor:pointer;transition:background .15s,border-color .15s}
+  button:hover{background:#252c3d;border-color:#3a4256}
+  button.primary{background:#2a3350;border-color:#3a4a78}
+  button.primary:hover{background:#31406a}
+  #play{min-width:96px;text-align:center}   /* fixed width so label changes never reflow the bar */
+  .turn{font-size:14px;letter-spacing:.02em;min-height:20px;text-align:center;margin-top:10px}
+  .vlabel{color:var(--muted);font-size:12.5px;text-align:center;margin-top:6px}
+  .gametitle{text-align:center;margin:0 0 10px}
+  .gametitle b{font-size:16px;color:var(--ink);font-weight:600}
+  .gametitle span{display:block;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--muted);margin-top:3px;letter-spacing:.02em}
+  .cap{color:var(--muted);font-size:13px;line-height:1.55;text-align:center;max-width:470px;margin:14px auto 0}
+  .cap b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="fig">
+  <div class="gametitle" id="gametitle"></div>
+  <div class="stage">
+    <svg id="svg" viewBox="0 0 700 540" role="img" aria-label="Blokus four-fold symmetry"></svg>
+  </div>
+  <div class="bar">
+    <button id="stepBack" title="previous step">◀ Step</button>
+    <button id="play" class="primary">▶ Play</button>
+    <button id="stepFwd" title="next step">Step ▶</button>
+    <input id="scrub" type="range" min="0" max="1000" value="0" step="1" aria-label="scrub the fold">
+  </div>
+  <div class="turn mono" id="turn">A finished perfect game — four colors, one pinwheel.</div>
+  <div class="vlabel" id="vlabel"></div>
+  <p class="cap">Press <b>Play</b> to unfold the four arms. Once the board returns, <b>click any color</b> to highlight its matching quarter in the game &mdash; <b>click it again</b> (or scrub back) to clear the highlight.</p>
+</div>
+
+<script>
+const DATA = {"pieces":[{"name":"I1","cells":[[0,0]],"size":1},{"name":"I2","cells":[[0,0],[0,1]],"size":2},{"name":"I3","cells":[[0,0],[0,1],[0,2]],"size":3},{"name":"V3","cells":[[0,0],[1,0],[1,1]],"size":3},{"name":"I4","cells":[[0,0],[0,1],[0,2],[0,3]],"size":4},{"name":"L4","cells":[[0,0],[1,0],[2,0],[2,1]],"size":4},{"name":"T4","cells":[[0,0],[0,1],[0,2],[1,1]],"size":4},{"name":"S4","cells":[[0,1],[0,2],[1,0],[1,1]],"size":4},{"name":"O4","cells":[[0,0],[0,1],[1,0],[1,1]],"size":4},{"name":"F5","cells":[[0,1],[0,2],[1,0],[1,1],[2,1]],"size":5},{"name":"I5","cells":[[0,0],[0,1],[0,2],[0,3],[0,4]],"size":5},{"name":"L5","cells":[[0,0],[1,0],[2,0],[3,0],[3,1]],"size":5},{"name":"N5","cells":[[0,1],[1,1],[2,0],[2,1],[3,0]],"size":5},{"name":"P5","cells":[[0,0],[0,1],[1,0],[1,1],[2,0]],"size":5},{"name":"T5","cells":[[0,0],[0,1],[0,2],[1,1],[2,1]],"size":5},{"name":"U5","cells":[[0,0],[0,2],[1,0],[1,1],[1,2]],"size":5},{"name":"V5","cells":[[0,0],[1,0],[2,0],[2,1],[2,2]],"size":5},{"name":"W5","cells":[[0,0],[1,0],[1,1],[2,1],[2,2]],"size":5},{"name":"X5","cells":[[0,1],[1,0],[1,1],[1,2],[2,1]],"size":5},{"name":"Y5","cells":[[0,1],[1,0],[1,1],[2,1],[3,1]],"size":5},{"name":"Z5","cells":[[0,0],[0,1],[1,1],[2,1],[2,2]],"size":5}],"game":{"name":"I2_H44_E00_01","moves":[{"move":1,"color":"R","piece":"I2","orient":1,"cells":[[0,0],[0,1]]},{"move":2,"color":"B","piece":"I2","orient":2,"cells":[[0,19],[1,19]]},{"move":3,"color":"G","piece":"I2","orient":1,"cells":[[19,18],[19,19]]},{"move":4,"color":"Y","piece":"I2","orient":2,"cells":[[18,0],[19,0]]},{"move":5,"color":"R","piece":"S4","orient":2,"cells":[[1,2],[2,2],[2,3],[3,3]]},{"move":6,"color":"B","piece":"S4","orient":1,"cells":[[2,17],[2,18],[3,16],[3,17]]},{"move":7,"color":"G","piece":"S4","orient":2,"cells":[[16,16],[17,16],[17,17],[18,17]]},{"move":8,"color":"Y","piece":"S4","orient":1,"cells":[[16,2],[16,3],[17,1],[17,2]]},{"move":9,"color":"R","piece":"F5","orient":6,"cells":[[3,6],[4,4],[4,5],[4,6],[5,5]]},{"move":10,"color":"B","piece":"F5","orient":7,"cells":[[4,15],[5,14],[5,15],[6,15],[6,16]]},{"move":11,"color":"G","piece":"F5","orient":8,"cells":[[14,14],[15,13],[15,14],[15,15],[16,13]]},{"move":12,"color":"Y","piece":"F5","orient":5,"cells":[[13,3],[13,4],[14,4],[14,5],[15,4]]},{"move":13,"color":"R","piece":"V5","orient":2,"cells":[[6,6],[6,7],[6,8],[7,6],[8,6]]},{"move":14,"color":"B","piece":"V5","orient":3,"cells":[[6,11],[6,12],[6,13],[7,13],[8,13]]},{"move":15,"color":"G","piece":"V5","orient":4,"cells":[[11,13],[12,13],[13,11],[13,12],[13,13]]},{"move":16,"color":"Y","piece":"V5","orient":1,"cells":[[11,6],[12,6],[13,6],[13,7],[13,8]]},{"move":17,"color":"R","piece":"U5","orient":4,"cells":[[6,3],[6,4],[7,4],[8,3],[8,4]]},{"move":18,"color":"B","piece":"U5","orient":1,"cells":[[3,11],[3,13],[4,11],[4,12],[4,13]]},{"move":19,"color":"G","piece":"U5","orient":2,"cells":[[11,15],[11,16],[12,15],[13,15],[13,16]]},{"move":20,"color":"Y","piece":"U5","orient":3,"cells":[[15,6],[15,7],[15,8],[16,6],[16,8]]},{"move":21,"color":"R","piece":"W5","orient":3,"cells":[[8,0],[8,1],[9,1],[9,2],[10,2]]},{"move":22,"color":"B","piece":"W5","orient":4,"cells":[[0,11],[1,10],[1,11],[2,9],[2,10]]},{"move":23,"color":"G","piece":"W5","orient":1,"cells":[[9,17],[10,17],[10,18],[11,18],[11,19]]},{"move":24,"color":"Y","piece":"W5","orient":2,"cells":[[17,9],[17,10],[18,8],[18,9],[19,8]]},{"move":25,"color":"R","piece":"N5","orient":1,"cells":[[11,1],[12,1],[13,0],[13,1],[14,0]]},{"move":26,"color":"B","piece":"N5","orient":2,"cells":[[0,5],[0,6],[1,6],[1,7],[1,8]]},{"move":27,"color":"G","piece":"N5","orient":3,"cells":[[5,19],[6,18],[6,19],[7,18],[8,18]]},{"move":28,"color":"Y","piece":"N5","orient":4,"cells":[[18,11],[18,12],[18,13],[19,13],[19,14]]},{"move":29,"color":"R","piece":"Z5","orient":2,"cells":[[14,3],[15,1],[15,2],[15,3],[16,1]]},{"move":30,"color":"B","piece":"Z5","orient":1,"cells":[[1,3],[1,4],[2,4],[3,4],[3,5]]},{"move":31,"color":"G","piece":"Z5","orient":2,"cells":[[3,18],[4,16],[4,17],[4,18],[5,16]]},{"move":32,"color":"Y","piece":"Z5","orient":1,"cells":[[16,14],[16,15],[17,15],[18,15],[18,16]]},{"move":33,"color":"R","piece":"T4","orient":2,"cells":[[16,4],[17,3],[17,4],[18,4]]},{"move":34,"color":"B","piece":"T4","orient":3,"cells":[[3,2],[4,1],[4,2],[4,3]]},{"move":35,"color":"G","piece":"T4","orient":4,"cells":[[1,15],[2,15],[2,16],[3,15]]},{"move":36,"color":"Y","piece":"T4","orient":1,"cells":[[15,16],[15,17],[15,18],[16,17]]},{"move":37,"color":"R","piece":"I5","orient":1,"cells":[[5,9],[5,10],[5,11],[5,12],[5,13]]},{"move":38,"color":"B","piece":"I5","orient":2,"cells":[[9,14],[10,14],[11,14],[12,14],[13,14]]},{"move":39,"color":"G","piece":"I5","orient":1,"cells":[[14,6],[14,7],[14,8],[14,9],[14,10]]},{"move":40,"color":"Y","piece":"I5","orient":2,"cells":[[6,5],[7,5],[8,5],[9,5],[10,5]]},{"move":41,"color":"R","piece":"L5","orient":3,"cells":[[1,13],[1,14],[2,14],[3,14],[4,14]]},{"move":42,"color":"B","piece":"L5","orient":4,"cells":[[13,18],[14,15],[14,16],[14,17],[14,18]]},{"move":43,"color":"G","piece":"L5","orient":1,"cells":[[15,5],[16,5],[17,5],[18,5],[18,6]]},{"move":44,"color":"Y","piece":"L5","orient":2,"cells":[[5,1],[5,2],[5,3],[5,4],[6,1]]},{"move":45,"color":"R","piece":"T5","orient":4,"cells":[[6,14],[7,14],[7,15],[7,16],[8,14]]},{"move":46,"color":"B","piece":"T5","orient":1,"cells":[[14,11],[14,12],[14,13],[15,12],[16,12]]},{"move":47,"color":"G","piece":"T5","orient":2,"cells":[[11,5],[12,3],[12,4],[12,5],[13,5]]},{"move":48,"color":"Y","piece":"T5","orient":3,"cells":[[3,7],[4,7],[5,6],[5,7],[5,8]]},{"move":49,"color":"R","piece":"V3","orient":2,"cells":[[5,17],[5,18],[6,17]]},{"move":50,"color":"B","piece":"V3","orient":3,"cells":[[17,13],[17,14],[18,14]]},{"move":51,"color":"G","piece":"V3","orient":4,"cells":[[13,2],[14,1],[14,2]]},{"move":52,"color":"Y","piece":"V3","orient":1,"cells":[[1,5],[2,5],[2,6]]},{"move":53,"color":"R","piece":"L4","orient":3,"cells":[[2,7],[2,8],[3,8],[4,8]]},{"move":54,"color":"B","piece":"L4","orient":4,"cells":[[7,17],[8,15],[8,16],[8,17]]},{"move":55,"color":"G","piece":"L4","orient":1,"cells":[[15,11],[16,11],[17,11],[17,12]]},{"move":56,"color":"Y","piece":"L4","orient":2,"cells":[[11,2],[11,3],[11,4],[12,2]]},{"move":57,"color":"R","piece":"Y5","orient":6,"cells":[[0,7],[0,8],[0,9],[0,10],[1,9]]},{"move":58,"color":"B","piece":"Y5","orient":7,"cells":[[7,19],[8,19],[9,18],[9,19],[10,19]]},{"move":59,"color":"G","piece":"Y5","orient":8,"cells":[[18,10],[19,9],[19,10],[19,11],[19,12]]},{"move":60,"color":"Y","piece":"Y5","orient":5,"cells":[[9,0],[10,0],[10,1],[11,0],[12,0]]},{"move":61,"color":"R","piece":"O4","orient":1,"cells":[[9,15],[9,16],[10,15],[10,16]]},{"move":62,"color":"B","piece":"O4","orient":1,"cells":[[15,9],[15,10],[16,9],[16,10]]},{"move":63,"color":"G","piece":"O4","orient":1,"cells":[[9,3],[9,4],[10,3],[10,4]]},{"move":64,"color":"Y","piece":"O4","orient":1,"cells":[[3,9],[3,10],[4,9],[4,10]]},{"move":65,"color":"R","piece":"X5","orient":1,"cells":[[11,17],[12,16],[12,17],[12,18],[13,17]]},{"move":66,"color":"B","piece":"X5","orient":1,"cells":[[16,7],[17,6],[17,7],[17,8],[18,7]]},{"move":67,"color":"G","piece":"X5","orient":1,"cells":[[6,2],[7,1],[7,2],[7,3],[8,2]]},{"move":68,"color":"Y","piece":"X5","orient":1,"cells":[[1,12],[2,11],[2,12],[2,13],[3,12]]},{"move":69,"color":"R","piece":"I4","orient":2,"cells":[[13,19],[14,19],[15,19],[16,19]]},{"move":70,"color":"B","piece":"I4","orient":1,"cells":[[19,3],[19,4],[19,5],[19,6]]},{"move":71,"color":"G","piece":"I4","orient":2,"cells":[[3,0],[4,0],[5,0],[6,0]]},{"move":72,"color":"Y","piece":"I4","orient":1,"cells":[[0,13],[0,14],[0,15],[0,16]]},{"move":73,"color":"R","piece":"I3","orient":2,"cells":[[2,19],[3,19],[4,19]]},{"move":74,"color":"B","piece":"I3","orient":1,"cells":[[19,15],[19,16],[19,17]]},{"move":75,"color":"G","piece":"I3","orient":2,"cells":[[15,0],[16,0],[17,0]]},{"move":76,"color":"Y","piece":"I3","orient":1,"cells":[[0,2],[0,3],[0,4]]},{"move":77,"color":"R","piece":"P5","orient":6,"cells":[[0,17],[0,18],[1,16],[1,17],[1,18]]},{"move":78,"color":"B","piece":"P5","orient":7,"cells":[[16,18],[17,18],[17,19],[18,18],[18,19]]},{"move":79,"color":"G","piece":"P5","orient":8,"cells":[[18,1],[18,2],[18,3],[19,1],[19,2]]},{"move":80,"color":"Y","piece":"P5","orient":5,"cells":[[1,0],[1,1],[2,0],[2,1],[3,1]]},{"move":81,"color":"R","piece":"I1","orient":1,"cells":[[0,12]]},{"move":82,"color":"B","piece":"I1","orient":1,"cells":[[12,19]]},{"move":83,"color":"G","piece":"I1","orient":1,"cells":[[19,7]]},{"move":84,"color":"Y","piece":"I1","orient":1,"cells":[[7,0]]}]}};
+// per-game title (friendly label + raw id)
+(function(){
+  const NAMEMAP={
+    'I2_H44_E00_01':'The classic — all 44 empties pooled dead center',
+    'I2_H40_E01_01':'A central hole, plus a few scattered strays',
+    'F5_H00_E02_01':'No central hole — the void fully scattered',
+    'W5_H00_E02_01':'Scattered void, a W-piece opening',
+    'Y5_H00_E02_01':'Scattered void, a Y-piece opening',
+    'ASYMproof':'Zero symmetry — a fully asymmetric perfect game',
+    'pw_00001':'Near-pinwheel (peel-walk, early)',
+    'pw_00041':'Peel-walk, drifting off symmetry',
+    'pw_00077':'Peel-walk, further off',
+    'pw_00803':'The least-symmetric one found',
+    'pw_00009':'One corner changed',
+    'fourdiffstarts1':'Four different opening pieces',
+  };
+  const g=DATA.game.name;
+  document.getElementById('gametitle').innerHTML=
+    `<b>${NAMEMAP[g]||'A perfect Blokus game'}</b><span>${g}</span>`;
+})();
+const CELL=16, N=20, BW=N*CELL;
+const BX=(700-BW)/2, BY=18;
+const S=0.46;
+const SC=[104,268,432,596], RCY=435;
+const COLORS={R:'#d94a44',B:'#3f74dd',Y:'#e6b53c',G:'#4ca85f'};
+const CNAME={R:'Red',B:'Blue',Y:'Yellow',G:'Green'};
+const ORDER=['R','B','G','Y'];               // draw order: each mover sits above its target
+const SVGNS='http://www.w3.org/2000/svg';
+const svg=document.getElementById('svg');
+function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]); if(parent)parent.appendChild(e); return e;}
+
+const cellsOf=color=>DATA.game.moves.filter(m=>m.color===color);
+function centroidOf(color){let sr=0,sc=0,n=0;
+  for(const mv of cellsOf(color)) for(const [r,c] of mv.cells){sr+=r+0.5;sc+=c+0.5;n++;}
+  return {r:sr/n,c:sc/n};}
+function pivotOf(color){const t=centroidOf(color);return {x:BX+t.c*CELL,y:BY+t.r*CELL};}
+
+function matchDeg(color){
+  const rel=col=>{const t=centroidOf(col);
+    return cellsOf(col).flatMap(mv=>mv.cells).map(([r,c])=>[c+0.5-t.c, r+0.5-t.r]);};
+  const key=a=>new Set(a.map(([x,y])=>x.toFixed(2)+','+y.toFixed(2)));
+  const redK=key(rel('R')), X=rel(color);
+  for(const deg of [0,90,-90,180,-180,270,-270]){
+    const a=deg*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
+    const rot=X.map(([x,y])=>[x*ca-y*sa, x*sa+y*ca]);
+    const k=key(rot); if(k.size===redK.size && [...k].every(v=>redK.has(v))) return deg;
+  }
+  return null;   // no exact congruent-to-red rotation exists (asymmetric game)
+}
+const FIXEDROT={R:0,B:-90,G:180,Y:90};
+const isC4 = ORDER.every(c=>matchDeg(c)!==null);          // true only if every arm is a genuine rotation of red
+const MD={}; for(const c of ORDER) MD[c]=matchDeg(c) ?? FIXEDROT[c];
+
+// ---- pieces that DIFFER across the four templates -------------------------------------
+// rotate every colour's cells into red's frame (about the board centre), then find cells —
+// hence pieces — that differ from RED. Empty for a true C4 game (every arm equals red).
+function toRedFrame(r,c,deg){ const a=deg*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
+  const x=c+0.5-10, y=r+0.5-10, x2=x*ca-y*sa, y2=x*sa+y*ca;
+  return Math.round(y2+9.5)+','+Math.round(x2+9.5); }
+const _rf={}; for(const c of ORDER){ _rf[c]=new Set();
+  for(const mv of cellsOf(c)) for(const [r,cc] of mv.cells) _rf[c].add(toRedFrame(r,cc,MD[c])); }
+const _redSet=_rf['R'];   // RED is the reference: each arm is compared to it, so red stays clean
+const diffPieces={}; for(const c of ORDER) diffPieces[c]=cellsOf(c).filter(mv=>
+  mv.cells.some(([r,cc])=>!_redSet.has(toRedFrame(r,cc,MD[c]))));
+const diffEls=[];
+
+function perimeter(cells){
+  const has=new Set(cells.map(c=>c.r+','+c.c)); let d='';
+  for(const {r,c} of cells){const x=BX+c*CELL, y=BY+r*CELL;
+    if(!has.has((r-1)+','+c)) d+=`M${x} ${y}h${CELL}`;
+    if(!has.has((r+1)+','+c)) d+=`M${x} ${y+CELL}h${CELL}`;
+    if(!has.has(r+','+(c-1))) d+=`M${x} ${y}v${CELL}`;
+    if(!has.has(r+','+(c+1))) d+=`M${x+CELL} ${y}v${CELL}`;}
+  return d;
+}
+
+// scenery
+el('rect',{x:BX,y:BY,width:BW,height:BW,fill:'var(--board)',rx:3},svg);
+let gd=''; for(let i=0;i<=N;i++) gd+=`M${BX+i*CELL} ${BY}V${BY+BW}M${BX} ${BY+i*CELL}H${BX+BW}`;
+el('path',{d:gd,stroke:'#8b93a8','stroke-opacity':0.22,'stroke-width':0.5,fill:'none'},svg);
+// the full game, ghosted — kept PER COLOUR so we can spotlight one quarter at a time
+const bd={};
+for(const color of ORDER){
+  const g=el('g',{opacity:0.12},svg); bd[color]=g;
+  for(const mv of cellsOf(color)){
+    const cells=mv.cells.map(c=>({r:c[0],c:c[1]}));
+    for(const {r,c} of cells)
+      el('rect',{x:BX+c*CELL,y:BY+r*CELL,width:CELL,height:CELL,fill:COLORS[color]},g);
+    el('path',{d:perimeter(cells),stroke:'#0d0f16','stroke-width':1,fill:'none','stroke-linecap':'square'},g);
+  }
+}
+
+const defs=el('defs',{},svg);
+const filt=el('filter',{id:'lift',x:'-30%',y:'-30%',width:'160%',height:'160%'},defs);
+el('feDropShadow',{dx:0,dy:5,stdDeviation:6,'flood-color':'#000','flood-opacity':0.5},filt);
+
+const group={};
+for(const color of ORDER){
+  const g=el('g',{filter:'url(#lift)'},svg);
+  for(const mv of cellsOf(color)){
+    const cells=mv.cells.map(c=>({r:c[0],c:c[1]}));
+    for(const {r,c} of cells)
+      el('rect',{x:BX+c*CELL,y:BY+r*CELL,width:CELL,height:CELL,fill:COLORS[color]},g);
+    el('path',{d:perimeter(cells),stroke:'#0d0f16','stroke-width':1,fill:'none','stroke-linecap':'square'},g);
+  }
+  for(const mv of diffPieces[color]){                 // thin bright border on the differing pieces
+    const cells=mv.cells.map(c=>({r:c[0],c:c[1]}));
+    diffEls.push(el('path',{d:perimeter(cells),stroke:'#ffffff','stroke-width':2.2,fill:'none',
+      'stroke-linejoin':'round','stroke-linecap':'round',opacity:0,'pointer-events':'none'},g));
+  }
+  group[color]=g;
+}
+
+// per-colour region outline (white), drawn on top of the board; shown when that colour is spotlit
+const hl={};
+for(const color of ORDER){
+  const cells=cellsOf(color).flatMap(mv=>mv.cells).map(x=>({r:x[0],c:x[1]}));
+  hl[color]=el('path',{d:perimeter(cells),stroke:'#ffffff','stroke-width':2.6,fill:'none',
+    'stroke-linejoin':'round','stroke-linecap':'round',opacity:0,'pointer-events':'none'},svg);
+}
+
+// click a colour at the bottom -> spotlight its quarter in the board
+let selected=null;
+function selectColor(color){
+  if(pos<T-0.5){ stopPlay(); setAt(T); selected=color; render(); updateHint(); return; }
+  selected=(selected===color?null:color); render(); updateHint();
+}
+// big invisible click zones over each bottom slot — no need to hit the pixels exactly
+ORDER.forEach((color,i)=>{
+  const z=el('rect',{x:SC[i]-80,y:RCY-80,width:160,height:160,fill:'transparent','pointer-events':'all'},svg);
+  z.style.cursor='pointer';
+  z.addEventListener('click',()=>selectColor(color));
+});
+
+// pose -> matrix (+ opacity)
+const HOME={}; for(const c of ORDER){const p=pivotOf(c); HOME[c]={deg:0,scale:1,cx:p.x,cy:p.y,op:1};}
+function matFromPose(color,pose){
+  const p=pivotOf(color), a=pose.deg*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
+  const A00=pose.scale*ca, A01=-pose.scale*sa, A10=pose.scale*sa, A11=pose.scale*ca;
+  return {a:A00,b:A10,c:A01,d:A11,
+    e:pose.cx-(A00*p.x+A01*p.y), f:pose.cy-(A10*p.x+A11*p.y)};
+}
+function setPose(color,pose){const m=matFromPose(color,pose);
+  const g=group[color];
+  g.setAttribute('transform',`matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e} ${m.f})`);
+  g.setAttribute('opacity',pose.op);
+}
+const at=(color,slot,deg,op)=>({deg:deg||0,scale:S,cx:SC[slot],cy:RCY,op:op===undefined?1:op});
+
+// ---- the choreography ----
+const STAGES=[
+  {dur:700,label:'Peel red',set:{R:at('R',0,0)}},
+  {dur:700,label:'Peel blue',set:{B:at('B',1,0)}},
+  {dur:700,label:'Peel green',set:{G:at('G',2,0)}},
+  {dur:700,label:'Peel yellow — four spirals, four orientations',set:{Y:at('Y',3,0)}},
+  {dur:850,label:'Rotate blue to red&rsquo;s orientation',set:{B:at('B',1,MD.B)}},
+  {dur:850,label:'Rotate green to red&rsquo;s orientation',set:{G:at('G',2,MD.G)}},
+  {dur:850,label:'Rotate yellow to red&rsquo;s orientation'+(isC4?' — all four identical now':' — note they do NOT match (no symmetry)'),set:{Y:at('Y',3,MD.Y)}},
+  {dur:1100,label:'Click any color to highlight its quarter (click again to clear)',set:{},bg:1},
+];
+
+// cumulative states
+let states=[{}], durs=[0], cur={}, playing=false, raf=null;
+for(const c of ORDER) states[0][c]={...HOME[c]};
+states[0]._bg=0.12;
+for(const st of STAGES){ const s={}, prev=states[states.length-1];
+  for(const c of ORDER) s[c]={...(st.set[c]||prev[c])};
+  s._bg = st.bg!==undefined ? st.bg : prev._bg;
+  states.push(s); durs.push(st.dur); }
+for(const c of ORDER) cur[c]={...states[0][c]};
+cur._bg=states[0]._bg;
+
+function render(){
+  for(const c of ORDER) setPose(c,cur[c]);
+  for(const c of ORDER){
+    const base=cur._bg;
+    bd[c].setAttribute('opacity', selected&&c!==selected ? base*0.13 : base);        // dim the others
+    hl[c].setAttribute('opacity', (selected===c && base>0.5) ? 1 : 0);               // white outline on the spotlit one
+    if(selected) group[c].setAttribute('opacity', c===selected ? cur[c].op : cur[c].op*0.28);  // dim the other arms
+  }
+  for(const d of diffEls) d.setAttribute('opacity', cur._bg>0.9 ? 1 : 0);            // differing pieces, once unfolded
+}
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const FADE_HOLD=0.55;
+const fadeCurve=p=> p<FADE_HOLD ? 0 : ease((p-FADE_HOLD)/(1-FADE_HOLD));
+const lerpP=(a,b,u,uop)=>({deg:a.deg+(b.deg-a.deg)*u, scale:a.scale+(b.scale-a.scale)*u,
+  cx:a.cx+(b.cx-a.cx)*u, cy:a.cy+(b.cy-a.cy)*u, op:a.op+(b.op-a.op)*uop});
+
+// ---- continuous timeline, scrubber-driven (same control model as the game player) ----
+const cum=[0]; for(let i=1;i<states.length;i++) cum[i]=cum[i-1]+durs[i];
+const T=cum[cum.length-1];
+let pos=0, stopAt=T, lastT=0;
+const scrub=document.getElementById('scrub'),
+      turn=document.getElementById('turn'), vlabel=document.getElementById('vlabel'),
+      btn=document.getElementById('play');
+scrub.max=T;
+
+function segAt(p){ if(p<=0) return {i:1,u:0}; if(p>=T) return {i:states.length-1,u:1};
+  let i=1; while(i<states.length-1 && p>cum[i]) i++; return {i,u:(p-cum[i-1])/durs[i]}; }
+function setAt(p){
+  pos=Math.max(0,Math.min(T,p));
+  if(pos<T-0.5) selected=null;                       // off the reveal clears the spotlight
+  const {i,u}=segAt(pos), e=ease(u), uop=fadeCurve(u);
+  for(const c of ORDER) cur[c]=lerpP(states[i-1][c],states[i][c],e,uop);
+  cur._bg=states[i-1]._bg+(states[i]._bg-states[i-1]._bg)*e;
+  render(); scrub.value=pos; updateLabel(); updateBtn();
+}
+function updateLabel(){
+  turn.innerHTML = pos<=0.5 ? (isC4?'A finished perfect game — four colors, one pinwheel.':'A finished perfect game — four colors, but no symmetry.')
+    : STAGES[segAt(pos).i-1].label;
+  updateHint();
+}
+function updateHint(){
+  if(selected) vlabel.innerHTML=`Spotlighting <b style="color:${COLORS[selected]}">${CNAME[selected]}</b>&rsquo;s quarter &mdash; click it again to clear`;
+  else vlabel.textContent = pos>=T-0.5 ? 'Unfolded — click any color to highlight.' : `${Math.round(pos/T*100)}% unfolded`;
+}
+function updateBtn(){ btn.innerHTML = playing ? '❚❚ Pause' : (pos>=T-0.5 ? '↻ Replay' : '▶ Play'); }
+
+function stopPlay(){ playing=false; if(raf)cancelAnimationFrame(raf); raf=null; }
+function frame(now){ if(!playing) return; const dt=now-lastT; lastT=now;
+  setAt(Math.min(pos+dt,stopAt));
+  if(pos>=stopAt-0.5){ setAt(stopAt); stopPlay(); updateBtn(); return; }
+  raf=requestAnimationFrame(frame); }
+function play(target){ stopAt=(target===undefined?T:target);
+  if(pos>=stopAt-0.5) return;
+  playing=true; updateBtn(); lastT=performance.now(); raf=requestAnimationFrame(frame); }
+
+// Replay = a swift single-move rewind: every arm flies home to the board (translate+rotate+
+// scale together) and the board fades back to ghost, all in one quick tween — not a slow unwind.
+let rewinding=false;
+function quickRewind(){
+  stopPlay(); selected=null; rewinding=true;
+  const from={_bg:cur._bg}; for(const c of ORDER) from[c]={...cur[c]};
+  const to=states[0], dur=560, start=performance.now();
+  (function frame(now){ let p=(now-start)/dur; if(p>1)p=1; const e=ease(p);
+    for(const c of ORDER) cur[c]=lerpP(from[c],to[c],e,e);
+    cur._bg=from._bg+(to._bg-from._bg)*e;
+    render(); scrub.value=T*(1-e);
+    if(p<1) raf=requestAnimationFrame(frame);
+    else{ rewinding=false; pos=0; scrub.value=0; render(); updateLabel(); updateBtn(); }
+  })(start);
+}
+btn.onclick=()=>{ if(rewinding) return;
+  if(playing){ stopPlay(); updateBtn(); return; }
+  if(pos>=T-0.5){ quickRewind(); return; }   // at the end -> swift rewind home
+  play(T); };
+scrub.oninput=()=>{ stopPlay(); setAt(+scrub.value); };
+document.getElementById('stepFwd').onclick=()=>{ stopPlay();
+  let t=T; for(let i=1;i<cum.length;i++){ if(cum[i]>pos+0.5){ t=cum[i]; break; } }
+  play(t); };                                          // play forward to the next stage boundary
+document.getElementById('stepBack').onclick=()=>{ stopPlay();
+  let t=0; for(let i=cum.length-1;i>=0;i--){ if(cum[i]<pos-0.5){ t=cum[i]; break; } }
+  setAt(t); };                                         // snap back to the previous boundary
+
+setAt(0);
+// open with ?ready=1 to start already unfolded + clickable (scrub-to-end shortcut)
+if(/ready|end|static/i.test(location.search+location.hash)) setAt(T);
+</script>
+</body>
+</html>
