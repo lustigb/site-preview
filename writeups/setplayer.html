@@ -121,11 +121,15 @@
     .mod figure > div{padding-left:8px !important; padding-right:8px !important}
   }
   .mod figure:has(> script) > div{box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent)}
-  /* Hover highlight on everything clickable (a mouse only, so it never sticks after a tap on a phone). Each box
-     lays an invisible .hit rectangle over its cards and buttons; tint + outline that rectangle on hover. */
+  /* Hover cues on everything clickable, kept quiet (a mouse only, so nothing sticks after a tap on a phone).
+     Each box lays an invisible .hit rectangle over its cards and buttons, drawn right after the thing it covers:
+     cards get a crisp edge + slight lift, text buttons go bold with a darker border, feature words brighten. */
   @media (hover:hover){
-    .setmatrix .hit:hover, .setbuild .hit:hover, .setcomplete .hit:hover, .setisset .hit:hover{
-      fill:color-mix(in srgb, var(--accent) 12%, transparent); stroke:var(--accent); stroke-width:2; stroke-opacity:.7}
+    .setcomplete .cardg:has(+ .hit:hover), .setisset .cardg:has(+ .hit:hover){
+      filter:drop-shadow(0 0 1.1px rgba(0,0,0,.7)) drop-shadow(0 3px 5px rgba(0,0,0,.18))}
+    .setcomplete g:has(> .hit:hover) > text, .setisset g:has(> .hit:hover) > text{opacity:1 !important; font-weight:800}
+    .setcomplete g:has(> .hit:hover) > rect:not(.hit), .setisset g:has(> .hit:hover) > rect:not(.hit){stroke:var(--ink); stroke-opacity:.85}
+    .setmatrix .hit:hover + text{opacity:1 !important}
   }
 </style>
 
