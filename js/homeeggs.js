@@ -10,7 +10,7 @@
 // window.prepareEgg() loads the player ahead of time, still invisible (titlecode.js calls it when the
 // first letter of the code locks in), so the egg starts the moment the code is finished instead of
 // after a ~1 s download. An unused prepared player is dropped after PREPARED_MS.
-// While an egg plays, a small pill on the photo says which one it is ("Easter egg 4 of 13"), so people can
+// While an egg plays, a small note centred just under the title says which one it is ("Easter egg 4 of 13"), so people can
 // tell the eggs apart and know how many there are.
 // Sound: phones only allow audio that starts from a tap on THIS page (not the egg's iframe), so titlecode.js calls
 // window.unlockEggAudio() while you press the code letters, and eggs with music (pixelRoll) get it played from here.
@@ -25,15 +25,21 @@
   const tag = document.createElement('div');               // "Easter egg x of N" while one plays
   tag.className = 'egg-tag';
   tag.setAttribute('aria-live', 'polite');
-  tag.style.cssText = 'position:absolute; right:8px; bottom:8px; z-index:3; pointer-events:none;'
-                    + 'font:500 12px/1.2 var(--font-ui, system-ui, sans-serif); color:#fff;'
-                    + 'background:rgba(20,22,26,.62); border-radius:999px; padding:4px 10px;'
+  // Centred just under the "Brian Sciences" title: never covers the animation or the circuit traces (Brian, 2026-10-28).
+  // It floats (absolute), so showing it never shifts the page.
+  tag.style.cssText = 'position:absolute; left:50%; transform:translateX(-50%); z-index:3; pointer-events:none; white-space:nowrap;'
+                    + 'font:500 12px/1.2 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c);'
+                    + 'background:color-mix(in srgb, var(--ink, #1a1f1c) 9%, var(--bg, #f3f5f0));'   // a shade darker than the page
+                    + 'border:1px solid var(--line, #cfd6cb); border-radius:999px; padding:3px 10px;'   // (lighter in dark mode)
                     + 'opacity:0; transition:opacity .4s ease;';
-  if (getComputedStyle(box).position === 'static') box.style.position = 'relative';
-  box.appendChild(tag);
+  const title = document.querySelector('.home-page .hero h1');
+  const tagHome = title ? title.parentElement : box;       // the title's own container
+  if (getComputedStyle(tagHome).position === 'static') tagHome.style.position = 'relative';
+  tagHome.appendChild(tag);
   function showTag(n, total) {
     if (!n || !total) return;
-    tag.textContent = `🥚 Easter egg ${n} of ${total}`;
+    tag.style.top = title ? (title.offsetTop + title.offsetHeight + 8) + 'px' : 'calc(100% + 6px)';   // just under the title
+    tag.textContent = `🥚 Secret egg ${n} of ${total}`;
     tag.style.opacity = 1;
   }
   const hideTag = () => { tag.style.opacity = 0; };

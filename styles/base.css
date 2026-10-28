@@ -369,9 +369,9 @@ a.secret-link, a.secret-link:hover, a.secret-link:visited { color: inherit; text
    between the title (hold-to-enter secret letters) and the first card so long-presses don't land on it. */
 @media (max-width: 760px) {
   body:has(.home-page) .site-footer { display: none; }
-  .home-page .hero { padding: 10px 0 24px; gap: 10px; margin-bottom: 0; }
+  .home-page .hero { padding: 10px 0 24px; gap: 34px; margin-bottom: 0; }   /* title sits lower: longer circuit-trace run up to the photo */
   .home-page .hero .signature { width: auto; height: min(40svh, 93vw); max-height: none; }
-  .home-page .hero h1 { font-size: clamp(2rem, 9.5vw, 2.6rem); margin-bottom: 14px; }   /* room below the code letters' bigger touch targets */
+  .home-page .hero h1 { font-size: clamp(2.2rem, 11.5vw, 3.1rem); margin-bottom: 14px; }   /* room below the code letters' bigger touch targets */
   .home-page .doors { padding: 20px 0 0; margin-bottom: 0; }
   .home-page .door-grid { gap: 8px; }
   .home-page .door { padding: 9px 14px; }
