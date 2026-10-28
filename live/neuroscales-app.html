@@ -88,8 +88,12 @@ button{font:inherit;color:inherit}
 .m-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px 16px;flex-wrap:wrap;margin-bottom:6px}
 .m-head h2{font-family:var(--f-display);font-weight:400;font-size:24px;margin:0;line-height:1.15}
 .m-head h2 em{font-style:italic}
-.legend{display:flex;flex-wrap:wrap;gap:4px 6px}
-.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:none;border-radius:999px;padding:2px 9px 2px 7px;font-size:12px;cursor:pointer;color:var(--ink2)}
+.legend{display:flex;flex-wrap:nowrap;gap:4px 6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:none;border-radius:999px;padding:2px 9px 2px 7px;font-size:12px;cursor:pointer;color:var(--ink2);white-space:nowrap}
+/* keep the five method families on one line in a narrower window (they used to wrap to two); phones still wrap */
+@media (max-width:1380px){.legend{gap:4px}.legend .chip{font-size:11px;gap:4px;padding:2px 7px 2px 5px}}
+@media (max-width:1150px){.legend .chip{font-size:10.5px;padding:1px 6px 1px 5px}.legend .chip i{width:8px;height:8px}}
+@media (max-width:820px){.legend{flex-wrap:wrap}}
 .chip i{width:9px;height:9px;border-radius:3px;flex:none}
 .chip[aria-pressed="false"]{opacity:.45}
 .chip[aria-pressed="false"] i{background:transparent!important;outline:1.5px solid var(--ink3)}
