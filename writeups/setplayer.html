@@ -1,3 +1,4 @@
+<div style="font:14px/1.45 -apple-system,system-ui,sans-serif;background:#fbeec2;color:#5c4708;border-bottom:2px solid #d4a72c;padding:9px 20px;text-align:center"><b>Draft: very much under construction.</b></div>
 <title>Automatic SET detection phone app</title>
 <style>
   :root{
@@ -48,6 +49,9 @@
      sections drifted apart. Now: less between sections, more between a title and its
      copy, and real air under a module. */
   section.mod{max-width:1080px; margin:0 auto; padding:54px 26px}
+  .part{padding-top:40px; padding-bottom:6px; border-top:1px solid var(--hair, #e2e0da); margin-top:30px}
+  .roadmap{max-width:var(--measure); margin-left:auto; margin-right:auto; padding-left:1.3em; box-sizing:border-box}
+  .roadmap li{margin:.35em 0} .roadmap a{color:inherit}
   section.mod h2{text-align:center; margin-bottom:.85em}
   section.mod > p{max-width:var(--measure); margin-left:auto; margin-right:auto}
   section.mod figure{margin:30px 0 34px}
@@ -104,7 +108,6 @@
 </style>
 
 <nav aria-label="Site" style="font:13px/1.4 -apple-system,system-ui,sans-serif;color:#b4bacb;background:#15171d;margin:0;padding:10px max(20px, calc((100% - 860px) / 2));display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px;font-weight:600;text-decoration:none" href="../index.html">Brian Sciences</a><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../project-setplayer.html">About this project · more projects →</a></nav>
-<div style="font:14px/1.45 -apple-system,system-ui,sans-serif;background:#fbeec2;color:#5c4708;border-bottom:2px solid #d4a72c;padding:9px 20px;text-align:center"><b>Draft: very much under construction.</b></div>
 <header class="wrap">
   <div class="ey">Computer vision &middot; on-device</div>
   <h1>Automatic SET detection phone app</h1>
@@ -120,7 +123,16 @@
   <p>In high school my good friend Laura introduced me to the card game SET. What I love
   about it is how the deceptively simple rules create a brain teaser in the form of a
   visual perception working memory search puzzle.</p>
+  <p>This write-up has three parts:</p>
+  <ol class="roadmap">
+    <li><a href="#part1"><b>The game.</b></a> Interactive explainers of how SET works: click and play with them.</li>
+    <li><a href="#part2"><b>The app.</b></a> A short demo video of it working.</li>
+    <li><a href="#part3"><b>How it was made.</b></a> An automatic, AI-written account of the details of the process.
+      Honestly, a bit junky to read.</li>
+  </ol>
 </section>
+
+<div class="wrap part" id="part1"><span class="num">PART 1 &middot; THE GAME</span></div>
 
 
 
@@ -2682,6 +2694,24 @@ function mkText(svg, size, weight){
   <p>The game continues until the deck runs out, and at the very end there may be a few
   cards left on the table that do not make a SET. The player with the most points &mdash;
   the biggest stack of SETs in front of them &mdash; wins.</p>
+</section>
+
+
+<section class="wrap part" id="part2">
+  <span class="num">PART 2 &middot; THE APP</span>
+  <h2>The app in action</h2>
+  <p>Here is a clip of it working in an early development mode. Later I added more polish, with a voice that
+  tells me when it has found a SET and can read it out if I want.</p>
+  <figure><video controls playsinline preload="metadata" style="width:100%;max-width:420px;display:block;margin:0 auto;border-radius:8px">
+    <source src="../media/setplayer_demo.mp4" type="video/mp4"></video></figure>
+  <p>App and code download: coming soon.</p>
+</section>
+
+
+<section class="wrap part" id="part3">
+  <span class="num">PART 3 &middot; HOW IT WAS MADE</span>
+  <p><em>Fair warning: this part was written automatically by AI from my project notes. It covers the details of
+  the process, but it's honestly a bit junky to read.</em></p>
 </section>
 
 
