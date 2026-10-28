@@ -1,4 +1,5 @@
 <div style="font:14px/1.45 -apple-system,system-ui,sans-serif;background:#fbeec2;color:#5c4708;border-bottom:2px solid #d4a72c;padding:9px 20px;text-align:center"><b>Draft: very much under construction.</b></div>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Automatic SET detection phone app</title>
 <style>
   :root{
@@ -105,6 +106,24 @@
            --hi:#000000; --accent:#0f7fc4; }
     body{background-image:radial-gradient(1200px 620px at 72% -8%, #f0ecf6 0%, rgba(240,236,246,0) 62%)}
   }
+
+  /* Readability pass (2026-10-28): phones get real-size text (viewport tag above) with slimmer margins; wide
+     screens get a little bigger text and wider boxes; every interactive box gets an "Interactive" cue. */
+  @media (min-width:1150px){
+    body{font-size:20px}
+    :root{--measure:70ch}
+    .mod figure > div{max-width:980px !important}
+  }
+  @media (max-width:640px){
+    body{font-size:17px; line-height:1.6}
+    .mod{padding:34px 12px}
+    .wrap{padding:0 16px}
+    .mod figure > div{padding-left:8px !important; padding-right:8px !important}
+  }
+  .mod figure:has(> script)::before{content:"\25B6\00A0 Interactive\00A0\00B7\00A0 click or tap"; display:block; width:max-content;
+    margin:0 auto 10px; font:600 12px/1 system-ui,-apple-system,sans-serif; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--accent); border:1px solid currentColor; border-radius:999px; padding:6px 12px}
+  .mod figure:has(> script) > div{box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent)}
 </style>
 
 <nav aria-label="Site" style="font:13px/1.4 -apple-system,system-ui,sans-serif;color:#b4bacb;background:#15171d;margin:0;padding:10px max(20px, calc((100% - 860px) / 2));display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px;font-weight:600;text-decoration:none" href="../index.html">Brian Sciences</a><a style="color:#e9eaf1;text-decoration:underline;text-underline-offset:3px" href="../project-setplayer.html">About this project · more projects →</a></nav>
