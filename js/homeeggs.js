@@ -12,6 +12,10 @@
 // after a ~1 s download. An unused prepared player is dropped after PREPARED_MS.
 // While an egg plays, a small note centred just under the title says which one it is ("Easter egg 4 of 13"), so people can
 // tell the eggs apart and know how many there are.
+// Which egg: the home page picks it (pickEgg), favouring eggs this visitor hasn't seen yet in this tab: an unseen egg
+// is UNSEEN_BOOST times as likely as a seen one, and never the same one twice in a row. Repeats stay possible, just
+// rarer; simulated, ~27 plays see all of them (vs ~55 with a plain random pick). "Seen" lives in sessionStorage: this
+// tab only, gone when it closes, never sent anywhere (no cookies).
 // Sound: phones only allow audio that starts from a tap on THIS page (not the egg's iframe), so titlecode.js calls
 // window.unlockEggAudio() while you press the code letters, and eggs with music (pixelRoll) get it played from here.
 (function () {
@@ -21,6 +25,20 @@
   const PREPARED_MS = 60000;
   let busy = false, lastEgg = null;
   let prepared = null;                                     // { frame, ready, drop } waiting to play
+  const UNSEEN_BOOST = 4, SEEN_KEY = 'bs-eggs-seen';
+  const seenEggs = () => { try { return JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]'); } catch (e) { return []; } };
+  function markSeen(name) {
+    try { const s = seenEggs(); if (!s.includes(name)) { s.push(name); sessionStorage.setItem(SEEN_KEY, JSON.stringify(s)); } }
+    catch (e) { /* storage blocked: the pick is just plain random */ }
+  }
+  function pickEgg(names) {                                // names: every playable egg, from the player's ready message
+    if (!names || !names.length) return undefined;         // unknown list: the player picks at random itself
+    const seen = seenEggs(), pool = names.filter(n => n !== lastEgg);
+    const w = pool.map(n => (seen.includes(n) ? 1 : UNSEEN_BOOST));
+    let r = Math.random() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r < 0) return pool[i]; }
+    return pool[pool.length - 1];
+  }
 
   const tag = document.createElement('div');               // "Easter egg x of N" while one plays
   tag.className = 'egg-tag';
@@ -81,7 +99,8 @@
   window.prepareEgg = function () {
     if (busy || prepared) return;
     const p = prepared = { frame: makeFrame(), ready: false };
-    p.onReady = ev => { if (ev.source === p.frame.contentWindow && ev.data?.type === 'egglab-ready') p.ready = true; };
+    p.onReady = ev => { if (ev.source === p.frame.contentWindow && ev.data?.type === 'egglab-ready') {
+      p.ready = true; p.eggs = (ev.data.eggs || []).map(e => e.name); } };
     addEventListener('message', p.onReady);
     p.drop = setTimeout(() => { if (prepared === p) { prepared = null; removeEventListener('message', p.onReady); p.frame.remove(); } }, PREPARED_MS);
   };
@@ -91,10 +110,11 @@
     busy = true;
     window.shankWind?.pause();
 
-    let frame, alreadyReady = false;
+    let frame, alreadyReady = false, eggNames = null;
     if (prepared) {                                        // use the player loaded ahead of time
       frame = prepared.frame;
       alreadyReady = prepared.ready;
+      eggNames = prepared.eggs || null;
       clearTimeout(prepared.drop);
       removeEventListener('message', prepared.onReady);
       prepared = null;
@@ -105,15 +125,17 @@
     let safety = setTimeout(done, 15000);                  // the player never said ready: give up
     function start() {
       frame.style.opacity = 1;
-      frame.contentWindow.postMessage({ type: 'egglab-play', name }, '*');
+      frame.contentWindow.postMessage({ type: 'egglab-play', name: name || pickEgg(eggNames) }, '*');
     }
     function onMessage(ev) {
       if (ev.source !== frame.contentWindow) return;
       const m = ev.data || {};
       if (m.type === 'egglab-ready') {
+        eggNames = (m.eggs || []).map(e => e.name);
         start();
       } else if (m.type === 'egglab-playing') {
         lastEgg = m.name;
+        markSeen(m.name);
         showTag(m.number, m.total);
         eggMusic(m.name);
         clearTimeout(safety);
