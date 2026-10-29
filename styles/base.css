@@ -445,6 +445,7 @@ body:has(#projgrid) .people-controls { margin-bottom: 18px; }
 
 /* Task Sims page: one entry per sim = thumbnail + title + play links, with an expandable "More details" */
 .sim { border-top: 1px solid var(--line); padding: 18px 0 8px; }
+.sims-list-head { margin: 56px 0 6px; }
 .sim-row { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
 .sim-thumb { width: 100%; display: block; border-radius: var(--radius); box-shadow: 0 1px 4px rgb(0 0 0 / 0.15); }
 .sim h2 { font-size: 1.05rem; line-height: 1.35; margin: 0 0 4px; }
@@ -516,4 +517,7 @@ body:has(#projgrid) .people-controls { margin-bottom: 18px; }
 .supp-videos { margin: 18px 0; }
 .dc .supp-videos .dc-figure, .dc:has(.page-head .meta a[href="research.html"]) .supp-videos .dc-figure { margin: 0 0 18px; width: 100%; max-width: 760px; background: var(--bg); }
 .supp-videos .dc-figure video { display: block; width: 100%; max-width: none; height: auto; background: #000; border-radius: 0; }
+/* Task Sims: the scaled-maze flyover, as wide as the text column */
+.dc-figure.sims-flyover { max-width: 860px; margin-top: 14px; background: #000; }
+.dc-figure.sims-flyover video { max-width: none; border-radius: 0; }
 .supp-videos figcaption { font-family: var(--font-ui); font-size: 0.85rem; color: var(--muted); padding: 8px 12px 10px; background: var(--bg); }
