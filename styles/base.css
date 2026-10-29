@@ -220,6 +220,15 @@ a.avatar { text-decoration: none; color: var(--muted); }
 .person h3 a::after { content: ""; position: absolute; inset: 0; }
 .psite { position: relative; z-index: 1; }
 .person-figure { max-width: 420px; }
+/* a clipped citation shown at about the page's text size, linking to the paper, with its source in the corner */
+.cite-clip { margin: 14px 0; width: 660px; max-width: 100%; }
+.cite-clip a { position: relative; display: block; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.cite-clip img { width: 100%; height: auto; display: block; }
+.cite-clip .cite-tag { position: absolute; right: 8px; bottom: 8px; font-family: var(--font-ui); font-size: .78rem; color: #333; background: rgba(255,255,255,.92); border: 1px solid #ccc; border-radius: 4px; padding: 2px 8px; }
+.cite-clip a:hover .cite-tag { color: var(--accent); border-color: currentColor; }
+.person-footnote p { font-size: .88rem; color: var(--muted); }
+.person-footnote .footnote-pic { margin: 8px 0 0; width: 300px; max-width: 100%; }
+.person-footnote .footnote-pic img { width: 100%; height: auto; display: block; border-radius: var(--radius); }
 
 /* Video lists: click a title to expand and play */
 .video-controls { display: flex; gap: 8px; margin: 0 0 10px; }
