@@ -308,7 +308,7 @@ speedSel.onchange=()=>{speed=+speedSel.value;};
 
 scrub.max=NMOVES;
 jumpTo(0);
-timers.push(setTimeout(()=>{if(k===0){playing=true;updateBtn();step();}},700));
+// waits for Play (no auto-start: on the website it started at random times as the lazy iframe loaded)
 </script>
 </body>
 </html>
