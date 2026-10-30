@@ -34,7 +34,7 @@
       <div class="filters">
         <button data-f="all" class="on">All</button><button data-f="mentor">Mentors</button><button data-f="collaborator">Collaborators</button>
       </div>
-      <label class="sortby">Sort <select id="sort"><option value="name" selected>A–Z</option><option value="role">by group</option></select></label>
+      <label class="sortby">Sort <select id="sort"><option value="role">by group</option><option value="first">first name A–Z</option><option value="last">last name A–Z</option></select></label>
     </div>
     <div class="people-grid" id="people">
       <div class="person" data-name="Eva Pastalkova" data-tags="mentor collaborator hippocampus"><a class="avatar" href="person-eva-pastalkova.html"><img src="img/people/eva-pastalkova.png" alt=""></a><div><h3><a href="person-eva-pastalkova.html">Eva Pastalkova</a></h3><p class="ptags"><span class="ptag">mentor</span><span class="ptag">collaborator</span><span class="ptag">hippocampus</span></p><p class="hover-line">My graduate advisor in the Janelia–UChicago ISTP program.</p></div></div>
@@ -76,15 +76,17 @@
   </section>
 </main>
 <script>
-  // Filter by tag and sort; loads A–Z, "by group" is the curated order in people.json.
+  // Filter by tag and sort; default "by group" is the curated order in people.json.
   const grid = document.getElementById("people");
   const cards = [...grid.children];
   let filter = "all";
-  const last = c => c.dataset.name.split(" ").pop();  // A–Z by last name
+  const first = c => c.dataset.name, last = c => c.dataset.name.split(" ").pop();
   function render() {
-    const order = document.getElementById("sort").value === "name"
-      ? [...cards].sort((a, b) => last(a).localeCompare(last(b)) || a.dataset.name.localeCompare(b.dataset.name))
-      : cards;
+    const by = document.getElementById("sort").value;
+    const order = by === "role" ? cards
+      : [...cards].sort((a, b) => by === "last"
+          ? last(a).localeCompare(last(b)) || first(a).localeCompare(first(b))
+          : first(a).localeCompare(first(b)));
     for (const c of order) {
       c.hidden = filter !== "all" && !c.dataset.tags.split(" ").includes(filter);
       grid.appendChild(c);
@@ -95,7 +97,7 @@
     filter = b.dataset.f; render();
   });
   document.getElementById("sort").onchange = render;
-  render();
+  render();  // honours a sort choice the browser restores on reload
 </script>
 
 <footer class="site-footer">
