@@ -70,15 +70,17 @@
       const b = eggAudio.createBuffer(1, 1, 22050), s = eggAudio.createBufferSource();   // a silent blip unlocks iOS
       s.buffer = b; s.connect(eggAudio.destination); s.start(0);
     } catch (e) { /* no audio: the eggs still play, silently */ }
-    if (!window.PixelRoll && !document.querySelector('script[data-pixelroll]')) {        // the pixelRoll music
+    [['PixelRoll', 'pixelroll'], ['EggSfx', 'eggsfx']].forEach(([global, file]) => {     // pixelRoll's music, other eggs' sound effects
+      if (window[global] || document.querySelector(`script[data-eggsound="${file}"]`)) return;
       const sc = document.createElement('script');
-      sc.src = 'egglab/pixelroll.js'; sc.dataset.pixelroll = '1';
+      sc.src = `egglab/${file}.js`; sc.dataset.eggsound = file;
       document.head.appendChild(sc);
-    }
+    });
   };
-  function eggMusic(name) {
-    if (name === 'pixelRoll' && eggAudio && window.PixelRoll)
+  function eggMusic(m) {
+    if (m.name === 'pixelRoll' && eggAudio && window.PixelRoll)
       window.PixelRoll.playMusic(eggAudio, eggAudio.currentTime + window.PixelRoll.IN);
+    if (m.sfx && eggAudio && window.EggSfx) window.EggSfx.play(eggAudio, m.sfx);
   }
 
   function makeFrame() {
@@ -137,7 +139,7 @@
         lastEgg = m.name;
         markSeen(m.name);
         showTag(m.number, m.total);
-        eggMusic(m.name);
+        eggMusic(m);
         clearTimeout(safety);
         safety = setTimeout(done, m.ms + 5000);            // the egg never said done: clean up anyway
       } else if (m.type === 'egglab-done') {

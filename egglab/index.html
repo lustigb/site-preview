@@ -154,6 +154,8 @@
 
 <script src="art/custom.js"></script>
 <script src="pixelroll.js"></script>
+<script src="eggsfx.js"></script>
+<script src="pelican.js"></script>
 <script>
 // ?player=1: the home page's egg player (see homeeggs.js in site/js). No panel, no idle eggs; it
 // plays one egg when the parent page asks and tells it when that egg is over.
@@ -1424,6 +1426,1744 @@ EGGS.pixelRoll = {
   },
 };
 
+// ---- icicleDrop: the shanks are icicles over a marshmallow floor ------------------------------------
+// The shanks slide up their own lines until only ragged tips hang from the photo's top edge, while a soft floor puffs
+// up from below. One by one, in random order, each trembles, cracks loose, free-falls and spears into the floor. In the
+// floor it is a damped spring around its resting depth, so it plunges too deep, bounces back a little and settles. The
+// floor dents with it, and each landing sends a ripple that makes the stakes already standing wobble. At the end the
+// floor sinks away and every shank eases back to its exact place in the photo.
+const ICE = {
+  G: 6000,                  // free-fall acceleration, px/s^2
+  FLOOR: 866,               // resting height of the floor's top
+  HANG_MIN: 90, HANG_MAX: 350,    // how far the tips reach down from the top edge while hanging
+  DEPTH_MIN: 52, DEPTH_MAX: 98,   // how deep each stake finally rests
+  TREMBLE: 420, SHAKE: 3,   // ms and px of the shiver before it lets go
+  OMEGA: 24, ZETA: 0.26,    // the soft floor's spring: rad/s and damping
+  UP_AT: 250, UP_MS: 1000, FLOOR_AT: 500, FIRST: 1900,
+  HOLD: 1300, OUT_MS: 1100,
+};
+const iceFloorBase = x => ICE.FLOOR + 7 * Math.sin(x / 97 + 1) + 4 * Math.sin(x / 41);   // gentle puffy lumps
+
+EGGS.icicleDrop = {
+  label: 'icicleDrop', note: 'shanks pull up into icicles, then drop one by one and stake into a marshmallow floor',
+  mode: 'scene', duration: 11000,
+  prepare() {
+    let t0 = ICE.FIRST;
+    this.drops = shuffled().map(k => {
+      const s = SHANKS[k - 1];
+      const hang = ICE.HANG_MIN + Math.random() * (ICE.HANG_MAX - ICE.HANG_MIN);
+      const ex = onShank(k, ICE.FLOOR), y0 = iceFloorBase(ex);
+      const fallS = Math.sqrt(2 * (y0 - hang) / ICE.G);    // seconds from letting go to touching the floor
+      const d = { k, s, hang, ex, y0, t0, upAt: ICE.UP_AT + Math.random() * 200,
+                  depth: ICE.DEPTH_MIN + Math.random() * (ICE.DEPTH_MAX - ICE.DEPTH_MIN),
+                  letGo: t0 + ICE.TREMBLE, fallS, v: ICE.G * fallS, hit: t0 + ICE.TREMBLE + fallS * 1000,
+                  crumbs: Array.from({ length: 6 }, () => ({ dx: (Math.random() - 0.5) * 34, r: 1.5 + Math.random() * 2.5,
+                                                              lag: Math.random() * 90, vx: (Math.random() - 0.5) * 70 })) };
+      const gap = Math.random() < 0.2 ? 170 + Math.random() * 90 : 450 + Math.random() * 450;   // now and then a quick pair
+      t0 += gap;
+      return d;
+    });
+    const lastHit = Math.max(...this.drops.map(d => d.hit));
+    this.OUT = lastHit + ICE.HOLD;
+    this.duration = Math.round(this.OUT + ICE.OUT_MS + 350);
+  },
+  enter() {
+    ropesOn(true);
+    if (PLAYER) return;                                   // on the home page, homeeggs.js plays the sfx() list itself
+    const run = this.soundRun = {}, t0 = performance.now();
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume().then(() => {
+      if (this.soundRun !== run) return;                  // the egg ended before sound was allowed
+      const gone = performance.now() - t0;
+      this.sound = EggSfx.play(audio, this.sfx().filter(h => h.ms > gone).map(h => ({ ...h, ms: (h.ms - gone) / speed })));
+    });
+  },
+  sfx() {                                                 // every sound, in ms from the egg's start
+    return this.drops.flatMap(d => {
+      const v = 0.75 + 0.25 * Math.max(0, Math.min(1, (d.v - 2490) / 560)), pitch = 0.82 + Math.random() * 0.36;
+      return [{ ms: Math.round(d.hit), kind: 'land', v, pitch },                    // the stake goes in
+              { ms: Math.round(d.hit + 150), kind: 'squish', v: v * 0.32, pitch: pitch * 1.3 }];   // and the floor gives it back a bit
+    });
+  },
+  depthAt(d, tau) {                                       // depth in the floor, tau seconds after touching it
+    const w = ICE.OMEGA, z = ICE.ZETA, wd = w * Math.sqrt(1 - z * z), A = -d.depth, B = (d.v + z * w * A) / wd;
+    return d.depth + Math.exp(-z * w * tau) * (A * Math.cos(wd * tau) + B * Math.sin(wd * tau));
+  },
+  tipAt(d, t) {                                           // height of this shank's tip at time t
+    if (t < d.letGo) {
+      const u = EASE.inout(Math.max(0, Math.min(1, (t - d.upAt) / ICE.UP_MS)));
+      return d.s.tip + (d.hang - d.s.tip) * u;
+    }
+    if (t < d.hit) { const tau = (t - d.letGo) / 1000; return d.hang + 0.5 * ICE.G * tau * tau; }
+    const rest = d.y0 + this.depthAt(d, (t - d.hit) / 1000);
+    const u = EASE.inout(Math.max(0, Math.min(1, (t - this.OUT) / ICE.OUT_MS)));
+    return rest + (d.s.tip - rest) * u;
+  },
+  floorDrop(t) {                                          // how far the floor sits below its resting height
+    const u = (t - ICE.FLOOR_AT) / 1000;
+    if (u <= 0) return 190;
+    const rise = 1 - Math.exp(-5.5 * u) * Math.cos(9 * u);   // puffs up with a little overshoot
+    const out = EASE.in(Math.max(0, Math.min(1, (t - this.OUT) / ICE.OUT_MS)));
+    return 190 * (1 - rise) + 190 * out;
+  },
+  surface(x, t) {                                         // the floor's top edge at x
+    const keep = 1 - Math.max(0, Math.min(1, (t - this.OUT) / ICE.OUT_MS));
+    let y = iceFloorBase(x) + this.floorDrop(t);
+    this.drops.forEach(d => {
+      if (t < d.hit) return;
+      const tau = (t - d.hit) / 1000, dist = Math.abs(x - d.ex), now = Math.max(0, this.depthAt(d, tau));
+      y += keep * (0.42 * now * Math.exp(-((dist / 30) ** 2)) - 0.1 * now * Math.exp(-(((dist - 70) / 40) ** 2)));   // dent + raised shoulder
+      y += keep * this.ripple(dist, tau);
+    });
+    return y;
+  },
+  ripple(dist, tau) {                                     // a wave running outward from one landing
+    const front = Math.max(0, Math.min(1, (700 * tau - dist) / 40 + 1));
+    return front * -9 * Math.exp(-tau / 0.35) * Math.cos(dist / 28 - tau * 22) * Math.exp(-dist / 260);
+  },
+  wobble(d, t) {                                          // tilt in degrees: its own landing, plus nearby landings
+    if (t < d.hit) return 0;
+    let deg = 0;
+    this.drops.forEach(o => {
+      if (t < o.hit) return;
+      const tau = (t - o.hit) / 1000, near = o === d ? 1.5 : 0.55 * Math.exp(-Math.abs(o.ex - d.ex) / 200);
+      deg += near * Math.exp(-tau / 0.5) * Math.sin(tau * 30);
+    });
+    return deg;
+  },
+  drawStake(d, t) {
+    const k = d.k, tip = this.tipAt(d, t), dy = tip - d.s.tip, dx = d.s.a * dy;   // slides along its own line
+    const sx = Math.floor(onShank(k, -SOLO_TOP) - 16), sw = Math.ceil(onShank(k, 1000) + 16) - sx;
+    let shake = 0;
+    if (t >= d.t0 && t < d.letGo) shake = ICE.SHAKE * ((t - d.t0) / ICE.TREMBLE) * Math.sin(t * 0.09 + k * 2);
+    rctx.save();
+    const deg = this.wobble(d, t);
+    if (deg) { rctx.translate(d.ex, d.y0); rctx.rotate(deg * Math.PI / 180); rctx.translate(-d.ex, -d.y0); }
+    rctx.drawImage(soloImgs[k - 1], sx, 0, sw, 1700, sx + dx + shake, dy - SOLO_TOP, sw, 1700);
+    rctx.restore();
+  },
+  drawCrumbs(d, t) {                                      // bits that break off the top edge as it lets go
+    if (t < d.letGo) return;
+    rctx.fillStyle = '#b9c6d8';
+    d.crumbs.forEach(c => {
+      const tau = (t - d.letGo - c.lag) / 1000;
+      if (tau <= 0) return;
+      const y = 0.5 * ICE.G * 0.55 * tau * tau, x = onShank(d.k, 0) + c.dx + c.vx * tau;
+      if (y > d.y0) return;
+      rctx.beginPath(); rctx.arc(x, y, c.r, 0, 7); rctx.fill();
+    });
+  },
+  drawFloor(t) {
+    const drop = this.floorDrop(t);
+    const edge = [];
+    for (let x = -20; x <= 770; x += 5) edge.push(x, this.surface(x, t));
+    const trace = yOff => { for (let i = 0; i < edge.length; i += 2) rctx[i ? 'lineTo' : 'moveTo'](edge[i], edge[i + 1] + yOff); };
+    rctx.beginPath(); trace(0); rctx.lineTo(770, 1400); rctx.lineTo(-20, 1400); rctx.closePath();
+    const g = rctx.createLinearGradient(0, ICE.FLOOR + drop - 16, 0, ICE.FLOOR + drop + 150);
+    g.addColorStop(0, '#fff4ee'); g.addColorStop(0.55, '#fbdfe0'); g.addColorStop(1, '#f2bfc9');
+    rctx.fillStyle = g; rctx.fill();
+    rctx.lineJoin = 'round';
+    rctx.beginPath(); trace(9); rctx.strokeStyle = 'rgba(255, 255, 255, .85)'; rctx.lineWidth = 7; rctx.stroke();   // soft highlight under the rim
+    rctx.beginPath(); trace(0); rctx.strokeStyle = '#dd9fac'; rctx.lineWidth = 3; rctx.stroke();
+  },
+  render(t) {
+    photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
+    ropeFrame();
+    this.drops.forEach(d => this.drawCrumbs(d, t));
+    this.drops.forEach(d => this.drawStake(d, t));
+    this.drawFloor(t);
+  },
+  exit() {
+    this.soundRun = null;
+    if (this.sound) this.sound.stop();
+    this.sound = null;
+    restorePhoto();
+  },
+};
+
+// ---- aquarium: the photo fills with water; sand, rocks and seaweed sprout; fish wander in --------------------------
+// All drawn on #ropes, back to front: white, water, light rays, sand, back seaweed/rocks/fish, the shanks (the photo's own
+// pixels, swaying a little below the waterline), a thin water tint over them, front seaweed/rocks/fish, bubbles, surface.
+// Everything is re-rolled each play. Fish follow smooth paths through random waypoints, turning by squashing through
+// edge-on. As the water drains, the seaweed is limited to the water's height, so it collapses with it.
+const AQ = {
+  TOP: 62, BOTTOM: 1015, SAND: 968,                       // resting water surface; water off the photo; sand height
+  FILL_AT: 200, FILL_MS: 2800, SAND_AT: 2900, ROCKS_AT: 3100, WEEDS_AT: 3300, FISH_AT: 5400,
+  FISH_LAST_IN: 9500, DRAIN: 17900, DRAIN_MS: 2500, END: 20800,
+};
+const aqR = (a, b) => a + Math.random() * (b - a);
+const aqClamp = u => Math.max(0, Math.min(1, u));
+const aqPop = u => (u <= 0 ? 0 : 1 - Math.exp(-6 * u) * Math.cos(8 * u));    // springs up with a small overshoot
+const aqSandEdge = x => AQ.SAND + 6 * Math.sin(x / 83 + 2) + 3 * Math.sin(x / 31);
+// Fish look: body, fin, tail colours, half-height of the body (the body is 100 long), and bands [centre, half-width, colour].
+const AQ_KINDS = [
+  { body: '#f28a2e', fin: '#dd6f18', tail: '#dd6f18', h: 30, bands: [[20, 7, '#fff'], [-14, 8, '#fff']] },
+  { body: '#f6d23f', fin: '#e2b31c', tail: '#e2b31c', h: 46, bands: [] },
+  { body: '#3f7fe0', fin: '#2d5fb8', tail: '#f2c53d', h: 26, bands: [] },
+  { body: '#d566a8', fin: '#b04486', tail: '#b04486', h: 33, bands: [[12, 3, '#f8c2e0'], [-2, 3, '#f8c2e0'], [-16, 3, '#f8c2e0']] },
+  { body: '#8fcf9f', fin: '#5fa877', tail: '#5fa877', h: 24, bands: [[-4, 16, '#c9ecd2']] },
+];
+const AQ_NEON = { body: '#5ad1ff', fin: '#3aa8db', tail: '#e8513f', h: 22, bands: [[-22, 12, '#e8513f']] };
+
+EGGS.aquarium = {
+  label: 'aquarium', note: 'the photo fills with water, sand, rocks and seaweed sprout, and fish wander in from the sides',
+  mode: 'scene', duration: AQ.END,
+  prepare() {
+    const spaced = (n, gap) => {                          // n x positions at least gap apart
+      const xs = [];
+      for (let tries = 0; xs.length < n && tries < 400; tries += 1) {
+        const x = aqR(18, 732);
+        if (xs.every(o => Math.abs(o - x) > gap)) xs.push(x);
+      }
+      return xs;
+    };
+    this.rocks = spaced(6, 95).map((x, i) => {
+      const w = aqR(42, 88), h = aqR(26, 74), n = 10;
+      const pts = Array.from({ length: n }, (_, j) => {
+        const a = Math.PI * 2 * j / n, r = aqR(0.82, 1.12);
+        return [Math.cos(a) * w * r, Math.sin(a) * h * r];
+      });
+      const shade = aqR(0, 1);
+      return { x, w, h, pts, at: AQ.ROCKS_AT + i * 130 + aqR(0, 90), front: i % 3 === 0,
+               fill: `rgb(${112 + shade * 34}, ${108 + shade * 28}, ${116 + shade * 20})`,
+               spots: Array.from({ length: 7 }, () => [aqR(-0.7, 0.7) * w, aqR(-0.75, -0.05) * h, aqR(1.2, 3.2)]) };
+    });
+    const GREENS = ['#2f8f4e', '#3aa35b', '#1f7a52', '#6fae3a', '#2b9a78'];
+    this.weeds = spaced(13, 38).map((x, i) => {
+      const front = i % 3 === 0, red = Math.random() < 0.15;
+      return { x, front, H: front ? aqR(170, 340) : aqR(280, 640), W: aqR(5, 8), amp: aqR(16, 34), wave: aqR(75, 125),
+               phase: aqR(0, 6.3), period: aqR(560, 860), leaves: Math.random() < 0.7, at: AQ.WEEDS_AT + aqR(0, 1800),
+               ms: aqR(1800, 2600), color: red ? '#b5563e' : GREENS[Math.floor(Math.random() * GREENS.length)] };
+    });
+    this.grains = Array.from({ length: 70 }, () => [aqR(0, 750), aqR(8, 44), aqR(0.8, 1.9)]);
+    this.bubbles = Array.from({ length: 16 }, () => ({ x: aqR(30, 720), r: aqR(2.5, 7), period: aqR(3200, 6200), phase: aqR(0, 1), sway: aqR(5, 14) }));
+    this.rays = [120, 300, 470, 640].map(x => ({ x, w: aqR(40, 90), phase: aqR(0, 6.3) }));
+    const route = (tIn, tOut, y0) => {                    // waypoints: in from one side, wander, out the nearer side
+      const fromLeft = Math.random() < 0.5, way = [];
+      const off = left => (left ? -130 : 880);
+      way.push({ t: tIn - 1, x: off(fromLeft) - (fromLeft ? 60 : -60), y: y0 });   // an extra point so the spline starts smoothly
+      way.push({ t: tIn, x: off(fromLeft), y: y0 });
+      let x = fromLeft ? aqR(90, 260) : aqR(490, 660), y = Math.max(130, Math.min(840, y0 + aqR(-90, 90))), T = tIn + aqR(3000, 3800);
+      while (T < tOut - 3000) {
+        way.push({ t: T, x, y });
+        const dir = Math.random() * Math.PI * 2, step = aqR(170, 400);
+        x = Math.max(70, Math.min(680, x + Math.cos(dir) * step));
+        y = Math.max(130, Math.min(840, y + Math.sin(dir) * step * 0.55));
+        T += aqR(2700, 3500);
+      }
+      way.push({ t: tOut - 3000 + aqR(-200, 200), x, y });
+      const toLeft = x < 375;
+      way.push({ t: tOut, x: off(toLeft), y: y + aqR(-50, 50) });
+      way.push({ t: tOut + 1, x: off(toLeft) - (toLeft ? 60 : -60), y });
+      return way;
+    };
+    const kinds = AQ_KINDS.slice().sort(() => Math.random() - 0.5);
+    this.fish = kinds.map((kind, i) => ({
+      kind, size: aqR(0.62, 1.0), back: i % 2 === 1, swim: aqR(0.011, 0.016), offT: aqR(0, 3),
+      way: route(AQ.FISH_AT + i * 900 + aqR(0, 500), AQ.DRAIN - aqR(0, 1600), aqR(170, 800)),
+    }));
+    const school = route(AQ.FISH_AT + 2200, AQ.DRAIN - 300, aqR(250, 700));
+    for (let i = 0; i < 6; i += 1) {
+      this.fish.push({ kind: AQ_NEON, size: aqR(0.26, 0.32), back: false, swim: 0.024, offT: i, lag: i * 90,
+                       ox: aqR(-46, 46), oy: aqR(-36, 36), way: school });
+    }
+  },
+  enter() { ropesOn(true); },
+  level(t) {
+    const up = EASE.inout(aqClamp((t - AQ.FILL_AT) / AQ.FILL_MS));
+    const down = EASE.inout(aqClamp((t - AQ.DRAIN) / AQ.DRAIN_MS));
+    return AQ.BOTTOM + (AQ.TOP - AQ.BOTTOM) * up + (AQ.BOTTOM - AQ.TOP) * down;
+  },
+  surf(x, t) {
+    const busy = aqClamp((t - AQ.FILL_AT) / AQ.FILL_MS) < 1 || t > AQ.DRAIN ? 13 : 4.5;
+    return this.level(t) + busy * Math.sin(x / 70 + t / 420) + busy * 0.5 * Math.sin(x / 29 - t / 260 + 1);
+  },
+  waterPath(t, ctx = rctx) {
+    ctx.beginPath();
+    ctx.moveTo(-10, this.surf(-10, t));
+    for (let x = 0; x <= 760; x += 10) ctx.lineTo(x, this.surf(x, t));
+    ctx.lineTo(760, 1010); ctx.lineTo(-10, 1010); ctx.closePath();
+  },
+  sandDrop(t) {                                           // how far below its resting place the sand is
+    const out = EASE.in(aqClamp((t - AQ.DRAIN - AQ.DRAIN_MS * 0.55) / (AQ.DRAIN_MS * 0.42)));
+    return 70 * (1 - Math.min(1, aqPop((t - AQ.SAND_AT) / 700))) + 70 * out;
+  },
+  drawRock(r, t) {
+    const out = EASE.in(aqClamp((t - AQ.DRAIN - AQ.DRAIN_MS * 0.5) / (AQ.DRAIN_MS * 0.4)));
+    const s = aqPop((t - r.at) / 800) * (1 - out);
+    if (s <= 0.01) return;
+    rctx.save();
+    rctx.translate(r.x, AQ.SAND + 16 + this.sandDrop(t));
+    rctx.scale(s, s);
+    const n = r.pts.length, mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const first = mid(r.pts[n - 1], r.pts[0]);
+    rctx.beginPath(); rctx.moveTo(first[0], first[1]);
+    r.pts.forEach((p, i) => { const m = mid(p, r.pts[(i + 1) % n]); rctx.quadraticCurveTo(p[0], p[1], m[0], m[1]); });
+    rctx.closePath();
+    const g = rctx.createLinearGradient(0, -r.h, 0, r.h * 0.4);
+    g.addColorStop(0, '#d2cfd2'); g.addColorStop(0.45, r.fill); g.addColorStop(1, '#5d5a66');
+    rctx.fillStyle = g; rctx.fill();
+    rctx.strokeStyle = 'rgba(50, 48, 60, .55)'; rctx.lineWidth = 2; rctx.stroke();
+    rctx.fillStyle = 'rgba(60, 58, 70, .4)';
+    r.spots.forEach(p => { rctx.beginPath(); rctx.arc(p[0], p[1], p[2], 0, 7); rctx.fill(); });
+    rctx.restore();
+  },
+  drawWeed(w, t) {
+    const base = aqSandEdge(w.x) + 10 + this.sandDrop(t);
+    const room = base - this.level(t) - 24;               // never taller than the water
+    const L = Math.min(w.H * EASE.out(aqClamp((t - w.at) / w.ms)), room);
+    if (L < 8) return;
+    const left = [], right = [], step = 11;
+    const spine = s => {
+      const u = s / w.H;
+      return [w.x + w.amp * (u ** 1.15) * Math.sin(s / w.wave - t / w.period + w.phase) * 1.3, base - s];
+    };
+    const half = s => w.W * ((1 - s / L) ** 0.55) + 1;
+    for (let s = 0; s <= L; s += step) {
+      const [x, y] = spine(s), hw = half(s);
+      left.push(x - hw, y); right.push(x + hw, y);
+    }
+    const [tx, ty] = spine(L);
+    rctx.beginPath(); rctx.moveTo(left[0], left[1]);
+    for (let i = 2; i < left.length; i += 2) rctx.lineTo(left[i], left[i + 1]);
+    rctx.lineTo(tx, ty);
+    for (let i = right.length - 2; i >= 0; i -= 2) rctx.lineTo(right[i], right[i + 1]);
+    rctx.closePath();
+    rctx.fillStyle = w.color; rctx.fill();
+    if (!w.leaves) return;
+    for (let s = 30, side = 1; s < L - 14; s += 32, side = -side) {
+      const [x, y] = spine(s), grow = Math.min(1, (L - s) / 45), len = (34 - 16 * s / w.H) * grow;
+      const flut = 7 * Math.sin(t / 430 + s / 40 + w.phase);
+      rctx.beginPath(); rctx.moveTo(x, y);
+      rctx.quadraticCurveTo(x + side * len * 0.55, y - 16 * grow, x + side * len, y - 12 * grow + flut);
+      rctx.quadraticCurveTo(x + side * len * 0.45, y + 5 * grow, x, y + 7);
+      rctx.fill();
+    }
+  },
+  fishPos(f, T) {                                         // Catmull-Rom through the waypoints; null when off the route
+    const W = f.way;
+    if (T < W[1].t || T >= W[W.length - 2].t) return null;
+    let i = 1;
+    while (W[i + 1].t <= T) i += 1;
+    const u = (T - W[i].t) / (W[i + 1].t - W[i].t), [p0, p1, p2, p3] = [W[i - 1], W[i], W[i + 1], W[i + 2]];
+    const cr = key => 0.5 * (2 * p1[key] + (p2[key] - p0[key]) * u + (2 * p0[key] - 5 * p1[key] + 4 * p2[key] - p3[key]) * u * u
+                             + (3 * p1[key] - p0[key] - 3 * p2[key] + p3[key]) * u * u * u);
+    return [cr('x'), cr('y')];
+  },
+  drawFish(f, t) {
+    const T = t - (f.lag || 0), p = this.fishPos(f, T), a = this.fishPos(f, T - 40), b = this.fishPos(f, T + 40);
+    if (!p || !a || !b) return;
+    const vx = (b[0] - a[0]) / 80, vy = (b[1] - a[1]) / 80;   // px per ms
+    const turn = Math.max(-1, Math.min(1, vx / 0.05));
+    const face = (turn >= 0 ? 1 : -1) * Math.max(0.14, Math.abs(turn));
+    const tilt = Math.max(-0.38, Math.min(0.38, Math.atan2(vy, Math.abs(vx) + 0.02))) * Math.sign(face);
+    const k = f.kind, wag = Math.sin(t * f.swim + f.offT) * 0.75;
+    rctx.save();
+    rctx.translate(p[0] + (f.ox || 0) + (f.lag ? 7 * Math.sin(t / 420 + f.offT) : 0), p[1] + (f.oy || 0));
+    rctx.rotate(tilt);
+    rctx.scale(face * f.size, f.size);
+    rctx.lineWidth = 2.4; rctx.strokeStyle = 'rgba(30, 40, 60, .55)'; rctx.lineJoin = 'round';
+    rctx.save();                                          // tail
+    rctx.translate(-44, 0); rctx.scale(0.5 + 0.5 * Math.cos(wag * 1.8), 1); rctx.rotate(wag * 0.25);
+    rctx.beginPath(); rctx.moveTo(4, 0); rctx.lineTo(-30, -k.h * 0.72); rctx.quadraticCurveTo(-20, 0, -30, k.h * 0.72); rctx.closePath();
+    rctx.fillStyle = k.tail; rctx.fill(); rctx.stroke();
+    rctx.restore();
+    rctx.beginPath(); rctx.moveTo(18, -k.h * 0.82); rctx.quadraticCurveTo(-8, -k.h * 1.5, -28, -k.h * 0.62); rctx.closePath();   // top fin
+    rctx.fillStyle = k.fin; rctx.fill(); rctx.stroke();
+    const body = () => { rctx.beginPath(); rctx.moveTo(50, 0); rctx.bezierCurveTo(26, -k.h * 1.32, -24, -k.h * 1.32, -48, 0); rctx.bezierCurveTo(-24, k.h * 1.32, 26, k.h * 1.32, 50, 0); rctx.closePath(); };
+    body(); rctx.fillStyle = k.body; rctx.fill();
+    rctx.save(); body(); rctx.clip();
+    k.bands.forEach(([c, hw, col]) => { rctx.fillStyle = col; rctx.fillRect(c - hw, -80, hw * 2, 160); });
+    rctx.fillStyle = 'rgba(255, 255, 255, .22)'; rctx.fillRect(-50, -k.h * 1.3, 100, k.h * 0.7);   // lighter back
+    rctx.restore();
+    body(); rctx.stroke();
+    rctx.save();                                          // side fin, paddling
+    rctx.translate(10, k.h * 0.28); rctx.rotate(0.7 + wag * 0.6);
+    rctx.beginPath(); rctx.moveTo(0, 0); rctx.quadraticCurveTo(-8, 18, -20, 16); rctx.quadraticCurveTo(-14, 4, 0, 0); rctx.closePath();
+    rctx.fillStyle = k.fin; rctx.fill(); rctx.stroke();
+    rctx.restore();
+    rctx.beginPath(); rctx.arc(30, -k.h * 0.26, 7.5, 0, 7); rctx.fillStyle = '#fff'; rctx.fill(); rctx.stroke();
+    rctx.beginPath(); rctx.arc(32, -k.h * 0.26, 4, 0, 7); rctx.fillStyle = '#1b1b24'; rctx.fill();
+    rctx.restore();
+  },
+  drawBubbles(t) {
+    rctx.lineWidth = 1.4;
+    this.bubbles.forEach(b => {
+      const u = ((t / b.period) + b.phase) % 1, y = AQ.SAND - u * (AQ.SAND - AQ.TOP), x = b.x + b.sway * Math.sin(y / 38 + b.phase * 6);
+      if (y < this.surf(x, t) + 6) return;
+      const fade = Math.min(1, u / 0.06, (1 - u) / 0.05);
+      rctx.strokeStyle = `rgba(255, 255, 255, ${0.8 * fade})`; rctx.fillStyle = `rgba(255, 255, 255, ${0.16 * fade})`;
+      rctx.beginPath(); rctx.arc(x, y, b.r, 0, 7); rctx.fill(); rctx.stroke();
+      rctx.fillStyle = `rgba(255, 255, 255, ${0.9 * fade})`;
+      rctx.beginPath(); rctx.arc(x - b.r * 0.35, y - b.r * 0.35, b.r * 0.22, 0, 7); rctx.fill();
+    });
+  },
+  render(t) {
+    photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
+    ropeFrame();
+    rctx.fillStyle = '#fff'; rctx.fillRect(-5, -5, 760, 1010);
+    this.waterPath(t);
+    const body = rctx.createLinearGradient(0, AQ.TOP, 0, 1000);
+    body.addColorStop(0, '#bdeaf3'); body.addColorStop(0.5, '#7fcbe0'); body.addColorStop(1, '#3f9fc0');
+    rctx.fillStyle = body; rctx.fill();
+    rctx.save();                                          // light rays, kept inside the water
+    this.waterPath(t); rctx.clip();
+    const rayFade = rctx.createLinearGradient(0, AQ.TOP, 0, 800);
+    rayFade.addColorStop(0, 'rgba(255, 255, 255, .34)'); rayFade.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    rctx.fillStyle = rayFade;
+    this.rays.forEach(r => {
+      const dx = 26 * Math.sin(t / 1900 + r.phase);
+      rctx.beginPath(); rctx.moveTo(r.x + dx, 0); rctx.lineTo(r.x + dx + r.w, 0);
+      rctx.lineTo(r.x + dx + r.w * 2.1 - 130, 820); rctx.lineTo(r.x + dx - r.w * 0.6 - 130, 820); rctx.closePath(); rctx.fill();
+    });
+    rctx.restore();
+    this.weeds.filter(w => !w.front).forEach(w => this.drawWeed(w, t));
+    this.rocks.filter(r => !r.front).forEach(r => this.drawRock(r, t));
+    const sandTop = this.sandDrop(t);
+    if (sandTop < 69) {
+      rctx.beginPath(); rctx.moveTo(-10, aqSandEdge(-10) + sandTop);
+      for (let x = 0; x <= 760; x += 12) rctx.lineTo(x, aqSandEdge(x) + sandTop);
+      rctx.lineTo(760, 1010); rctx.lineTo(-10, 1010); rctx.closePath();
+      const g = rctx.createLinearGradient(0, AQ.SAND - 8, 0, 1000);
+      g.addColorStop(0, '#efdcae'); g.addColorStop(1, '#cdb078');
+      rctx.fillStyle = g; rctx.fill();
+      rctx.fillStyle = 'rgba(130, 100, 55, .4)';
+      this.grains.forEach(p => { rctx.beginPath(); rctx.arc(p[0], aqSandEdge(p[0]) + p[1] + sandTop, p[2], 0, 7); rctx.fill(); });
+    }
+    this.fish.filter(f => f.back).forEach(f => this.drawFish(f, t));
+    for (let k = 1; k <= 8; k += 1) {                     // the shanks, swaying a little under water
+      drawShankAlong(k, shankCurve(k, -10, 8, y => {
+        const under = aqClamp((y - this.surf(onShank(k, y), t)) / 80);
+        return under * 3.2 * Math.sin(y / 85 - t / 520 + k);
+      }), -10, 8);
+    }
+    this.waterPath(t); rctx.fillStyle = 'rgba(95, 190, 220, .17)'; rctx.fill();   // tint: the shanks are in the water
+    this.weeds.filter(w => w.front).forEach(w => this.drawWeed(w, t));
+    this.rocks.filter(r => r.front).forEach(r => this.drawRock(r, t));
+    this.fish.filter(f => !f.back).forEach(f => this.drawFish(f, t));
+    this.drawBubbles(t);
+    rctx.beginPath();                                     // the waterline
+    rctx.moveTo(-10, this.surf(-10, t));
+    for (let x = 0; x <= 760; x += 10) rctx.lineTo(x, this.surf(x, t));
+    rctx.strokeStyle = 'rgba(255, 255, 255, .95)'; rctx.lineWidth = 4; rctx.stroke();
+    rctx.strokeStyle = 'rgba(60, 150, 190, .6)'; rctx.lineWidth = 1.5; rctx.stroke();
+  },
+  exit() { restorePhoto(); },
+};
+
+// ---- antSwarm: tiny ants cross the photo and eat the shanks, leaving cartoon bones ---------------------------------------
+// The shanks are divided into thousands of small bite sites, which "open" in a ragged front moving left to right. The whole
+// swarm is simulated once per play (saved at 30 Hz, so any moment can be looked up): each ant walks to a nearby open site, bites
+// it, and moves on; each spot takes several chews, so the ants pile up on the shanks. When nothing is left they leave off the
+// right edge, carrying a blue crumb. Bites erase a private copy of the shank layer and reveal the one or two big cartoon bones
+// that were inside each shank. Afterwards a fresh probe slides down from above and knocks each bone off as its tip reaches it.
+const ANT = { N: 700, SPREAD: 5000, FIRST: 300, OPEN_AT: 1000, OPEN_MS: 12000, BITE: 300, CHEWS: 3, HURRY_AT: 13000, HURRY: 1.6, CAP: 17000, SIM_MS: 30000, HZ: 30,
+              SPACE: 7, BITE_R: 9, REVEAL_R: 44, FRESH_MS: 1500, END_HOLD: 700, SIZE: 1 };
+function drawBigBone(c, b) {                              // one cartoon bone, centred on its middle, lying along local y
+  const half = b.len / 2, ends = half - 15;
+  const paint = (grow, col) => {
+    c.fillStyle = col;
+    c.beginPath(); c.rect(-b.shaft - grow, -ends, 2 * (b.shaft + grow), 2 * ends); c.fill();
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+      c.beginPath(); c.arc(sx * b.knobX, sy * ends, b.knob + grow, 0, 7); c.fill();
+    });
+  };
+  paint(3, '#3f3730');                                    // dark outline first, then the bone on top
+  paint(0, '#fff8e8');
+  c.fillStyle = 'rgba(190, 170, 140, .55)';               // shading down one side, and on the knobs
+  c.fillRect(b.shaft * 0.32, -ends + 8, b.shaft * 0.5, 2 * ends - 16);
+  [[1, -1], [1, 1]].forEach(([sx, sy]) => { c.beginPath(); c.arc(sx * b.knobX + 5, sy * ends + 3, b.knob * 0.55, 0, 7); c.fill(); });
+  c.strokeStyle = 'rgba(95, 80, 62, .6)'; c.lineWidth = 1.8; c.lineCap = 'round';   // a couple of drawn-on nicks
+  c.beginPath(); c.moveTo(-b.shaft * 0.5, b.nick); c.lineTo(-b.shaft * 0.05, b.nick + 7); c.moveTo(-b.shaft * 0.45, b.nick + 18); c.lineTo(-b.shaft * 0.15, b.nick + 22); c.stroke();
+}
+
+EGGS.antSwarm = {
+  label: 'antSwarm', note: 'a swarm of tiny ants eats the shanks, uncovering big cartoon bones inside',
+  mode: 'scene', duration: 22000,                         // set for each play, in prepare()
+  prepare() {
+    // bite sites, with a ragged left-to-right opening order
+    const blobs = Array.from({ length: 34 }, () => [Math.random() * 750, Math.random() * 1000]);
+    const ragged = (x, y) => Math.min(...blobs.map(b => Math.hypot(b[0] - x, b[1] - y))) / 170;
+    const sites = [];
+    for (let k = 1; k <= 8; k += 1) {
+      for (let y = -4; y <= SHANKS[k - 1].tip + 7; y += ANT.SPACE) {
+        [-7.5, 0, 7.5].forEach(lat => {
+          const x = onShank(k, y) + lat;
+          const order = Math.min(1, Math.max(0, x / 750 * 0.7 + Math.min(1, ragged(x, y)) * 0.3));
+          sites.push({ x, y, k, open: ANT.OPEN_AT + order * ANT.OPEN_MS, claims: ANT.CHEWS, done: 0 });
+        });
+      }
+    }
+    sites.sort((a, b) => a.open - b.open);
+    // simulate the swarm
+    const dt = 1000 / ANT.HZ, frames = Math.ceil(ANT.SIM_MS / dt) + 1, N = ANT.N;
+    const X = new Float32Array(N * frames), Y = new Float32Array(N * frames), H = new Float32Array(N * frames);
+    const ants = Array.from({ length: N }, (_, i) => ({
+      x: -20 - Math.random() * 30, y: 15 + Math.random() * 970, h: 0, start: ANT.FIRST + i / N * ANT.SPREAD,
+      speed: 95 + Math.random() * 75, phase: Math.random() * 6.3, state: 'seek', target: null, until: 0, firstBite: Infinity,
+    }));
+    const open = [], bites = [];
+    let nextSite = 0, unclaimed = sites.length, wrapped = false;
+    for (let f = 0; f < frames; f += 1) {
+      const T = f * dt;
+      while (nextSite < sites.length && sites[nextSite].open <= T) open.push(sites[nextSite++]);
+      if (T >= ANT.CAP && !wrapped) {                     // wrap up: stragglers stop heading for far-off leftovers and go home
+        wrapped = true; open.length = 0; unclaimed = 0; nextSite = sites.length;
+        ants.forEach(a => { if (a.state === 'seek') a.target = null; });
+      }
+      for (let i = 0; i < N; i += 1) {
+        const a = ants[i];
+        if (T >= a.start && a.state !== 'gone') {
+          if (a.state === 'bite' && T >= a.until) {
+            const site = a.target;
+            site.done += 1;
+            bites.push({ x: site.x, y: site.y, t: T, final: site.done === ANT.CHEWS });
+            a.firstBite = Math.min(a.firstBite, T);
+            a.target = null; a.state = 'seek';
+          }
+          if (a.state === 'seek' && !a.target) {
+            if (open.length) {                            // the nearest of a random handful of open sites
+              let best = -1, bestD = Infinity;
+              for (let s = 0; s < 48; s += 1) {
+                const j = Math.floor(Math.random() * open.length), d = Math.hypot(open[j].x - a.x, open[j].y - a.y);
+                if (d < bestD) { bestD = d; best = j; }
+              }
+              a.target = open[best];
+              a.target.claims -= 1;
+              if (!a.target.claims) { open[best] = open[open.length - 1]; open.pop(); unclaimed -= 1; }
+            } else if (!unclaimed) a.state = 'leave';
+          }
+          let gx, gy;
+          if (a.state === 'leave') { gx = 800; gy = a.y + 40 * Math.sin(T / 300 + a.phase); }
+          else if (a.target) { gx = a.target.x; gy = a.target.y; }
+          else { gx = Math.min(a.x + 60, 690); gy = a.y + 50 * Math.sin(T / 240 + a.phase); }      // nothing open right now: drift forward
+          if (a.state !== 'bite') {
+            const d = Math.hypot(gx - a.x, gy - a.y);
+            if (a.target && d < 3.5) { a.state = 'bite'; a.until = T + ANT.BITE * (0.75 + Math.random() * 0.6); }
+            else {
+              a.h = Math.atan2(gy - a.y, gx - a.x) + 0.55 * Math.sin(T / 75 + a.phase);
+              const go = a.speed * dt / 1000 * (a.target || a.state === 'leave' ? 1 : 0.55) * (T > ANT.HURRY_AT ? ANT.HURRY : 1);
+              a.x += Math.cos(a.h) * Math.min(go, d + 1); a.y += Math.sin(a.h) * Math.min(go, d + 1);
+              if (a.state === 'leave' && a.x > 790) a.state = 'gone';
+            }
+          }
+        }
+        X[i * frames + f] = a.x; Y[i * frames + f] = a.y; H[i * frames + f] = a.h;
+      }
+    }
+    sites.forEach(s => { if (s.done < ANT.CHEWS) bites.push({ x: s.x, y: s.y, t: ANT.CAP + Math.random() * 900, final: true }); });
+    let lastOut = 0;                                      // the fresh probe comes once the last ant has walked off
+    ants.forEach((a, i) => { let f = 0; while (f < frames - 1 && X[i * frames + f] <= 765) f += 1; lastOut = Math.max(lastOut, f * dt); });
+    this.lastOut = lastOut;
+    this.fresh = lastOut + 500;
+    this.duration = Math.round(this.fresh + ANT.FRESH_MS + ANT.END_HOLD);
+    this.sim = { X, Y, H, frames, dt };
+    this.ants = ants;
+    this.bites = bites.sort((a, b) => a.t - b.t);
+    // one or two big bones per shank, along its line; each drops when the fresh probe's tip reaches its top end
+    const freshAt = t => { const u = EASE.inout(Math.max(0, Math.min(1, (t - this.fresh) / ANT.FRESH_MS))); return (1 - u) * 1080; };
+    this.freshAt = freshAt;
+    this.bigBones = [];
+    for (let k = 1; k <= 8; k += 1) {
+      const top = 26, tip = SHANKS[k - 1].tip - 2, two = Math.random() < 0.6;
+      const mid = top + (tip - top) * (0.42 + Math.random() * 0.16);
+      (two ? [[top, mid - 12], [mid + 12, tip]] : [[top, tip]]).forEach(([y0, y1]) => {
+        const y = (y0 + y1) / 2, len = y1 - y0;
+        let drop = this.fresh;
+        while (drop < this.fresh + ANT.FRESH_MS && SHANKS[k - 1].tip - freshAt(drop) < y0) drop += 10;
+        this.bigBones.push({ x: onShank(k, y), y, len, shaft: 12 + Math.random() * 2, knob: 18 + Math.random() * 3, knobX: 14,
+                             rot: lean(k) * Math.PI / 180 + (Math.random() - 0.5) * 0.06, nick: (Math.random() - 0.5) * len * 0.5,
+                             drop, spin: (Math.random() - 0.5) * 1.1 });
+      });
+    }
+    this.applied = 0;
+    this.lastT = -1;
+  },
+  enter() {
+    if (!this.eaten) {
+      this.eaten = document.createElement('canvas'); this.eaten.width = 750; this.eaten.height = 1000;
+      this.eg = this.eaten.getContext('2d');
+      this.shown = document.createElement('canvas'); this.shown.width = 750; this.shown.height = 1000;   // bones uncovered so far
+      this.sg = this.shown.getContext('2d');
+    }
+    this.sg.clearRect(0, 0, 750, 1000);
+    const g = this.eg;
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, 750, 1000);
+    g.drawImage(document.getElementById('fg'), 0, 0, 750, 1000);
+    this.applied = 0; this.lastT = -1;
+    ropesOn(true);
+  },
+  applyBites(t) {                                         // erase every bite made up to time t
+    if (t < this.lastT) { this.enter(); }                 // rewinding (freeze-frames): start over from the whole shanks
+    this.lastT = t;
+    const g = this.eg;
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath();
+    const reveal = new Path2D();
+    let any = false, anyFinal = false;
+    while (this.applied < this.bites.length && this.bites[this.applied].t <= t) {
+      const s = this.bites[this.applied++], R0 = s.final ? ANT.BITE_R : ANT.BITE_R * 0.55;
+      for (let n = 0; n < (s.final ? 3 : 1); n += 1) {
+        const x = s.x + (Math.random() - 0.5) * 6, y = s.y + (Math.random() - 0.5) * 6, r = R0 * (0.7 + Math.random() * 0.5);
+        g.moveTo(x + r, y); g.arc(x, y, r, 0, 7);
+      }
+      if (s.final) { reveal.moveTo(s.x + ANT.REVEAL_R, s.y); reveal.arc(s.x, s.y, ANT.REVEAL_R, 0, 7); anyFinal = true; }
+      any = true;
+    }
+    if (any) g.fill();
+    if (anyFinal) {                                       // the bone shows through wherever the shank is gone
+      const sg = this.sg;
+      sg.save(); sg.clip(reveal);
+      this.bigBones.forEach(b => { sg.save(); sg.translate(b.x, b.y); sg.rotate(b.rot); drawBigBone(sg, b); sg.restore(); });
+      sg.restore();
+    }
+  },
+  drawAnts(t) {
+    const { X, Y, H, frames, dt } = this.sim, f = Math.min(frames - 2, Math.floor(t / dt)), u = Math.min(1, t / dt - f);
+    const S = ANT.SIZE, legs = new Path2D(), body = new Path2D(), crumb = new Path2D();
+    let shown = 0;
+    for (let i = 0; i < ANT.N; i += 1) {
+      const a = this.ants[i], at = i * frames + f;
+      if (t < a.start) continue;
+      const x = X[at] + (X[at + 1] - X[at]) * u, y = Y[at] + (Y[at + 1] - Y[at]) * u;
+      if (x < -14 || x > 764) continue;
+      shown += 1;
+      const h = H[at + 1], c = Math.cos(h), s = Math.sin(h), step = Math.sin(t * 0.05 + a.phase * 5) * 1.3;
+      for (let side = -1; side <= 1; side += 2) for (let n = -1; n <= 1; n += 1) {
+        const kick = (n === 0 ? -step : step) * side;
+        const bx = n * 1.4 * S, ex = (n * 3.2 + kick) * S, ey = side * 3.7 * S;
+        legs.moveTo(x + bx * c, y + bx * s);
+        legs.lineTo(x + ex * c - ey * s, y + ex * s + ey * c);
+      }
+      const dot = (d, r) => { const px = x + d * S * c, py = y + d * S * s; body.moveTo(px + r * S, py); body.arc(px, py, r * S, 0, 7); };
+      dot(-3.5, 2.3); dot(-0.6, 1.25); dot(2.2, 1.7);
+      if (t > a.firstBite) { const px = x + 5 * S * c, py = y + 5 * S * s; crumb.moveTo(px + 1.5 * S, py); crumb.arc(px, py, 1.5 * S, 0, 7); }
+    }
+    this.shownAnts = shown;
+    rctx.strokeStyle = '#2a1a12'; rctx.lineWidth = 0.5 * S; rctx.stroke(legs);
+    rctx.fillStyle = '#20130c'; rctx.fill(body);
+    rctx.fillStyle = 'rgb(20, 8, 150)'; rctx.fill(crumb);
+  },
+  render(t) {
+    photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
+    ropeFrame();
+    rctx.fillStyle = '#fff'; rctx.fillRect(-5, -5, 760, 1010);
+    this.applyBites(t);
+    if (t < this.fresh) rctx.drawImage(this.shown, 0, 0, 750, 1000);
+    else this.bigBones.forEach(b => {                     // the fresh probe is coming down and knocks them off
+      const fall = Math.max(0, t - b.drop) / 1000, y = b.y + 0.5 * 3000 * fall * fall;
+      if (y - b.len / 2 > 1020) return;
+      rctx.save(); rctx.translate(b.x, y); rctx.rotate(b.rot + b.spin * fall); drawBigBone(rctx, b); rctx.restore();
+    });
+    rctx.drawImage(this.eaten, 0, 0, 750, 1000);
+    if (t >= this.fresh) drawRaisedShanks(this.freshAt(t));
+    if (t < this.lastOut + 100) this.drawAnts(t);
+  },
+  exit() { restorePhoto(); },
+};
+
+// ---- brainRecording: the probe goes into a soft pink brain and records a firing network -------------------------------
+// A cutaway view. The shanks slide up, a brain rises from below, and the whole probe comes down as one rigid piece. The tips are
+// staggered, so each one meets the surface at its own moment: it dimples the tissue, and (for the bendy ones) the shank bows, until
+// the surface gives and the tip pops through, the shank twanging straight. It then goes on down in stop-and-go steps with the tissue
+// dragged along around it, relaxing in the pauses. At depth (exactly the photo's own shank positions) the neurons fire in patterns,
+// pulses run down their axons, and a monitor at the top shows what each shank picks up.
+const BRAIN = {
+  RAISE: 782, UP_AT: 300, UP_MS: 1200, BRAIN_AT: 1550, DROP: 800,
+  STEPS: [[3200, 0], [3700, 115], [6600, 340], [7300, 440], [7550, 440], [8200, 560], [8500, 560], [9600, 782]],
+  REC_AT: 10100, PANEL_MS: 450, OUT: 24400, OUT_MS: 1300, END: 26000,
+  SPARSE: 26, LAYER: 125, LAYER_HALF: 30, FRONT: 0.25,
+  PANEL: { x: 14, y: 14, w: 722, h: 222 }, TRACE_PX_S: 128, FS: 120,
+};
+const brClamp = u => Math.max(0, Math.min(1, u));
+const brSurfaceBase = x => 322 - 30 * Math.sqrt(Math.abs(Math.sin(Math.PI * (x - 105) / 164))) + 2.5 * Math.sin(x / 37);   // rounded folds
+const BR_COLOURS = ['#ff5a5a', '#ff9b3d', '#ffd84a', '#7fe06a', '#45d6c0', '#4fb4ff', '#8f8bff', '#d77bff'];   // one per shank, as in the rainbow shanks
+
+function brainDescent(t) {                                // how far the probe has come down from its raised position
+  const K = BRAIN.STEPS;
+  if (t <= K[0][0]) return 0;
+  for (let i = 0; i < K.length - 1; i += 1) {
+    if (t < K[i + 1][0]) return K[i][1] + (K[i + 1][1] - K[i][1]) * EASE.inout((t - K[i][0]) / (K[i + 1][0] - K[i][0]));
+  }
+  return K[K.length - 1][1];
+}
+function brainRaise(t) {                                  // how far above its photo position the probe is
+  return EASE.inout(brClamp((t - BRAIN.UP_AT) / BRAIN.UP_MS)) * BRAIN.RAISE - brainDescent(t);
+}
+
+EGGS.brainRecording = {
+  label: 'brainRecording', note: 'the shanks poke into a soft pink brain, popping through the surface, and record a dense layer of neurons firing in patterns',
+  mode: 'scene', duration: BRAIN.END,
+  // ---- the insertion, worked out once per play at 60 Hz: for each shank, how far the tip lags, the bow, and the dent in the surface
+  simulateInsertion() {
+    const dt = 1000 / 60, n = Math.ceil(BRAIN.END / dt) + 2;
+    this.ins = SHANKS.map((s, i) => {
+      const k = i + 1, ex = onShank(k, 310), S0 = brSurfaceBase(ex), bendy = Math.random() < 0.55;
+      const H = bendy ? 58 + Math.random() * 32 : 26 + Math.random() * 20, K = (bendy ? 0.72 : 0.16) * (Math.random() < 0.5 ? -1 : 1);
+      const lag = new Float32Array(n), bow = new Float32Array(n), dent = new Float32Array(n);
+      let popped = false, tPop = 0, lag0 = 0, bow0 = 0, dent0 = 0, vLag = 0, prevD = 0;
+      for (let f = 0; f < n; f += 1) {
+        const t = f * dt, D = brainDescent(t), v = (D - prevD) / dt * 1000;
+        const h = t < BRAIN.STEPS[0][0] ? -1 : s.tip - brainRaise(t) - S0;       // no contact until the descent begins
+        prevD = D; vLag += (v - vLag) * 0.09;
+        if (!popped && h >= H) { popped = true; tPop = t; lag0 = lag[f - 1]; bow0 = bow[f - 1]; dent0 = dent[f - 1]; }
+        if (!popped) {
+          const press = Math.max(0, h);
+          dent[f] = 0.55 * press; lag[f] = 0.45 * press; bow[f] = K * lag[f] * 2.1;
+        } else {
+          const tau = (t - tPop) / 1000;
+          lag[f] = lag0 * Math.exp(-tau / 0.05);                                   // the tip shoots through
+          bow[f] = bow0 * Math.exp(-tau / 0.3) * Math.cos(tau * 42);               // and the shank twangs straight
+          dent[f] = dent0 * Math.exp(-tau / 0.3) * Math.cos(Math.min(tau * 9, Math.PI / 2)) + 7 + Math.min(24, Math.abs(vLag) * 0.2);   // tissue springs back, but stays dragged while it moves
+        }
+      }
+      return { k, ex, S0, lag, bow, dent, popped: tPop, dt };
+    });
+  },
+  // ---- the network: cartoon cells, axons between them, and the spike times that make the patterns ----------------------
+  buildNetwork() {
+    // A dense cell layer runs along the line of the shank tips, where the recording pads are; above it the tissue is sparse.
+    const tipX = k => onShank(k, SHANKS[k - 1].tip), slope = (SHANKS[7].tip - SHANKS[0].tip) / (tipX(8) - tipX(1));
+    const layerY = x => SHANKS[0].tip + (x - tipX(1)) * slope - 14;
+    const cells = [], add = (x, y, inLayer) => cells.push({ x, y, inLayer, i: cells.length });
+    for (let tries = 0, n = 0; n < BRAIN.LAYER && tries < 9000; tries += 1) {
+      const x = 6 + Math.random() * 738, y = layerY(x) + (Math.random() - 0.5) * 2 * BRAIN.LAYER_HALF;
+      if (cells.every(c => Math.hypot(c.x - x, c.y - y) > 15)) { add(x, y, true); n += 1; }
+    }
+    for (let tries = 0, n = 0; n < BRAIN.SPARSE && tries < 6000; tries += 1) {
+      const x = 24 + Math.random() * 702, y = 395 + Math.random() * 380;
+      if (y < layerY(x) - 110 && cells.filter(c => !c.inLayer).every(c => Math.hypot(c.x - x, c.y - y) > 78)) { add(x, y, false); n += 1; }
+    }
+    const RR = (a, b) => a + Math.random() * (b - a);
+    const dend = { back: new Path2D(), front: new Path2D() }, soma = { back: new Path2D(), front: new Path2D() };
+    cells.forEach(c => {
+      c.front = Math.random() < BRAIN.FRONT;
+      c.pyr = c.inLayer ? Math.random() < 0.94 : Math.random() < 0.55;
+      c.r = c.inLayer ? RR(6, 8) : c.pyr ? RR(8.5, 12.5) : RR(6.5, 8.5);
+      const d = c.dend = new Path2D(), { x, y, r } = c;
+      if (c.pyr) {
+        const top = y - (c.inLayer ? RR(120, 230) : RR(70, 128)), bend = RR(-16, 16), tuftX = x + bend * 1.5;
+        d.moveTo(x, y - r); d.quadraticCurveTo(x + bend, (y + top) / 2, tuftX, top);
+        const branch = (frac, side, len) => {             // side branches off the apical dendrite
+          const by = y - r + (top - y + r) * frac, bx = x + bend * (frac * 1.45);
+          const ex = bx + side * len, ey = by - len * RR(0.45, 0.9);
+          d.moveTo(bx, by); d.quadraticCurveTo(bx + side * len * 0.5, by - len * 0.1, ex, ey);
+        };
+        branch(0.38, -1, RR(24, 40)); branch(0.52, 1, RR(24, 40)); branch(0.74, -1, RR(18, 30));
+        for (const side of [-1, 1]) { d.moveTo(tuftX, top); d.lineTo(tuftX + side * RR(10, 18), top - RR(12, 22)); }   // tuft
+        for (let b = 0; b < 4; b += 1) {                   // basal dendrites
+          const a = RR(0.2, 1.0) * (b % 2 ? 1 : -1) + Math.PI / 2, len = c.inLayer ? RR(15, 28) : RR(24, 42);
+          const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
+          d.moveTo(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7);
+          d.quadraticCurveTo(x + Math.cos(a + 0.3) * len * 0.6, y + Math.sin(a + 0.3) * len * 0.6, ex, ey);
+          d.moveTo(ex, ey); d.lineTo(ex + RR(-11, 11), ey + RR(6, 13));
+        }
+      } else {
+        for (let b = 0; b < 7; b += 1) {
+          const a = b / 7 * 6.28 + RR(-0.3, 0.3), len = RR(22, 42), ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
+          d.moveTo(x, y); d.lineTo(ex, ey); d.moveTo(ex, ey); d.lineTo(ex + RR(-9, 9), ey + RR(-9, 9));
+        }
+      }
+      const s = c.body = new Path2D();
+      if (c.pyr) {
+        s.moveTo(x, y - r * 1.5); s.quadraticCurveTo(x + r * 0.5, y - r * 0.3, x + r * 1.05, y + r * 0.72);
+        s.quadraticCurveTo(x, y + r * 1.15, x - r * 1.05, y + r * 0.72); s.quadraticCurveTo(x - r * 0.5, y - r * 0.3, x, y - r * 1.5);
+      } else s.arc(x, y, r, 0, 7);
+      const group = c.front ? 'front' : 'back';
+      dend[group].addPath(d); soma[group].addPath(s);
+    });
+    // axons: each cell reaches 2 or 3 others not too close and not too far
+    const axons = new Path2D();
+    cells.forEach(c => {
+      const near = cells.filter(o => o !== c && Math.hypot(o.x - c.x, o.y - c.y) < 270 && Math.hypot(o.x - c.x, o.y - c.y) > 70)
+        .sort(() => Math.random() - 0.5).slice(0, 2 + Math.floor(Math.random() * 2));
+      c.out = near.map(o => {
+        const mx = (c.x + o.x) / 2, my = (c.y + o.y) / 2, ox = -(o.y - c.y), oy = o.x - c.x, bow = RR(-0.28, 0.28);
+        const edge = { x0: c.x, y0: c.y + c.r, cx: mx + ox * bow, cy: my + oy * bow, x1: o.x, y1: o.y, ms: Math.hypot(o.x - c.x, o.y - c.y) * RR(2.9, 3.9) };
+        axons.moveTo(edge.x0, edge.y0); axons.quadraticCurveTo(edge.cx, edge.cy, edge.x1, edge.y1);
+        return edge;
+      });
+      c.near = SHANKS.map((s, i) => {                     // which shanks hear this cell, and how loud
+        const d = Math.abs(onShank(i + 1, c.y) - c.x), dy = Math.abs(c.y - (s.tip - 18));   // the pads are near the tip
+        return { k: i + 1, amp: Math.max(0, 1 - d / 62) * Math.max(0, 1 - Math.max(0, dy - 24) / 60) };
+      }).filter(q => q.amp > 0);
+    });
+    this.cells = cells; this.paths = { dend, soma, axons };
+    // spike times
+    const spikes = [], fire = (c, t) => { if (t < BRAIN.OUT) spikes.push({ c, t, b: 0.38 + 0.62 * Math.random() ** 1.4 }); };   // b: this spike's brightness
+    for (let t = 2200; t < BRAIN.OUT; t += 45) if (Math.random() < 0.34) fire(cells[Math.floor(Math.random() * cells.length)], t);   // the quiet background chatter
+    const each = (T0, when) => cells.forEach(c => { if (!c.inLayer && Math.random() > 0.22) return; const dt = when(c); if (dt !== null) fire(c, T0 + dt + RR(-18, 18)); });
+    const midX = 375, midY = layerY(375);
+    // The program: travelling waves, a split wave from the middle and population bursts, with stretches of sparse firing
+    // between them in which assemblies come on. An assembly is a fixed set of cells that fire together, and the same ones
+    // come back at different times. The local ones are neighbours in the layer; the broad ones are scattered along all of it.
+    const layer = cells.filter(c => c.inLayer);
+    const local = [0.12, 0.38, 0.62, 0.88].map(f => {
+      const cx = 750 * f + RR(-40, 40), half = RR(42, 82);
+      return layer.filter(c => Math.abs(c.x - cx) < half && Math.random() < 0.85);
+    }).sort(() => Math.random() - 0.5);
+    const broad = [0, 1].map(() => layer.filter(() => Math.random() < RR(0.2, 0.34)));
+    let T = BRAIN.REC_AT + 450;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const wave = (d, ms, at = T) => each(at, c => (d > 0 ? c.x : 750 - c.x) / 750 * ms);
+    const burst = (at = T) => each(at, () => RR(0, 45));
+    const assembly = (cellsOf, at) => cellsOf.forEach(c => fire(c, at + RR(0, 38)));
+    const sparse = (ms, perSec) => { for (let i = 0, n = ms / 1000 * perSec; i < n; i += 1) fire(layer[Math.floor(Math.random() * layer.length)], T + RR(0, ms)); };
+    [
+      () => { wave(dir, 1100); return 1500; },
+      () => { sparse(1500, 46); assembly(local[0], T + 250); assembly(local[1], T + 750); assembly(local[2], T + 1150); return 1500; },
+      () => { wave(-dir, 1100); return 1500; },
+      () => { sparse(1100, 40); assembly(broad[0], T + 200); assembly(broad[1], T + 700); return 1100; },
+      () => { each(T, c => Math.abs(c.x - midX) / 375 * 1050); return 1500; },   // the split wave, out from the middle
+      () => { sparse(800, 60); assembly(local[3], T + 350); return 800; },
+      () => { burst(); return 650; },
+      () => { sparse(900, 40); assembly(local[1], T + 150); assembly(broad[0], T + 520); return 900; },
+      () => { wave(dir, 850); return 1150; },
+      () => { burst(); burst(T + 260); return 720; },
+      () => { sparse(700, 50); assembly(local[0], T + 250); return 700; },
+      () => { wave(-dir, 650); wave(dir, 650, T + 850); return 1700; },
+    ].forEach(block => { T += block(); });
+    this.spikes = spikes.sort((a, b) => a.t - b.t);
+    // what the monitor will show: each shank's voltage, sampled at FS
+    const nS = Math.ceil(BRAIN.END / 1000 * BRAIN.FS) + 8;
+    this.traces = SHANKS.map(() => {
+      const y = new Float32Array(nS);
+      let v = 0;
+      for (let i = 0; i < nS; i += 1) { v = v * 0.55 + (Math.random() - 0.5) * 2.0; y[i] = v; }
+      return y;
+    });
+    this.spikes.forEach(s => s.c.near.forEach(q => {
+      const i0 = Math.round(s.t / 1000 * BRAIN.FS), amp = 15 * q.amp, wave = [-0.5, -1, 0.55, 0.3], y = this.traces[q.k - 1];
+      wave.forEach((w, j) => { if (i0 + j < nS) y[i0 + j] += w * amp; });
+    }));
+    this.glow = this.glow || (() => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 96;
+      const g = cv.getContext('2d'), q = g.createRadialGradient(48, 48, 2, 48, 48, 48);
+      q.addColorStop(0, 'rgba(255, 250, 200, 1)'); q.addColorStop(0.28, 'rgba(255, 220, 110, .6)'); q.addColorStop(1, 'rgba(255, 200, 90, 0)');
+      g.fillStyle = q; g.fillRect(0, 0, 96, 96);
+      return cv;
+    })();
+  },
+  buildTissue() {
+    if (this.tissue) return;
+    const cv = this.tissue = document.createElement('canvas'); cv.width = 750; cv.height = 1100;
+    const g = cv.getContext('2d');
+    const body = g.createLinearGradient(0, 270, 0, 1100);
+    body.addColorStop(0, '#fbc9d0'); body.addColorStop(0.4, '#f3a9b9'); body.addColorStop(1, '#e68aa2');
+    g.fillStyle = body; g.fillRect(0, 0, 750, 1100);
+    for (let i = 0; i < 7000; i += 1) {
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(255, 240, 240, .25)' : 'rgba(190, 80, 110, .16)';
+      g.beginPath(); g.arc(Math.random() * 750, 280 + Math.random() * 820, 0.5 + Math.random() * 1.4, 0, 7); g.fill();
+    }
+    g.lineCap = 'round';
+    const vessel = (x, y, ang, w, depth) => {             // small branching blood vessels
+      if (depth <= 0 || w < 0.5) return;
+      const len = 30 + Math.random() * 40, ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len;
+      g.strokeStyle = 'rgba(200, 50, 80, .32)'; g.lineWidth = w;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(ex, ey); g.stroke();
+      vessel(ex, ey, ang + 0.2 + Math.random() * 0.5, w * 0.72, depth - 1);
+      vessel(ex, ey, ang - 0.2 - Math.random() * 0.5, w * 0.72, depth - 1);
+    };
+    for (let i = 0; i < 8; i += 1) vessel(Math.random() * 750, 320 + Math.random() * 40, Math.PI / 2 + (Math.random() - 0.5), 2.6, 5);
+    for (let x = 105 - 164; x < 800; x += 164) {          // the folds, going down from each valley
+      const depth = 110 + Math.random() * 70, sway = (Math.random() - 0.5) * 34;
+      const fold = () => { g.beginPath(); g.moveTo(x, 318); g.bezierCurveTo(x + sway, 318 + depth * 0.4, x - sway, 318 + depth * 0.7, x + sway * 0.4, 318 + depth); };
+      fold(); g.strokeStyle = 'rgba(190, 80, 110, .55)'; g.lineWidth = 6; g.stroke();
+      fold(); g.strokeStyle = 'rgba(150, 50, 85, .55)'; g.lineWidth = 2.2; g.stroke();
+    }
+  },
+  prepare() { this.simulateInsertion(); this.buildNetwork(); },
+  enter() { this.buildTissue(); ropesOn(true); },
+  brainDrop(t) {                                          // how far below its resting place the brain is
+    const u = (t - BRAIN.BRAIN_AT) / 1000;
+    const rise = u <= 0 ? 0 : 1 - Math.exp(-2.7 * u) * Math.cos(2.9 * u);   // comes up gently, after the probes are clear
+    const out = EASE.in(brClamp((t - BRAIN.OUT) / BRAIN.OUT_MS));
+    return BRAIN.DROP * (1 - rise) + BRAIN.DROP * out;
+  },
+  surface(x, t, f, keep, drop) {
+    let y = brSurfaceBase(x) + drop;
+    this.ins.forEach(s => {
+      const d = x - s.ex;
+      y += keep * s.dent[f] * Math.exp(-((d / 30) ** 2));
+      if (s.popped && t >= s.popped) {                    // the surface shivers when a tip breaks through
+        const tau = (t - s.popped) / 1000, dist = Math.abs(d);
+        if (tau < 1.6) y += keep * Math.min(1, (620 * tau - dist) / 40 + 1 > 0 ? (620 * tau - dist) / 40 + 1 : 0) * -4.5 * Math.exp(-tau / 0.42) * Math.cos(dist / 26 - tau * 19) * Math.exp(-dist / 220);
+      }
+    });
+    return y;
+  },
+  drawShanks(t, f, R) {
+    if (t >= BRAIN.STEPS[BRAIN.STEPS.length - 1][0] + 1600) { drawRaisedShanks(R); return; }   // settled: the plain, cheap way
+    const h = 7;
+    this.ins.forEach(s => {
+      const k = s.k, sh = SHANKS[k - 1], tipY = sh.tip - R, lag = s.lag[f], bow = s.bow[f], start = Math.max(-60, R - 20), pts = [];
+      for (let r = start; r <= sh.tip + 2; r += h) {
+        const y0 = r - R, u = brClamp(y0 / Math.max(10, tipY));
+        pts.push(onShank(k, y0) + bow * Math.sin(Math.PI * u), y0 - lag * u);
+      }
+      drawShankAlong(k, pts, start, h);
+    });
+  },
+  drawNeurons(which, t) {
+    const P = this.paths;
+    rctx.lineCap = 'round'; rctx.lineJoin = 'round';
+    rctx.strokeStyle = '#7f4a8a'; rctx.lineWidth = 1.5; rctx.stroke(P.dend[which]);
+    rctx.fillStyle = '#8a4e96'; rctx.fill(P.soma[which]);
+    rctx.strokeStyle = '#5a2a68'; rctx.lineWidth = 1.3; rctx.stroke(P.soma[which]);
+  },
+  activeSpikes(t, windowMs) {                             // binary search for the first spike still worth drawing
+    const S = this.spikes; let lo = 0, hi = S.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (S[m].t < t - windowMs) lo = m + 1; else hi = m; }
+    const out = [];
+    for (let i = lo; i < S.length && S[i].t <= t; i += 1) out.push(S[i]);
+    return out;
+  },
+  drawActivity(t) {
+    const live = this.activeSpikes(t, 1300);
+    // the cell lights up
+    live.forEach(s => {
+      const age = t - s.t;
+      if (age > 380) return;
+      rctx.globalAlpha = (0.3 + 0.55 * s.b) * (1 - age / 380);
+      rctx.strokeStyle = '#ffe27a'; rctx.lineWidth = 1.8; rctx.stroke(s.c.dend);
+      rctx.fillStyle = '#fff1b0'; rctx.fill(s.c.body);
+    });
+    rctx.globalAlpha = 1;
+    // pulses running along the axons: a thin lit streak on the line itself, with a small head
+    const streaks = new Path2D(), heads = new Path2D();
+    const on = (e, u) => { const v = 1 - u; return [v * v * e.x0 + 2 * v * u * e.cx + u * u * e.x1, v * v * e.y0 + 2 * v * u * e.cy + u * u * e.y1]; };
+    live.forEach(s => s.c.out.forEach(e => {
+      const head = (t - s.t) / e.ms;
+      if (head <= 0 || head >= 1.14) return;
+      const tail = Math.max(0, head - 0.14), front = Math.min(1, head);
+      if (front <= tail) return;
+      for (let n = 0; n <= 6; n += 1) {
+        const p = on(e, tail + (front - tail) * n / 6);
+        streaks[n ? 'lineTo' : 'moveTo'](p[0], p[1]);
+      }
+      if (head < 1) { const p = on(e, head); heads.moveTo(p[0] + 1.7, p[1]); heads.arc(p[0], p[1], 1.7, 0, 7); }
+    }));
+    rctx.lineCap = 'round';
+    rctx.strokeStyle = 'rgba(255, 222, 130, .62)'; rctx.lineWidth = 1.5; rctx.stroke(streaks);
+    rctx.fillStyle = 'rgba(255, 242, 190, .9)'; rctx.fill(heads);
+    // soma flashes, and the recording sites on the shanks that hear them
+    rctx.save(); rctx.globalCompositeOperation = 'lighter';
+    live.forEach(s => {
+      const age = t - s.t;
+      if (age > 320) return;
+      const R0 = (s.c.r * 2.2 + (s.c.inLayer ? 7 : 18) + (s.c.inLayer ? 9 : 12) * s.b) * (1 - age / 640);
+      rctx.globalAlpha = (s.c.inLayer ? 0.52 : 0.68) * s.b * (1 - age / 320);
+      rctx.drawImage(this.glow, s.c.x - R0, s.c.y - R0, R0 * 2, R0 * 2);
+    });
+    live.forEach(s => {
+      const age = t - s.t;
+      if (age > 230 || t < BRAIN.REC_AT - 700) return;
+      s.c.near.forEach(q => {
+        rctx.globalAlpha = 0.75 * q.amp * s.b * (1 - age / 230);
+        const tip = SHANKS[q.k - 1].tip, y = Math.max(tip - 46, Math.min(tip - 6, s.c.y)), x = onShank(q.k, y);
+        rctx.drawImage(this.glow, x - 13, y - 13, 26, 26);
+      });
+    });
+    rctx.restore();
+    rctx.globalAlpha = 1;
+  },
+  drawMonitor(t) {
+    const P = BRAIN.PANEL, slide = EASE.out(brClamp((t - BRAIN.REC_AT + 300) / BRAIN.PANEL_MS)) * (1 - EASE.in(brClamp((t - BRAIN.OUT) / 600)));
+    if (slide <= 0) return;
+    const y0 = P.y - (1 - slide) * (P.h + P.y + 12);
+    rctx.save();
+    rctx.beginPath(); rctx.roundRect(P.x, y0, P.w, P.h, 12);
+    rctx.fillStyle = 'rgba(12, 16, 28, .93)'; rctx.fill();
+    rctx.strokeStyle = 'rgba(160, 175, 210, .55)'; rctx.lineWidth = 2; rctx.stroke();
+    rctx.clip();
+    const fs = BRAIN.FS, pxPer = BRAIN.TRACE_PX_S / fs, nowI = t / 1000 * fs, firstI = Math.ceil(BRAIN.REC_AT / 1000 * fs);
+    rctx.lineWidth = 1.5; rctx.lineJoin = 'round';
+    this.traces.forEach((tr, i) => {
+      const yMid = y0 + 16 + (i + 0.5) * (P.h - 32) / 8, right = P.x + P.w - 12;
+      const span = Math.ceil((P.w - 24) / pxPer), last = Math.min(tr.length - 1, Math.floor(nowI)), start = Math.max(firstI, last - span);
+      if (last <= start) return;
+      rctx.beginPath();
+      for (let j = start; j <= last; j += 1) {
+        const x = right - (nowI - j) * pxPer, y = yMid + tr[j] * 0.92;
+        rctx[j === start ? 'moveTo' : 'lineTo'](x, y);
+      }
+      rctx.strokeStyle = BR_COLOURS[i]; rctx.stroke();
+    });
+    rctx.restore();
+  },
+  render(t) {
+    photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
+    ropeFrame();
+    rctx.fillStyle = '#fff'; rctx.fillRect(-5, -5, 760, 1010);
+    const f = Math.min(this.ins[0].lag.length - 1, Math.round(t / this.ins[0].dt)), R = brainRaise(t) * (1);
+    const drop = this.brainDrop(t), keep = 1 - EASE.in(brClamp((t - BRAIN.OUT) / BRAIN.OUT_MS));
+    // the brain, cut off along its (dented) surface
+    const edge = [];
+    for (let x = -10; x <= 760; x += 5) edge.push(x, this.surface(x, t, f, keep, drop));
+    const trace = dy => { for (let i = 0; i < edge.length; i += 2) rctx[i ? 'lineTo' : 'moveTo'](edge[i], edge[i + 1] + dy); };
+    rctx.save();
+    rctx.beginPath(); trace(0); rctx.lineTo(760, 1800); rctx.lineTo(-10, 1800); rctx.closePath(); rctx.clip();
+    rctx.drawImage(this.tissue, 0, drop);
+    rctx.translate(0, drop);
+    rctx.strokeStyle = 'rgba(150, 80, 130, .3)'; rctx.lineWidth = 1; rctx.stroke(this.paths.axons);
+    this.drawNeurons('back', t);
+    rctx.restore();
+    this.drawShanks(t, f, R);
+    rctx.save();
+    rctx.beginPath(); trace(0); rctx.lineTo(760, 1800); rctx.lineTo(-10, 1800); rctx.closePath(); rctx.clip();
+    rctx.translate(0, drop);
+    this.drawNeurons('front', t);
+    this.drawActivity(t);
+    rctx.restore();
+    rctx.lineJoin = 'round';
+    rctx.beginPath(); trace(7); rctx.strokeStyle = 'rgba(255, 245, 245, .75)'; rctx.lineWidth = 6; rctx.stroke();    // soft highlight below the edge
+    rctx.beginPath(); trace(0); rctx.strokeStyle = '#c9607c'; rctx.lineWidth = 3; rctx.stroke();
+    this.drawMonitor(t);
+  },
+  exit() { restorePhoto(); },
+};
+setTimeout(() => EGGS.brainRecording.buildTissue(), 1800);   // painted once the page has settled, so the first play doesn't stutter
+
+// ---- blackHole: a tiny tear in the upper right becomes a black hole and slowly swallows the whole picture ------------------
+// Drawn with a small WebGL shader: each screen pixel asks "which part of the photo has been pulled to here?". With c growing over
+// time, a pixel at distance r from the hole shows the photo from distance sqrt(r*r + c), plus a twist that is strongest near the hole;
+// so everything drains inward and spirals, slowly at first. Where the photo has run out, space shows through. At c = 0 the picture is
+// exactly the photo, so when the hole collapses in a white flash, c simply goes back to zero and the photo is there as the white fades.
+// On file:// (the lab opened from disk) browsers refuse to give WebGL the photo, so img/photo64.js supplies a copy as a data URL.
+const HOLE = {
+  X: 590, Y: 230, CMAX: 960000, PULL_AT: 1400, PULL_MS: 12300, SWALLOWED: 13700, COLLAPSE: 15300, FLASH: 15650, WHITE_HOLD: 120, WHITE_FADE: 1000, END: 12950,
+  SPEED: 1.35,            // everything up to the flash runs this much faster than the times above (the flash and fade do not)
+  VERT: 'attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }',
+  FRAG: `precision highp float;
+    uniform sampler2D uPhoto; uniform vec2 uRes, uHole;
+    uniform float uT, uRh, uC, uTwist, uTear, uDisk, uRing, uFlash, uWhoosh;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float vnoise(vec2 p) {
+      vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+    }
+    float wrapnoise(float ang, float n, float y) {                       // noise that joins up all the way round the hole
+      float x = ang / 6.2831853 * n, i = floor(x), f = fract(x), j = floor(y), g = fract(y);
+      float i0 = mod(i, n), i1 = mod(i + 1.0, n);
+      f = f * f * (3.0 - 2.0 * f); g = g * g * (3.0 - 2.0 * g);
+      return mix(mix(hash(vec2(i0, j)), hash(vec2(i1, j)), f), mix(hash(vec2(i0, j + 1.0)), hash(vec2(i1, j + 1.0)), f), g);
+    }
+    vec3 space(vec2 p, float rl) {
+      vec3 col = mix(vec3(0.012, 0.012, 0.045), vec3(0.05, 0.02, 0.1), vnoise(p / 210.0)) + vec3(0.03, 0.015, 0.06) * vnoise(p / 70.0);
+      vec2 cell = floor(p / 13.0);
+      float h = hash(cell);
+      if (h > 0.93) {
+        vec2 centre = (cell + 0.25 + 0.5 * vec2(hash(cell + 3.1), hash(cell + 7.7))) * 13.0;
+        float s = smoothstep(2.2, 0.0, length(p - centre));
+        col += s * mix(vec3(0.8, 0.86, 1.0), vec3(1.0, 0.88, 0.7), hash(cell + 1.7)) * (0.45 + 1.6 * (h - 0.93) / 0.07);
+      }
+      return col;
+    }
+    void main() {
+      vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) * 750.0 / uRes.x;
+      vec2 d = p - uHole;
+      float r = length(d), a = atan(d.y, d.x);
+      float rh = uRh * (1.0 + uTear * (wrapnoise(a, 16.0, uT * 1.6) - 0.45) * 1.5);   // jagged while it is still a tear
+      if (r < rh) { gl_FragColor = vec4(mix(vec3(0.0), vec3(1.0), uFlash), 1.0); return; }
+      float rl = r + uRh * uRh * 1.7 / max(r, 1.0);                                            // light bends around the hole
+      float R = sqrt(rl * rl + uC);
+      float tw = uTwist * log(1.0 + uC / (r * r + 900.0));
+      float sa = a + tw;
+      float blur = 0.004 + 0.018 * uWhoosh * 60.0 / (r + 60.0);
+      vec3 img = vec3(0.0); float cov = 0.0;
+      for (int i = 0; i < 5; i++) {                                                            // smeared along the flow
+        float Ri = R * (1.0 + float(i) * blur);
+        vec2 src = uHole + Ri * vec2(cos(sa), sin(sa));
+        if (src.x >= 0.0 && src.x <= 750.0 && src.y >= 0.0 && src.y <= 1000.0) { img += texture2D(uPhoto, src / vec2(750.0, 1000.0)).rgb; cov += 1.0; }
+      }
+      vec2 sdir = vec2(cos(a), sin(a)) * rl;
+      vec3 col = space(uHole + sdir, rl);
+      if (cov > 0.0) col = mix(col, img / cov, cov / 5.0);
+      float hot = exp(-(r - rh) / (rh * 2.2 + 18.0));                                           // what is falling in heats up
+      col = mix(col, vec3(1.0, 0.55, 0.16) * (0.65 + 0.9 * hot), hot * 0.72 * uDisk);
+      float lr = log(max(r, 1.0));
+      float swirl = wrapnoise(a + (lr * 9.0 - uT * 3.2) / 3.0, 19.0, lr * 4.0 - uT * 1.1);
+      float ring = smoothstep(rh, rh * 1.25, r) * exp(-(r - rh) / (rh * 2.4 + 8.0));
+      col += ring * uDisk * vec3(1.0, 0.62, 0.25) * (0.35 + 1.5 * swirl);
+      float lim = (r - rh * 1.18) / (rh * 0.12 + 1.2);
+      col += exp(-lim * lim) * vec3(1.0, 0.9, 0.76) * uRing;                                    // the bright ring at the edge
+      float wind = wrapnoise(a + tw * 0.4, 163.0, lr * 3.2 + uT * 5.0);                    // streaks of rushing air
+      float streak = pow(wind, 6.0) * uWhoosh * smoothstep(680.0, 90.0, r) * smoothstep(rh, rh * 3.0, r);
+      float lum = dot(col, vec3(0.33));
+      col = mix(col, mix(vec3(0.85, 0.9, 1.0), vec3(0.42, 0.48, 0.62), smoothstep(0.3, 0.75, lum)), min(1.0, streak * 2.6));
+      gl_FragColor = vec4(mix(col, vec3(1.0), uFlash), 1.0);
+    }`,
+};
+
+EGGS.blackHole = {
+  label: 'blackHole', note: 'a tiny tear in the upper right becomes a black hole and slowly swallows the whole picture',
+  mode: 'scene', duration: HOLE.END,
+  warm() {                                                // from disk, fetch the data-URL copy of the photo that WebGL is allowed to use
+    if (location.protocol !== 'file:' || window.EGG_PHOTO64 || document.querySelector('script[data-photo64]')) return;
+    const sc = document.createElement('script');
+    sc.src = 'img/photo64.js'; sc.dataset.photo64 = '1';
+    sc.onload = () => { const im = new Image(); im.onload = () => { this.dataPhoto = im; }; im.src = window.EGG_PHOTO64; };
+    document.head.appendChild(sc);
+  },
+  setupGL() {
+    if (this.tried) return !!this.gl;
+    this.tried = true;
+    const source = location.protocol === 'file:' ? this.dataPhoto : document.getElementById('photo');
+    if (!source) { this.tried = false; return false; }    // the copy isn't loaded yet: try again next time
+    const cv = document.createElement('canvas');
+    cv.width = 1125; cv.height = 1500; cv.className = 'layer'; cv.style.display = 'none';
+    const gl = cv.getContext('webgl', { preserveDrawingBuffer: true, antialias: false, alpha: false });
+    if (!gl) return false;
+    const shader = (type, text) => { const s = gl.createShader(type); gl.shaderSource(s, text); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s)); return s; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, shader(gl.VERTEX_SHADER, HOLE.VERT)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, HOLE.FRAG));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.error(gl.getProgramInfoLog(prog)); return false; }
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const at = gl.getAttribLocation(prog, 'a');
+    gl.enableVertexAttribArray(at); gl.vertexAttribPointer(at, 2, gl.FLOAT, false, 0, 0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    this.u = {};
+    ['uRes', 'uHole', 'uT', 'uRh', 'uC', 'uTwist', 'uTear', 'uDisk', 'uRing', 'uFlash', 'uWhoosh'].forEach(n => { this.u[n] = gl.getUniformLocation(prog, n); });
+    gl.uniform2f(this.u.uRes, cv.width, cv.height); gl.uniform2f(this.u.uHole, HOLE.X, HOLE.Y);
+    gl.viewport(0, 0, cv.width, cv.height);
+    document.getElementById('stage').appendChild(cv);
+    this.cv = cv; this.gl = gl;
+    return true;
+  },
+  story(t) {                                              // real time -> the time the numbers above are written in
+    const flashAt = HOLE.FLASH / HOLE.SPEED;
+    return t < flashAt ? t * HOLE.SPEED : HOLE.FLASH + (t - flashAt);
+  },
+  sfx() {                                                 // ms from the egg's start, sped up to match
+    const S = HOLE.SPEED;
+    return [{ ms: 1300 / S, kind: 'whoosh', dur: 12.8 / S, v: 0.65 }, { ms: 2200 / S, kind: 'rumble', dur: 13.2 / S, v: 0.9 },
+            { ms: (HOLE.FLASH - 20) / S, kind: 'splink', v: 1 }];
+  },
+  enter() {
+    this.useGL = this.setupGL();
+    if (this.useGL) this.cv.style.display = 'block'; else ropesOn(true);
+    if (PLAYER) return;                                   // on the home page, homeeggs.js plays the sfx() list itself
+    const run = this.soundRun = {}, t0 = performance.now();
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume().then(() => {
+      if (this.soundRun !== run) return;
+      const gone = performance.now() - t0;
+      this.sound = EggSfx.play(audio, this.sfx().filter(h => h.ms > gone).map(h => ({ ...h, ms: (h.ms - gone) / speed, dur: h.dur && h.dur / speed })));
+    });
+  },
+  levels(t) {
+    const rise = (a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+    let rh;
+    if (t < 1400) rh = 7 * EASE.out(rise(400, 1400));
+    else if (t < 3000) rh = 7 + 5 * rise(1400, 3000);
+    else if (t < HOLE.SWALLOWED) rh = 12 + 14 * rise(3000, HOLE.SWALLOWED);
+    else if (t < HOLE.COLLAPSE) rh = 26 + 8 * rise(HOLE.SWALLOWED, HOLE.COLLAPSE);
+    else rh = 34 * (1 - EASE.in(rise(HOLE.COLLAPSE, HOLE.FLASH)));
+    const pull = Math.min(1, Math.max(0, (t - HOLE.PULL_AT) / HOLE.PULL_MS));
+    let c = HOLE.CMAX * pull ** 3.4;
+    if (t >= HOLE.FLASH) c = 0;                           // behind the full white, the picture is simply back
+    const flash = t < HOLE.COLLAPSE ? 0 : t < HOLE.FLASH ? EASE.in(rise(HOLE.COLLAPSE, HOLE.FLASH)) : 1 - rise(HOLE.FLASH + HOLE.WHITE_HOLD, HOLE.FLASH + HOLE.WHITE_HOLD + HOLE.WHITE_FADE);
+    const after = t >= HOLE.FLASH;
+    return {
+      rh: after ? 0 : rh, c, flash,
+      twist: 0.6 + 1.0 * rise(1400, 11000),
+      tear: 1 - rise(1400, 3800),
+      disk: after ? 0 : EASE.inout(rise(3000, 7500)),
+      ring: after ? 0 : rise(900, 2400),
+      whoosh: after ? 0 : rise(1400, 3200) * (1 - 0.65 * rise(HOLE.SWALLOWED - 900, HOLE.SWALLOWED + 300)),
+    };
+  },
+  render(realT) {
+    const t = this.story(realT), L = this.levels(t);
+    if (!this.useGL) {                                    // no WebGL here: the plain version, the photo spinning down into the hole
+      const u = Math.min(1, L.c / HOLE.CMAX) ** 0.4;
+      ropeFrame();
+      rctx.fillStyle = '#05050f'; rctx.fillRect(-5, -5, 760, 1010);
+      if (u < 1) { rctx.save(); rctx.translate(HOLE.X, HOLE.Y); rctx.rotate(u * 9); rctx.scale(1 - u, 1 - u); rctx.drawImage(document.getElementById('photo'), -HOLE.X, -HOLE.Y, 750, 1000); rctx.restore(); }
+      rctx.fillStyle = '#000'; rctx.beginPath(); rctx.arc(HOLE.X, HOLE.Y, L.rh, 0, 7); rctx.fill();
+      return;
+    }
+    const gl = this.gl, U = this.u;
+    gl.uniform1f(U.uT, t / 1000); gl.uniform1f(U.uRh, L.rh); gl.uniform1f(U.uC, L.c); gl.uniform1f(U.uTwist, L.twist);
+    gl.uniform1f(U.uTear, L.tear); gl.uniform1f(U.uDisk, L.disk); gl.uniform1f(U.uRing, L.ring); gl.uniform1f(U.uFlash, L.flash); gl.uniform1f(U.uWhoosh, L.whoosh);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  },
+  exit() {
+    this.soundRun = null;
+    if (this.sound) this.sound.stop();
+    this.sound = null;
+    if (this.cv) this.cv.style.display = 'none';
+    if (!this.useGL) restorePhoto();
+  },
+};
+setTimeout(() => EGGS.blackHole.warm(), 1200);
+
+// ---- shankBlasters: the shanks shatter into pixel aliens and a little ship shoots them all down ----------------------------
+// An original arcade shooter that plays itself. Each shank breaks into blocks; the blocks fly to become one column of four aliens, whose
+// designs come from the probe (zigzag shank-tip legs, recording pads for eyes). The game runs on a fixed 60 Hz step from a seed, so one
+// silent run in prepare() gives the egg's length and the list of sounds, and render() can re-run it to any moment. When the last alien
+// is gone, the blocks stream back and rebuild the shanks. The photo's white background stays throughout.
+const BL = {
+  PX: 5, ROWS: [118, 208, 298, 388], BREAK: 500, FLY: 1150, FLY_MS: 1150, SHIP_IN: 2300, GO: 3100, SHIP_Y: 930,
+  FIRE_MS: 185, BULLET: 1100, BOMB: 430, SHIP_V: 580, MAX_MS: 19000, SPIN_MS: 1500, BACK_MS: 1200, END_HOLD: 450,
+  SPRITES: [
+    { eye: '#ff2f8f', body: '#159bdc', a: ['..#######..', '.#########.', '##O##O##O##', '###########', '.#.#.#.#.#.', '#.#.#.#.#.#', '.#...#...#.'],
+                                       b: ['..#######..', '.#########.', '##O##O##O##', '###########', '#.#.#.#.#.#', '.#.#.#.#.#.', '#...#...#..'] },
+    { eye: '#ffc61a', body: '#7a3fe0', a: ['...#####...', '..#O#O#O#..', '.#########.', '.#O#O#O#O#.', '###########', '#.#######.#', '#..#.#.#..#', '..#.....#..'],
+                                       b: ['...#####...', '..#O#O#O#..', '.#########.', '.#O#O#O#O#.', '###########', '#.#######.#', '.#.#.#.#.#.', '.#.......#.'] },
+    { eye: '#ffffff', body: '#10a878', a: ['.....#.....', '....###....', '...#####...', '..##O#O##..', '.#########.', '##.#####.##', '#...###...#', '....#.#....'],
+                                       b: ['.....#.....', '....###....', '...#####...', '..##O#O##..', '.#########.', '##.#####.##', '.#..###..#.', '...#...#...'] },
+  ],
+  SHIP: ['......#......', '.....###.....', '.....#O#.....', '....#####....', '#...#####...#', '#..#######..#', '#############', '##.#.###.#.##', '.....#.#.....'],
+  BLUES: ['rgb(13, 2, 148)', 'rgb(24, 10, 165)', 'rgb(44, 30, 190)', 'rgb(9, 0, 120)'],
+};
+function blDigits(c, n, x, y, s, col) {                   // a small pixel-number readout
+  const F = ['111101101101111', '010110010010111', '111001111100111', '111001111001111', '101101111001001', '111100111001111', '111100111101111', '111001001001001', '111101111101111', '111101111001111'];
+  c.fillStyle = col;
+  String(n).padStart(5, '0').split('').forEach((d, i) => { for (let j = 0; j < 15; j += 1) if (F[+d][j] === '1') c.fillRect(x + i * 4 * s + (j % 3) * s, y + Math.floor(j / 3) * s, s, s); });
+}
+
+EGGS.shankBlasters = {
+  label: 'shankBlasters', note: 'the shanks shatter into pixel aliens and a little ship shoots them all down',
+  mode: 'scene', duration: 18000,                         // set for each play in prepare()
+  prepare() {
+    this.seed = Math.floor(Math.random() * 1e9);
+    this.reset();
+    while (this.alive() && this.T < BL.MAX_MS) this.step();
+    this.aliens.forEach(a => { if (a.alive) this.kill(a); });   // safety: nothing is left over
+    this.clearAt = this.T;
+    this.events.push({ ms: this.clearAt + 450, kind: 'fanfare', v: 1 });
+    this.soundList = this.events.slice();
+    this.backAt = this.clearAt + BL.SPIN_MS;
+    this.duration = Math.round(this.backAt + BL.BACK_MS + BL.END_HOLD);
+    this.reset();
+    // the blocks: each pixel of each alien starts as a piece of its shank, and scatters somewhere for the trip home
+    this.blocks = [];
+    this.aliens.forEach(a => {
+      const sp = BL.SPRITES[a.type], k = a.col + 1, s = SHANKS[a.col], y0 = s.tip * a.row / 4, y1 = s.tip * (a.row + 1) / 4, pts = [];
+      sp.a.forEach((line, j) => line.split('').forEach((ch, i) => { if (ch !== '.') pts.push([i, j]); }));
+      const cells = [];
+      for (let y = y0 + 4; y < y1; y += 9) { cells.push([onShank(k, y) - 4.5, y]); cells.push([onShank(k, y) + 4.5, y]); }
+      cells.sort(() => Math.random() - 0.5);
+      pts.forEach(([i, j], n) => this.blocks.push({ a, i, j, sx: cells[n % cells.length][0], sy: cells[n % cells.length][1],
+        col: BL.BLUES[Math.floor(Math.random() * BL.BLUES.length)], lag: Math.random() * 450, ph: Math.random() * 6.3,
+        rx: Math.random() * 750, ry: Math.random() * 1000 }));
+    });
+  },
+  sfx() { return this.soundList; },
+  alive() { return this.aliens.some(a => a.alive); },
+  reset() {
+    let z = this.seed;                                    // a small seeded random-number generator, so every re-run is identical
+    this.rnd = () => { z = (z + 0x6D2B79F5) | 0; let r = Math.imul(z ^ (z >>> 15), 1 | z); r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r; return ((r ^ (r >>> 14)) >>> 0) / 4294967296; };
+    this.T = 0; this.lock = null; this.ship = { x: 375, cd: 0 }; this.bullets = []; this.bombs = []; this.kills = []; this.events = []; this.score = 0;
+    this.nextDive = BL.GO + 700;
+    this.aliens = [];
+    for (let col = 0; col < 8; col += 1) for (let row = 0; row < 4; row += 1) {
+      this.aliens.push({ col, row, type: row === 0 ? 2 : row === 3 ? 0 : 1, alive: true, mode: 'home', x: 0, y: 0, hx: onShank(col + 1, BL.ROWS[row]), hy: BL.ROWS[row] });
+    }
+  },
+  placeHome(a, T) { return [a.hx + 20 * Math.sin(T / 1200), a.hy + 7 * Math.sin(T / 700 + a.col * 0.7)]; },
+  kill(a) {
+    a.alive = false;
+    this.kills.push({ a, x: a.x, y: a.y, t: this.T });
+    this.score += a.mode === 'home' ? 100 : 250;
+    this.events.push({ ms: this.T, kind: 'zap', v: 1 });
+  },
+  step() {
+    const dt = 1000 / 60, T = (this.T += dt), sh = this.ship;
+    this.aliens.forEach(a => {
+      if (!a.alive) return;
+      if (a.mode === 'home') { [a.x, a.y] = this.placeHome(a, T); return; }
+      const d = a.dive, u = (T - d.t0) / d.ms;
+      if (a.mode === 'dive') {
+        if (u >= 1) { a.mode = 'back'; a.dive = { t0: T, ms: 1100 }; a.x = this.placeHome(a, T)[0]; a.y = -50; return; }
+        a.x = d.x0 + (d.to - d.x0) * u + d.amp * Math.sin(u * 6.2832 * d.turns);
+        a.y = d.y0 + (1080 - d.y0) * u ** 1.15;
+        if (!d.bombed && u > 0.28) { d.bombed = true; if (this.rnd() < 0.6) this.bombs.push({ x: a.x, y: a.y }); }
+      } else {
+        const [hx, hy] = this.placeHome(a, T), v = Math.min(1, u);
+        a.x = hx; a.y = -50 + (hy + 50) * EASE.out(v);
+        if (u >= 1) a.mode = 'home';
+      }
+    });
+    if (T < BL.GO) return;
+    if (T >= this.nextDive) {                             // send one down
+      this.nextDive = T + 500 + this.rnd() * 420;
+      const pool = this.aliens.filter(a => a.alive && a.mode === 'home');
+      if (pool.length) {
+        const lowest = Math.max(...pool.map(a => a.row)), near = pool.filter(a => a.row === lowest), from = this.rnd() < 0.7 ? near : pool;
+        const a = from[Math.floor(this.rnd() * from.length)];
+        a.mode = 'dive';
+        a.dive = { t0: T, ms: 2300 + this.rnd() * 900, x0: a.x, y0: a.y, to: Math.max(60, Math.min(690, sh.x + (this.rnd() - 0.5) * 240)), amp: (this.rnd() < 0.5 ? -1 : 1) * (90 + this.rnd() * 120), turns: 0.8 + this.rnd() * 0.7, bombed: false };
+        this.events.push({ ms: T, kind: 'dive', v: 1 });
+      }
+    }
+    // the ship picks the best target, aims a little ahead of movers, and sidesteps bombs
+    const reachable = a => a.alive && a.y > 0 && a.y < BL.SHIP_Y - 130;
+    if (!this.lock || !reachable(this.lock)) {            // keep one target until it's gone, so the ship doesn't dither
+      let best = Infinity; this.lock = null;
+      this.aliens.filter(reachable).forEach(a => { const score = Math.abs(a.x - sh.x) + (1000 - a.y) * 0.12; if (score < best) { best = score; this.lock = a; } });
+    }
+    const target = this.lock;
+    let aim = sh.x;
+    if (target) aim = target.x + (target.mode === 'dive' ? (target.x - target.px || 0) * 14 : 0);
+    this.aliens.forEach(a => { a.px = a.x; });
+    this.bombs.forEach(b => { if (b.y > BL.SHIP_Y - 260 && b.y < BL.SHIP_Y && Math.abs(b.x - sh.x) < 40) aim = sh.x + (sh.x >= b.x ? 90 : -90); });
+    aim = Math.max(45, Math.min(705, aim));
+    sh.x += Math.max(-BL.SHIP_V * dt / 1000, Math.min(BL.SHIP_V * dt / 1000, aim - sh.x));
+    sh.cd -= dt;
+    if (sh.cd <= 0 && this.bullets.length < 4 && this.aliens.some(a => a.alive && a.y > 0 && a.y < BL.SHIP_Y - 40 && Math.abs(a.x - sh.x) < 24)) {   // fire at anything lined up
+      sh.cd = BL.FIRE_MS; this.bullets.push({ x: sh.x, y: BL.SHIP_Y - 30 });
+      this.events.push({ ms: T, kind: 'laser', v: 1 });
+    }
+    this.bullets.forEach(b => { b.y -= BL.BULLET * dt / 1000; });
+    this.bombs.forEach(b => { b.y += BL.BOMB * dt / 1000; });
+    this.bullets = this.bullets.filter(b => {
+      if (b.y < -20) return false;
+      const a = this.aliens.find(q => q.alive && Math.abs(q.x - b.x) < 30 && Math.abs(q.y - b.y) < 24);
+      if (a) { this.kill(a); return false; }
+      return true;
+    });
+    this.bombs = this.bombs.filter(b => b.y < 1020);
+  },
+  enter() {
+    ropesOn(true);
+    if (PLAYER) return;                                   // on the home page, homeeggs.js plays the sfx() list itself
+    const run = this.soundRun = {}, t0 = performance.now();
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume().then(() => {
+      if (this.soundRun !== run) return;
+      const gone = performance.now() - t0;
+      this.sound = EggSfx.play(audio, this.sfx().filter(h => h.ms > gone).map(h => ({ ...h, ms: (h.ms - gone) / speed })));
+    });
+  },
+  drawAlien(a, x, y, t) {
+    const sp = BL.SPRITES[a.type], frame = Math.floor(t / 320 + a.col) % 2 ? sp.b : sp.a, P = BL.PX, w = frame[0].length, h = frame.length;
+    frame.forEach((line, j) => line.split('').forEach((ch, i) => {
+      if (ch === '.') return;
+      rctx.fillStyle = ch === 'O' ? sp.eye : sp.body;
+      rctx.fillRect(x + (i - w / 2) * P, y + (j - h / 2) * P, P, P);
+    }));
+  },
+  drawShip(x, y) {
+    const P = BL.PX, S = BL.SHIP;
+    S.forEach((line, j) => line.split('').forEach((ch, i) => {
+      if (ch === '.') return;
+      rctx.fillStyle = ch === 'O' ? '#0a86d8' : j < 4 ? '#f5a800' : '#ec5f12';
+      rctx.fillRect(x + (i - 6.5) * P, y + (j - 4.5) * P, P, P);
+    }));
+  },
+  render(t) {
+    photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
+    ropeFrame();
+    if (t < this.T) this.reset();
+    while (this.T + 1000 / 60 <= t) this.step();          // keeps running after the last kill, so shots and bombs finish flying
+    const clamp = u => Math.max(0, Math.min(1, u));
+    const back = clamp((t - this.backAt) / BL.BACK_MS);
+    rctx.fillStyle = '#fff'; rctx.fillRect(-5, -5, 760, 1010);
+    const whole = 1 - clamp((t - BL.BREAK) / 500);        // the real shanks, handing over to their blocks
+    const rebuilt = clamp((t - this.backAt - BL.BACK_MS * 0.8) / (BL.BACK_MS * 0.2));
+    if (whole > 0 || rebuilt > 0) { rctx.globalAlpha = Math.max(whole, rebuilt); drawRaisedShanks(0); rctx.globalAlpha = 1; }
+    const formed = t >= BL.FLY + BL.FLY_MS + 450;
+    if (t >= BL.BREAK && (!formed || back > 0) && back < 1) this.blocks.forEach(b => {   // shatter, fly to the aliens; and later, home again
+      let x, y, size;
+      const a = b.a, tx = this.placeHome(a, t)[0] + (b.i - 5.5) * BL.PX, ty = this.placeHome(a, t)[1] + (b.j - 4) * BL.PX;
+      if (back > 0) {
+        const u = EASE.inout(clamp((back - b.lag / 2600) / 0.8));
+        x = b.rx + (b.sx - b.rx) * u; y = b.ry + (b.sy - b.ry) * u; size = BL.PX + 4 * u;
+        rctx.globalAlpha = Math.min(1, back * 5);
+      } else {
+        const shiver = clamp((t - BL.BREAK) / 600) * 2.6, u = EASE.inout(clamp((t - BL.FLY - b.lag) / BL.FLY_MS));
+        x = b.sx + (tx - b.sx) * u + shiver * (1 - u) * Math.sin(t / 26 + b.ph); y = b.sy + (ty - b.sy) * u + shiver * (1 - u) * Math.cos(t / 31 + b.ph);
+        size = 9 + (BL.PX - 9) * u;
+      }
+      rctx.fillStyle = b.col; rctx.fillRect(x - size / 2, y - size / 2, size, size);
+    });
+    rctx.globalAlpha = 1;
+    if (formed && back === 0) this.aliens.forEach(a => { if (a.alive) this.drawAlien(a, a.mode === 'home' && this.T === 0 ? this.placeHome(a, t)[0] : (a.x || this.placeHome(a, t)[0]), a.y || this.placeHome(a, t)[1], t); });
+    if (t >= BL.SHIP_IN && back === 0) {
+      const u = EASE.out(clamp((t - BL.SHIP_IN) / 700)), spin = clamp((t - this.clearAt - 500) / (BL.SPIN_MS - 500));
+      const sy = BL.SHIP_Y + (1 - u) * 160 - EASE.in(spin) * 1040;
+      this.drawShip(this.ship.x + 34 * Math.sin(spin * 9) * spin, sy);
+      if (t > BL.GO && spin === 0) { rctx.fillStyle = Math.floor(t / 60) % 2 ? '#ec3a12' : '#f5a800'; rctx.fillRect(this.ship.x - 5, BL.SHIP_Y + 24, 10, 8 + 7 * Math.abs(Math.sin(t / 30))); }
+    }
+    rctx.fillStyle = '#0a6fd8'; this.bullets.forEach(b => rctx.fillRect(b.x - 2.5, b.y - 13, 5, 26));
+    rctx.fillStyle = '#e0279e'; this.bombs.forEach(b => { rctx.fillRect(b.x - 4, b.y - 9, 8, 18); rctx.fillStyle = Math.floor(t / 90) % 2 ? '#e0279e' : '#8c1a64'; });
+    this.kills.forEach(k => {                             // each alien bursts into its own pixels
+      const age = (t - k.t) / 1000;
+      if (age < 0 || age > 0.85 || back > 0) return;
+      const sp = BL.SPRITES[k.a.type];
+      sp.a.forEach((line, j) => line.split('').forEach((ch, i) => {
+        if (ch === '.') return;
+        const h = Math.sin(i * 12.99 + j * 78.2 + k.t) * 43758.5, r = h - Math.floor(h), ang = r * 6.2832, sp2 = 90 + r * 330;
+        rctx.globalAlpha = 1 - age / 0.85;
+        rctx.fillStyle = ch === 'O' ? sp.eye : (r < 0.3 ? '#ffa01e' : sp.body);
+        rctx.fillRect(k.x + (i - 5.5) * BL.PX + Math.cos(ang) * sp2 * age, k.y + (j - 4) * BL.PX + Math.sin(ang) * sp2 * age + 130 * age * age, BL.PX, BL.PX);
+      }));
+      rctx.globalAlpha = Math.max(0, 1 - age / 0.22);
+      rctx.fillStyle = '#ffbe3c'; rctx.beginPath(); rctx.arc(k.x, k.y, 8 + age * 95, 0, 7); rctx.fill();
+      rctx.globalAlpha = 1;
+    });
+    if (formed && back === 0) blDigits(rctx, this.score, 18, 14, 4, '#2a2a33');
+  },
+  exit() {
+    this.soundRun = null;
+    if (this.sound) this.sound.stop();
+    this.sound = null;
+    restorePhoto();
+  },
+};
+
+// ---- fourSeasons: the shanks become a row of trees, and a year goes by ---------------------------------------------------------
+// One calm continuous shot. The photo's white turns to snow; branches grow out of the shanks. A single number s runs 0 (winter) -> 1
+// (spring) -> 2 (summer) -> 3 (autumn) -> 4 (winter), lingering a little near each season. The sky, hills and ground colours are
+// blended from s, so there are no cuts. Each leaf is its own small timeline: bud, blossom, green, turn, fall, lie on the ground, get snowed over.
+const SEASON = {
+  START: 1800, EACH: 6200, FADE: 1500, COUNT: 4,
+  // colours at s = 0, 1, 2, 3, 4
+  SKY_TOP: [[184, 201, 220], [143, 208, 242], [79, 169, 234], [127, 168, 207], [184, 201, 220]],
+  SKY_LOW: [[238, 242, 246], [234, 247, 255], [205, 236, 251], [246, 220, 176], [238, 242, 246]],
+  FAR:     [[201, 214, 228], [185, 217, 194], [127, 184, 154], [196, 142, 82], [201, 214, 228]],
+  MID:     [[223, 231, 239], [163, 209, 137], [92, 166, 90], [201, 132, 58], [223, 231, 239]],
+  GROUND:  [[251, 252, 254], [182, 224, 138], [111, 187, 73], [201, 147, 63], [251, 252, 254]],
+  GROUND2: [[223, 232, 242], [121, 194, 95], [63, 143, 54], [141, 107, 43], [223, 232, 242]],
+  BRANCH: 'rgb(22, 12, 118)',
+};
+SEASON.END = SEASON.START + SEASON.EACH * SEASON.COUNT;
+const seClamp = u => Math.max(0, Math.min(1, u));
+const seSmooth = u => { const v = seClamp(u); return v * v * (3 - 2 * v); };
+function seasonAt(t) {                                    // 0..4, slowing near each whole number so every season gets its moment
+  const x = seClamp((t - SEASON.START) / (SEASON.EACH * SEASON.COUNT)) * SEASON.COUNT, n = Math.min(SEASON.COUNT - 1, Math.floor(x)), u = x - n;
+  return n + u - 0.7 * Math.sin(2 * Math.PI * u) / (2 * Math.PI);
+}
+function seasonColour(stops, s, alpha) {
+  const n = Math.min(stops.length - 2, Math.floor(s)), u = seSmooth(s - n), m = i => Math.round(stops[n][i] + (stops[n + 1][i] - stops[n][i]) * u);
+  return alpha === undefined ? `rgb(${m(0)}, ${m(1)}, ${m(2)})` : `rgba(${m(0)}, ${m(1)}, ${m(2)}, ${alpha})`;
+}
+function seMix(a, b, u) { return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u]; }
+
+EGGS.fourSeasons = {
+  label: 'fourSeasons', note: 'the shanks become a row of trees and a whole year goes by, from winter round to winter',
+  mode: 'scene', duration: SEASON.END + SEASON.FADE + 250,
+  prepare() {
+    const R = (a, b) => a + Math.random() * (b - a);
+    const toTime = s => { let lo = SEASON.START, hi = SEASON.END; for (let i = 0; i < 26; i += 1) { const m = (lo + hi) / 2; if (seasonAt(m) < s) lo = m; else hi = m; } return lo; };
+    const tipLine = x => SHANKS[0].tip + (x - onShank(1, SHANKS[0].tip)) * (SHANKS[7].tip - SHANKS[0].tip) / (onShank(8, SHANKS[7].tip) - onShank(1, SHANKS[0].tip));
+    this.groundAt = x => tipLine(x) - 26 + 5 * Math.sin(x / 83 + 2) + 3 * Math.sin(x / 37);
+    this.branches = []; this.leaves = [];
+    for (let k = 1; k <= 8; k += 1) {
+      const n = 16, top = 26, bottom = SHANKS[k - 1].tip - 300;
+      for (let i = 0; i < n; i += 1) {
+        const y = top + (bottom - top) * ((i + R(0.15, 0.85)) / n), side = i % 2 ? 1 : -1, x = onShank(k, y);
+        const len = R(46, 96) * (0.75 + 0.45 * (y / bottom)), ang = -Math.PI / 2 + side * R(0.75, 1.25);
+        const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len;
+        const main = { x, y, ex, ey, w: 3.4 };
+        this.branches.push(main);
+        const addLeaves = (x0, y0, x1, y1, count) => {
+          for (let q = 0; q < count; q += 1) {
+            const f = R(0.25, 1.05), d = Math.random(), lx = x0 + (x1 - x0) * f + R(-10, 10), ly = y0 + (y1 - y0) * f + R(-10, 10);
+            const fall = toTime(3.08 + d * 0.72), speed = R(55, 110);
+            const fallMs = Math.max(0, this.groundAt(lx) + R(0, 26) - ly) / speed * 1000;
+            this.leaves.push({ x: lx, y: ly, d, r: R(3.3, 6.2), rot: R(0, 6.28), ph: R(0, 6.28), fall, fallMs, sway: R(14, 42), spin: R(-2.4, 2.4),
+                               blossomWhite: Math.random() < 0.3, green: Math.floor(Math.random() * 3), warm: Math.floor(Math.random() * 4) });
+          }
+        };
+        addLeaves(x, y, ex, ey, 2);
+        [0.45, 0.72].forEach(f => {
+          const bx = x + (ex - x) * f, by = y + (ey - y) * f, a2 = ang + side * R(-0.9, -0.3) * (Math.random() < 0.5 ? 1 : -1), l2 = len * R(0.35, 0.55);
+          const tx = bx + Math.cos(a2) * l2, ty = by + Math.sin(a2) * l2;
+          this.branches.push({ x: bx, y: by, ex: tx, ey: ty, w: 1.7 });
+          addLeaves(bx, by, tx, ty, 4);
+        });
+      }
+    }
+    this.flakes = Array.from({ length: 170 }, () => ({ x: R(-20, 770), y: R(0, 1060), v: R(26, 80), r: R(1.1, 3.1), sway: R(6, 26), ph: R(0, 6.28) }));
+    this.petals = Array.from({ length: 60 }, () => ({ x: R(-20, 770), y: R(0, 1060), v: R(30, 70), r: R(2.4, 4.6), sway: R(20, 60), ph: R(0, 6.28), spin: R(-2, 2) }));
+    this.motes = Array.from({ length: 70 }, () => ({ x: R(0, 750), y: R(100, 900), sway: R(8, 34), ph: R(0, 6.28), r: R(0.8, 2) }));
+    this.flies = Array.from({ length: 3 }, (_, i) => ({ cx: R(150, 600), cy: R(420, 760), rx: R(90, 180), ry: R(40, 110), ph: R(0, 6.28), col: ['#f5a623', '#f7f2e8', '#7fb2ff'][i], sp: R(0.5, 0.8) }));
+    this.flock = Array.from({ length: 9 }, (_, i) => ({ dx: -Math.abs(i - 4) * 26 + R(-4, 4), dy: (i - 4) * 16 + R(-4, 4), ph: R(0, 6.28) }));
+    this.flockAt = toTime(2.95); this.flockMs = 7000;
+    this.clouds = Array.from({ length: 5 }, (_, i) => ({ x: i * 200 + R(-40, 40), y: R(40, 310), s: R(0.5, 1.1), v: R(4, 9) }));
+    this.buildStatic();
+  },
+  buildStatic() {
+    const ridge = (base, amps) => { const p = new Path2D(); p.moveTo(-10, 1010); for (let x = -10; x <= 760; x += 5) p.lineTo(x, base + amps.reduce((s, [a, f, ph]) => s + a * Math.sin(x / f + ph), 0)); p.lineTo(760, 1010); p.closePath(); return p; };
+    this.farHills = ridge(690, [[34, 170, 0.7], [15, 62, 2.1]]);
+    this.midHills = ridge(780, [[24, 120, 2.4], [10, 44, 0.5]]);
+    const g = new Path2D(); g.moveTo(-10, 1010);
+    for (let x = -10; x <= 760; x += 5) g.lineTo(x, this.groundAt(x));
+    g.lineTo(760, 1010); g.closePath(); this.groundPath = g;
+    if (!this.cloudImg) {
+      const cv = this.cloudImg = document.createElement('canvas'); cv.width = 340; cv.height = 150;
+      const c = cv.getContext('2d');
+      for (let i = 0; i < 28; i += 1) {
+        const x = 50 + Math.random() * 240, r = 20 + Math.random() * 28, y = 106 - r * (0.3 + Math.random() * 0.6) - (1 - Math.abs(x - 170) / 130) * Math.random() * 28;
+        const q = c.createRadialGradient(x - r * 0.25, y - r * 0.35, r * 0.1, x, y, r);
+        q.addColorStop(0, 'rgba(255, 255, 255, .95)'); q.addColorStop(0.72, 'rgba(250, 251, 255, .8)'); q.addColorStop(1, 'rgba(235, 243, 252, 0)');
+        c.fillStyle = q; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+      }
+    }
+  },
+  enter() { ropesOn(true); },
+  leafColour(l, s) {                                      // where this leaf is in its year: [r, g, b] and its size (0..1)
+    const G = [[120, 190, 80], [84, 164, 70], [52, 136, 62]][l.green], W = [[238, 186, 54], [226, 128, 38], [200, 74, 40], [176, 56, 46]][l.warm];
+    const bloomIn = seSmooth((s - (0.5 + 0.28 * l.d)) / 0.3);
+    const toGreen = seSmooth((s - (1.3 + 0.3 * l.d)) / 0.4);
+    const toWarm = seSmooth((s - (2.55 + 0.42 * l.d)) / 0.4);
+    const blossom = l.blossomWhite ? [253, 244, 246] : [247, 178, 200];
+    const c = seMix(seMix(blossom, G, toGreen), W, toWarm);
+    const lush = seSmooth((s - 1.4) / 0.5) * (1 - seSmooth((s - 2.7) / 0.5));   // summer leaves fill out, then thin again
+    return { c, size: bloomIn * (1 + 0.95 * lush) };
+  },
+  render(t) {
+    photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
+    ropeFrame();
+    const s = seasonAt(t), scene = seSmooth((t - 250) / 1400) * (1 - seSmooth((t - SEASON.END) / SEASON.FADE));
+    const grow = seSmooth((t - 900) / 1700) * (1 - seSmooth((t - SEASON.END + 150) / (SEASON.FADE * 0.85)));
+    const winter = Math.max(1 - s / 0.75, (s - 3.45) / 0.55), spring = Math.max(0, 1 - Math.abs(s - 1) / 0.75), summer = Math.max(0, 1 - Math.abs(s - 2) / 0.7), autumn = Math.max(0, 1 - Math.abs(s - 3) / 0.8);
+    rctx.fillStyle = '#fff'; rctx.fillRect(-5, -5, 760, 1010);
+    rctx.save(); rctx.globalAlpha = scene;
+    const sky = rctx.createLinearGradient(0, 0, 0, 780);
+    sky.addColorStop(0, seasonColour(SEASON.SKY_TOP, s)); sky.addColorStop(1, seasonColour(SEASON.SKY_LOW, s));
+    rctx.fillStyle = sky; rctx.fillRect(-5, -5, 760, 1010);
+    const sunX = 130 + 500 * s / 4, sunY = 250 - 130 * Math.sin(Math.PI * s / 4);       // the sun's slow arc over the year
+    const sunGlow = rctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 190);
+    const a = 0.45 + 0.5 * summer + 0.2 * autumn;
+    sunGlow.addColorStop(0, `rgba(255, 250, 220, ${a})`); sunGlow.addColorStop(0.12, `rgba(255, 240, 185, ${a * 0.75})`); sunGlow.addColorStop(1, 'rgba(255, 235, 170, 0)');
+    rctx.fillStyle = sunGlow; rctx.beginPath(); rctx.arc(sunX, sunY, 190, 0, 7); rctx.fill();
+    this.clouds.forEach(c => { const span = 1090, x = ((c.x + t * c.v / 1000) % span) - 340 * c.s; rctx.globalAlpha = scene * (0.85 - 0.3 * summer); rctx.drawImage(this.cloudImg, x, c.y, 340 * c.s, 150 * c.s); });
+    rctx.globalAlpha = scene;
+    rctx.fillStyle = seasonColour(SEASON.FAR, s); rctx.fill(this.farHills);
+    rctx.fillStyle = seasonColour(SEASON.MID, s); rctx.fill(this.midHills);
+    if (t > this.flockAt && t < this.flockAt + this.flockMs) {                          // geese going south in autumn
+      const u = (t - this.flockAt) / this.flockMs, fx = 820 - u * 1050, fy = 300 - 70 * u;
+      rctx.strokeStyle = 'rgba(60, 50, 60, .65)'; rctx.lineWidth = 1.7; rctx.lineCap = 'round';
+      this.flock.forEach(b => { const w = 3 + 2.6 * Math.sin(t / 150 + b.ph), x = fx + b.dx * -1, y = fy + b.dy; rctx.beginPath(); rctx.moveTo(x - 8, y - w); rctx.quadraticCurveTo(x - 3, y - 1, x, y); rctx.quadraticCurveTo(x + 3, y - 1, x + 8, y - w); rctx.stroke(); });
+    }
+    rctx.restore();
+    drawRaisedShanks(0);                                  // the trunks are the shanks themselves
+    if (grow > 0.002) {
+      const sway = i => 1.2 * Math.sin(t / 1100 + i * 0.7) * (0.5 + summer * 0.5 + autumn);
+      const boughs = new Path2D(), twigs = new Path2D();
+      this.branches.forEach((b, i) => {
+        const p = b.w > 2 ? boughs : twigs, x = b.x + (b.ex - b.x) * grow, y = b.y + (b.ey - b.y) * grow;
+        p.moveTo(b.x, b.y); p.quadraticCurveTo((b.x + x) / 2 + 3, (b.y + y) / 2 + 5, x + sway(i), y);
+      });
+      rctx.lineCap = 'round';
+      rctx.strokeStyle = SEASON.BRANCH; rctx.lineWidth = 3.2; rctx.stroke(boughs); rctx.lineWidth = 1.5; rctx.stroke(twigs);
+      if (winter > 0) {                                   // snow lying along the boughs
+        rctx.save(); rctx.translate(0, -2.4); rctx.globalAlpha = seClamp(winter) * scene * 0.95;
+        rctx.strokeStyle = '#ffffff'; rctx.lineWidth = 2.6; rctx.stroke(boughs); rctx.lineWidth = 1.5; rctx.stroke(twigs);
+        rctx.restore();
+      }
+    }
+    const leaves = this.leaves;
+    if (s > 0.45) leaves.forEach(l => {                   // bud, blossom, green, turn; then it lets go and drifts down
+      if (s < 0.5 + 0.28 * l.d) return;
+      const { c, size } = this.leafColour(l, s);
+      let x = l.x + 2.4 * Math.sin(t / 1200 + l.ph), y = l.y + 1.2 * Math.cos(t / 1000 + l.ph), rot = l.rot + 0.2 * Math.sin(t / 900 + l.ph), r = l.r * size;
+      if (t >= l.fall) {
+        const age = (t - l.fall) / 1000, u = Math.min(1, age * 1000 / Math.max(1, l.fallMs));
+        y = l.y + u * (this.groundLand(l) - l.y);
+        x = l.x + l.sway * Math.sin(age * 1.7 + l.ph) * (1 - u * 0.2);
+        if (u < 1) rot = l.rot + age * l.spin;
+        r = l.r;
+      }
+      const snowed = t >= l.fall ? seClamp((s - 3.82) / 0.16) : 0;
+      rctx.globalAlpha = scene * (1 - snowed);
+      if (rctx.globalAlpha <= 0.01) return;
+      rctx.fillStyle = `rgb(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])})`;
+      rctx.beginPath(); rctx.ellipse(x, y, r, r * 0.62, rot, 0, 7); rctx.fill();
+    });
+    rctx.globalAlpha = scene;
+    // the ground, over the shank tips, so the trunks stand in it
+    const gd = rctx.createLinearGradient(0, 850, 0, 1000);
+    gd.addColorStop(0, seasonColour(SEASON.GROUND, s)); gd.addColorStop(1, seasonColour(SEASON.GROUND2, s));
+    rctx.fillStyle = gd; rctx.fill(this.groundPath);
+    if (s > 3.0) leaves.forEach(l => {                    // the fallen leaves lie on top of the ground, then the snow takes them
+      if (t < l.fall + l.fallMs) return;
+      const { c } = this.leafColour(l, Math.min(s, 3.5)), fade = 1 - seClamp((s - 3.62) / 0.3);
+      if (fade <= 0.01) return;
+      rctx.globalAlpha = scene * fade;
+      rctx.fillStyle = `rgb(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])})`;
+      rctx.beginPath(); rctx.ellipse(l.x + l.sway * 0.7, this.groundLand(l), l.r, l.r * 0.45, l.rot, 0, 7); rctx.fill();
+    });
+    if (seClamp(winter) > 0.01) {
+      rctx.globalAlpha = seClamp(winter) * scene; rctx.fillStyle = '#ffffff';
+      this.flakes.forEach(f => { const y = (f.y + t * f.v / 1000) % 1060 - 30, x = f.x + f.sway * Math.sin(t / 1300 + f.ph); rctx.beginPath(); rctx.arc(x, y, f.r, 0, 7); rctx.fill(); });
+    }
+    if (spring > 0.01) {                                  // petals on the air
+      rctx.globalAlpha = spring * scene * 0.9;
+      this.petals.forEach((p, i) => { const y = (p.y + t * p.v / 1000) % 1060 - 30, x = p.x + p.sway * Math.sin(t / 1500 + p.ph); rctx.fillStyle = i % 3 ? '#f7b2c8' : '#fdf1f4'; rctx.beginPath(); rctx.ellipse(x, y, p.r, p.r * 0.55, t / 1000 * p.spin, 0, 7); rctx.fill(); });
+    }
+    if (summer > 0.01) {                                  // warm motes of dust, and butterflies
+      rctx.globalAlpha = summer * scene * 0.6; rctx.fillStyle = '#fffbd6';
+      this.motes.forEach(m => { rctx.beginPath(); rctx.arc(m.x + m.sway * Math.sin(t / 1700 + m.ph), m.y + 16 * Math.sin(t / 2100 + m.ph), m.r, 0, 7); rctx.fill(); });
+      rctx.globalAlpha = summer * scene;
+      this.flies.forEach(f => {
+        const q = t / 1000 * f.sp + f.ph, x = f.cx + f.rx * Math.sin(q), y = f.cy + f.ry * Math.sin(q * 1.7 + 1), flap = Math.abs(Math.sin(t / 70 + f.ph));
+        rctx.fillStyle = f.col;
+        [-1, 1].forEach(sd => { rctx.beginPath(); rctx.ellipse(x + sd * 4.2 * flap, y, 4.4 * flap + 0.5, 6, sd * 0.35, 0, 7); rctx.fill(); });
+        rctx.fillStyle = '#2b2b2b'; rctx.fillRect(x - 0.8, y - 4, 1.6, 8);
+      });
+    }
+    rctx.globalAlpha = 1;
+  },
+  groundLand(l) { return this.groundAt(l.x) + (l.ph * 4); },
+  exit() { restorePhoto(); },
+};
+
+// ---- shankHum: the shanks vibrate, from a low hum to a screaming glitchy resonance, then snap still --------------------------
+// In the spirit of shankShuffle: shanks join in one by one in random order, each with a kick, and at the end snap home one by one, each
+// leaving a fading ghost. In between, the vibration climbs: each shank is a little string (neighbours in opposite phase), redrawn each step
+// from its own pixels; as the pitch rises it shifts to higher string modes. The stronger it gets, the more it comes apart: red and cyan
+// copies split off it, whole bands of the picture slip sideways, and for single frames a shank comes up in the wrong colour.
+const HUM = { ON_AT: 500, ON_GAP: 230, RISE_AT: 2300, PEAK_AT: 7600, SNAP: 8800, SNAP_GAP: 115, GHOST_MS: 280, KICK_MS: 130, END_HOLD: 800, A_LOW: 1.1, A_HIGH: 19 };
+const humHash = (a, b) => { const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return h - Math.floor(h); };
+
+EGGS.shankHum = {
+  label: 'shankHum', note: 'the shanks vibrate from a low hum up to a high glitchy resonance, then snap still one by one',
+  mode: 'scene', duration: HUM.SNAP + 8 * HUM.SNAP_GAP + HUM.END_HOLD,
+  prepare() {
+    this.onAt = {}; this.offAt = {};
+    shuffled().forEach((k, i) => { this.onAt[k] = HUM.ON_AT + i * HUM.ON_GAP + Math.random() * 90; });
+    shuffled().forEach((k, i) => { this.offAt[k] = HUM.SNAP + i * HUM.SNAP_GAP; });
+    this.seed = Math.random() * 1000;
+  },
+  buildTints() {                                          // each shank straightened out, once in red and once in cyan
+    if (this.tints) return;
+    const paint = (k, colour) => {
+      const cv = document.createElement('canvas'); cv.width = 30; cv.height = 1000;
+      const g = cv.getContext('2d');
+      for (let row = 0; row < 1000; row += 2) g.drawImage(soloImgs[k - 1], onShank(k, row) - 15, row + SOLO_TOP, 30, 2, 0, row, 30, 2.5);
+      g.globalCompositeOperation = 'source-in'; g.fillStyle = colour; g.fillRect(0, 0, 30, 1000);
+      return cv;
+    };
+    this.tints = SHANKS.map((s, i) => ({ red: paint(i + 1, 'rgb(255, 34, 70)'), cyan: paint(i + 1, 'rgb(0, 226, 255)') }));
+  },
+  sfx() {
+    const out = [{ ms: HUM.ON_AT, kind: 'hum', dur: (HUM.SNAP - HUM.ON_AT) / 1000, v: 2.8 }];
+    for (let k = 1; k <= 8; k += 1) { out.push({ ms: this.onAt[k], kind: 'tick', v: 0.45, pitch: 0.8 }); out.push({ ms: this.offAt[k], kind: 'tick', v: 1, pitch: 1.5 }); }
+    out.push({ ms: HUM.SNAP + 8 * HUM.SNAP_GAP - 40, kind: 'ringout', v: 0.5 });
+    return out;
+  },
+  enter() {
+    this.buildTints();
+    ropesOn(true);
+    if (PLAYER) return;                                   // on the home page, homeeggs.js plays the sfx() list itself
+    const run = this.soundRun = {}, t0 = performance.now();
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume().then(() => {
+      if (this.soundRun !== run) return;
+      const gone = performance.now() - t0;
+      this.sound = EggSfx.play(audio, this.sfx().filter(h => h.ms > gone).map(h => ({ ...h, ms: (h.ms - gone) / speed, dur: h.dur && h.dur / speed })));
+    });
+  },
+  drawTint(tint, pts, h) {                                // like drawShankAlong, but from a straightened coloured copy
+    const n = pts.length / 2;
+    for (let i = 0; i < n - 1; i += 1) {
+      const x = pts[2 * i], y = pts[2 * i + 1], dx = pts[2 * i + 2] - x, dy = pts[2 * i + 3] - y, len = Math.hypot(dx, dy) || h, row = Math.max(0, y);
+      rctx.save(); rctx.translate(x, y); rctx.rotate(Math.atan2(-dx, dy));
+      rctx.drawImage(tint, 0, row, 30, h, -15, 0, 30, len + 0.6);
+      rctx.restore();
+    }
+  },
+  render(t) {
+    photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
+    ropeFrame();
+    rctx.fillStyle = '#fff'; rctx.fillRect(-5, -5, 760, 1010);
+    const L = Math.max(0, Math.min(1, (t - HUM.RISE_AT) / (HUM.PEAK_AT - HUM.RISE_AT))) ** 1.5;
+    const stepMs = 34 - 17 * L, n = Math.floor(t / stepMs), seed = this.seed;     // the steps come faster as it climbs
+    const mode = k => 1 + Math.floor(L * 3) + (L > 0.25 && k % 2 ? 1 : 0);
+    const bendAt = (k, amp, sign) => y => {                // this step's sideways shape: a standing wave plus a little jitter
+      const u = Math.max(0, Math.min(1, y / SHANKS[k - 1].tip));
+      return amp * sign * (Math.sin(Math.PI * mode(k) * u) * 0.82 + 0.18 * (2 * humHash(n + k, Math.floor(u * 12) + seed) - 1));
+    };
+    const poseOf = (k, nn) => {
+      const on = this.onAt[k], kick = t < on + HUM.KICK_MS ? 2.4 - 1.4 * (t - on) / HUM.KICK_MS : 1;
+      const a = (HUM.A_LOW + (HUM.A_HIGH - HUM.A_LOW) * L) * kick * (0.72 + 0.56 * humHash(nn, k * 3.7 + seed));
+      return { amp: a, sign: (nn + k) % 2 ? 1 : -1 };
+    };
+    // first the colour-split copies, multiplied so they fringe the shank instead of covering it
+    const split = 13 * L + (L > 0 ? 2.2 * L * (humHash(n, seed) - 0.5) * 6 : 0);
+    if (L > 0.04) {
+      rctx.save(); rctx.globalCompositeOperation = 'multiply'; rctx.globalAlpha = Math.min(1, L * 1.8);
+      for (let k = 1; k <= 8; k += 1) {
+        if (t < this.onAt[k] || t >= this.offAt[k]) continue;
+        const p = poseOf(k, n), f = bendAt(k, p.amp, p.sign), T = this.tints[k - 1];
+        this.drawTint(T.red, shankCurve(k, 0, 14, y => f(y) - split), 14);
+        this.drawTint(T.cyan, shankCurve(k, 0, 14, y => f(y) + split), 14);
+      }
+      rctx.restore();
+    }
+    for (let k = 1; k <= 8; k += 1) {
+      const on = t >= this.onAt[k], off = t >= this.offAt[k], T = this.tints[k - 1];
+      if (!on || off) {
+        drawShankAlong(k, shankCurve(k, -8, 8), -8, 8);   // still: its own rest shape
+        if (off && t < this.offAt[k] + HUM.GHOST_MS) {    // snapped home: the last wobble fades where it was, and it flashes
+          const age = (t - this.offAt[k]) / HUM.GHOST_MS, f = bendAt(k, HUM.A_HIGH * 0.8, k % 2 ? 1 : -1);
+          rctx.globalAlpha = 0.6 * (1 - age);
+          this.drawTint(T.cyan, shankCurve(k, 0, 14, f), 14);
+          rctx.globalAlpha = 1;
+        }
+        continue;
+      }
+      const p = poseOf(k, n), f = bendAt(k, p.amp, p.sign);
+      if (L > 0.08) {                                     // where it was a moment ago: reads as a blur of motion
+        const prev = poseOf(k, n - 1), g = bendAt(k, prev.amp, prev.sign);
+        rctx.globalAlpha = 0.42;
+        drawShankAlong(k, shankCurve(k, -8, 16, g), -8, 16);
+        rctx.globalAlpha = 1;
+      }
+      if (L > 0.5 && humHash(n, k + seed) < (L - 0.5) * 0.5) this.drawTint(humHash(n, k * 2) < 0.5 ? T.red : T.cyan, shankCurve(k, 0, 8, f), 8);   // one frame in the wrong colour
+      else if (t < this.onAt[k] + HUM.KICK_MS) this.drawTint(T.cyan, shankCurve(k, 0, 8, f), 8);                                                 // the kick as it joins in
+      else drawShankAlong(k, shankCurve(k, -8, 8, f), -8, 8);
+    }
+    if (L > 0.55 && t < HUM.SNAP) {                       // whole bands of the picture slip sideways
+      const bands = 1 + Math.floor((L - 0.55) / 0.45 * 10);
+      rctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (let b = 0; b < bands; b += 1) {
+        const y = Math.floor(humHash(n, b + seed) * 1960), h = 10 + Math.floor(humHash(n, b * 3 + seed) * 92), dx = (humHash(b, n * 2 + seed) - 0.5) * 150 * L;
+        rctx.drawImage(ropeCanvas, 0, y, 1500, h, dx, y, 1500, h);
+      }
+      rctx.setTransform(2, 0, 0, 2, 0, 0);
+    }
+  },
+  exit() {
+    this.soundRun = null;
+    if (this.sound) this.sound.stop();
+    this.sound = null;
+    restorePhoto();
+  },
+};
+
+// ---- pelicanRide: the "pelican riding a bicycle" AI test, attempt by attempt (drawing lives in pelican.js) -----------------
+function drawRaisedShanks(raise) {                        // the 8 shanks, slid up along their own lines
+  for (let k = 1; k <= 8; k += 1) {
+    const s = SHANKS[k - 1], sx = Math.floor(onShank(k, -SOLO_TOP) - 16), sw = Math.ceil(onShank(k, 1000) + 16) - sx;
+    rctx.drawImage(soloImgs[k - 1], sx, 0, sw, 1700, sx - s.a * raise, -SOLO_TOP - raise, sw, 1700);
+  }
+}
+EGGS.pelicanRide = {
+  label: 'pelicanRide', note: 'a sunny road: pelicans ride past on bicycles, each attempt better than the last, from crude blobs to a feathered finale',
+  mode: 'scene', duration: PelicanRide.DURATION,
+  enter() { ropesOn(true); },
+  render(t) {
+    photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
+    ropeFrame();
+    PelicanRide.render(rctx, t, drawRaisedShanks);
+  },
+  exit() { restorePhoto(); },
+};
+setTimeout(() => PelicanRide.warm(), 1500);               // paint the scenery and hero a few ms at a time once the page has settled
+
 // ---- Playback -----------------------------------------------------------------------------------
 let speed = 1, current = null, lastName = null, plays = 0;
 
@@ -1999,6 +3739,7 @@ if (PLAYER) {
     // number = its place among the visible eggs (definition order), so "Easter egg 4 of 13" stays stable
     const visible = Object.keys(EGGS).filter(n => !EGGS[n].hidden);
     parent.postMessage({ type: 'egglab-playing', name, ms: EGGS[name].duration,
+                         sfx: EGGS[name].sfx ? EGGS[name].sfx() : null,   // sounds for the parent page to play
                          number: visible.indexOf(name) + 1, total: visible.length }, '*');
   });
 }
