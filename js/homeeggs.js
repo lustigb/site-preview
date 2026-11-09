@@ -132,7 +132,7 @@
       { name: 'Soft click', hit: fidget('softClick') }, { name: 'Bubble wrap', hit: fidget('bubbleWrap') }, { name: 'Glass tink', hit: fidget('glassTink') },
       { name: 'Finger snap', hit: fidget('fingerSnap') }, { name: 'Key switch', hit: fidget('keySwitch') },
     ] },
-    { name: 'Piano', mode: 'keys', keys: true, sounds: [
+    { name: 'Piano', mode: 'keys', keys: true, options: { layout: 'piano' }, sounds: [
       { name: 'Piano', hit: voice('piano') }, { name: 'Electric piano', hit: voice('epiano') }, { name: 'Music box', hit: voice('musicBox') },
       { name: 'Warm organ', hit: voice('organ'), hold: true },
     ] },
@@ -150,12 +150,25 @@
   const inst = () => INSTRUMENTS[state.instrument];
   const sound = () => inst().sounds[(state.sound[inst().name] || 0) % inst().sounds.length];
   const musicalKey = () => MUSICAL_KEYS[state.key % MUSICAL_KEYS.length];
-  function keyHz(k) {                                      // the note for shank k in the current key, climbing through octaves as needed
-    const { root, steps } = musicalKey(), i = k - 1;
-    return root * 2 ** ((12 * Math.floor(i / steps.length) + steps[i % steps.length]) / 12);
+  // The piano is a real window onto a piano: eight white keys from the key's home note, with the black keys wherever the real ones fall.
+  const WHITE = [0, 2, 4, 5, 7, 9, 11], HAS_SHARP = [0, 2, 5, 7, 9];
+  function realPiano() {
+    const { root, steps } = musicalKey(), pc = ((Math.round(12 * Math.log2(root / 261.63)) % 12) + 12) % 12, j = WHITE.indexOf(pc);
+    const white = n => WHITE[(j + n) % 7] + 12 * Math.floor((j + n) / 7) - WHITE[j];
+    const blackAt = [1, 2, 3, 4, 5, 6, 7].filter(d => HAS_SHARP.includes(WHITE[(j + d - 1) % 7]));
+    const inKey = semi => steps.includes(((semi % 12) + 12) % 12);
+    return { root, white, blackAt, dots: { white: Array.from({ length: 8 }, (_, n) => inKey(white(n))), black: blackAt.map(d => inKey(white(d - 1) + 1)) } };
+  }
+  function keyHz(k) {                                      // the note for key k: 1..8 white, 9..13 black
+    const p = realPiano();
+    return p.root * 2 ** ((k <= 8 ? p.white(k - 1) : p.white(p.blackAt[k - 9] - 1) + 1) / 12);
+  }
+  function applyMode() {                                   // tell the shanks how to be played; a keyboard also needs its black keys and dots for the current key
+    const p = inst().keys ? realPiano() : null;
+    window.shankWind?.setMode(inst().mode, p ? { ...inst().options, blackAt: p.blackAt, dots: p.dots } : inst().options);
   }
   const keyLabel = document.createElement('div');          // which key the keyboard is in: the image's bottom left corner
-  keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); opacity:.65;';
+  keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   box.appendChild(keyLabel);
   function refreshInstrument() {
     keyLabel.textContent = musicalKey().name;
@@ -163,7 +176,7 @@
     document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst().keys);
   }
   window.keyLetterOn = () => !!inst().keys;
-  window.shankWind?.setMode(inst().mode, inst().options);
+  applyMode();
   refreshInstrument();
   const audioReady = () => eggAudio && eggAudio.state === 'running' && window.EggSfx;
   const shankHit = (k, v, ms = 0) => ({ ms, ...sound().hit(k, v, keyHz(k)) });
@@ -246,7 +259,7 @@
       setTimeout(() => note.release(), 170);
     }, i * 190));
   }
-  function changed(text) { stopTheremin(); saveState(); window.shankWind?.setMode(inst().mode, inst().options); refreshInstrument(); say(text); demo(); }
+  function changed(text) { stopTheremin(); saveState(); applyMode(); refreshInstrument(); say(text); demo(); }
   window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
   window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name); };
   window.nextMusicalKey = () => { if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name); } };

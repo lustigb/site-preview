@@ -49,7 +49,7 @@ window.LAB_INSTRUMENTS = [
       { id: 'gust', type: 'range', label: 'Push strength', min: 0.5, max: 4, step: 0.1 },
       { id: 'gap', type: 'range', label: 'Touch distance', min: 8, max: 50, step: 1, only: v => v.trigger === 'touch' },
   ] },
-  { name: 'Piano', note: 'press and drag', mode: 'keys', keys: true, controls: [ECHO, { id: 'dip', type: 'range', label: 'Key travel', min: 4, max: 40, step: 1 }], sounds: [
+  { name: 'Piano', note: 'press and drag', mode: 'keys', keys: true, controls: [{ id: 'shape', type: 'check', label: 'Piano keyboard shape' }, { id: 'real', type: 'check', label: 'Real piano: move to the key', only: v => v.shape }, { id: 'dots', type: 'check', label: 'Dots on the notes in the key', only: v => v.shape && v.real }, ECHO, { id: 'dip', type: 'range', label: 'Key travel', min: 4, max: 40, step: 1 }], sounds: [
       { name: 'Piano', play: s => s.egg({ kind: 'piano', v: s.v, hz: s.hz }) },
       { name: 'Electric piano', play: s => s.egg({ kind: 'epiano', v: s.v, hz: s.hz }) },
       { name: 'Music box', play: s => s.egg({ kind: 'musicBox', v: s.v, hz: s.hz }) },

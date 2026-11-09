@@ -8,6 +8,7 @@
 // untouched photo shows again.
 //
 // 'pad' mode: the shanks leave their places and form a grid (odd shanks upright, even shanks across), a tracking target follows the pointer, and window.shankPad(phase, x, y) reports it (x, y = 0..1).
+// setMode('keys', { layout: 'piano' }): the shanks become a keyboard: seven key dividers and a rail, the white gaps are the 8 white keys (k = 1..8), and stretched shank pieces are 5 black keys (k = 9..13).
 // shankWind.setMode('wind' | 'keys' | 'pad') picks how the shanks are played. 'keys': each shank is a key; press one (or drag across them) and it dips
 // down and springs back. homeeggs.js picks the sound (window.shankSwing).
 (function () {
@@ -60,7 +61,7 @@
   const osc = SHANKS.map(() => ({ a: 0, v: 0, d: 0, dv: 0, down: false }));   // a, v: sideways swing; d, dv: how far it is pressed down, as a key
   let on = false, last = 0, still = 0, prev = null, trail = [], paused = false, mode = 'wind';
   const held = new Map();                                   // pointer id -> the shank it is pressing (several fingers at once are fine)
-  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false };
+  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null };
   let opts = { ...DEFAULTS };                               // see setMode
   const TIP_X = SHANKS.map((sh, i) => onShank(i + 1, sh.tip)), BOUNCE = 0.45;
   const touched = SHANKS.map(() => 0);
@@ -69,10 +70,17 @@
   // How a shank bends: quadratic from its anchor far above the photo down to the tip.
   const bend = (k, y) => { const A = opts.stiff ? SOLO_TOP : ANCHOR; return ((y + A) / (SHANKS[k - 1].tip + A)) ** 2; };   // stiff: clamped just above the photo, so the top barely moves
 
-  let gridU = 0;                                            // 0 = the shanks in their real places, 1 = the grid
+  let gridU = 0, layout = null, desired = null;             // gridU: 0 = the shanks in their real places, 1 = fully in the layout; layout: 'pad', 'piano' or null
+  const BLACK_SRC = [1, 2, 4, 5, 6], BLACK_TOP = 46, BLACK_LEN = 540;   // the shanks whose pixels make the black keys; opts.blackAt says which dividers they sit on (they slide when it changes)
+  const blacks = BLACK_SRC.map(at => ({ d: 0, dv: 0, down: false, x: at }));
+  const keyOf = k => (k <= 8 ? osc[k - 1] : blacks[k - 9]);
   const pad = { x: 375, y: 500, alpha: 0, down: false, id: null };
-  const GRID_S = 0.9, ease = u => u * u * (3 - 2 * u);
+  const GRID_S = 0.7, ease = u => u * u * (3 - 2 * u);
   function gridPoint(k, y) {                                // where a point on this shank sits in the grid (photo px)
+    if (layout === 'piano') {                               // stretched to the full height: seven dividers, and the last shank as the rail along the top
+      const u = (y + SOLO_TOP) / (SHANKS[k - 1].tip + SOLO_TOP);
+      return k <= 7 ? [750 * k / 8, -10 + u * 1020] : [-20 + u * 790, 34];
+    }
     const midY = (SHANKS[k - 1].tip - SOLO_TOP) / 2, i = Math.floor((k - 1) / 2);
     return k % 2 ? [150 * (i + 1), 500 + (y - midY)] : [375 + (y - midY), 200 * (i + 1)];
   }
@@ -81,8 +89,27 @@
     for (let y = -SOLO_TOP; y <= SHANKS[k - 1].tip + 2; y += h) {
       const [x0, y0] = at(y), [x1, y1] = at(y + h), dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy), c = scale * dy / len, s = -scale * dx / len;
       ctx.setTransform(c, s, -s, c, scale * x0, scale * y0);
-      ctx.drawImage(img, onShank(k, y) - 15, y + SOLO_TOP, 30, h, -15, 0, 30, len + 0.6);
+      const w = layout === 'piano' ? 30 - 10 * e : 30;      // the piano's lines are a little thinner
+      ctx.drawImage(img, onShank(k, y) - 15, y + SOLO_TOP, 30, h, -w / 2, 0, w, len + 0.6);
     }
+  }
+  function drawPianoTop() {                                 // the black keys: shank pixels stretched wide, growing out of the dividers as the keyboard forms
+    const e = ease(Math.max(0, (gridU - 0.6) / 0.4));
+    if (e <= 0) return;
+    BLACK_SRC.forEach((at, i) => {
+      const img = solo[at - 1], tip = SHANKS[at - 1].tip, cut = tip * 0.55, h = 8, b = blacks[i], w = 80 * e * (b.down ? 0.95 : 1), stripLen = BLACK_LEN * e * h / (cut + SOLO_TOP);
+      for (let y = -SOLO_TOP; y < cut; y += h) {
+        const yy = BLACK_TOP + b.d * 0.5 + (y + SOLO_TOP) / (cut + SOLO_TOP) * BLACK_LEN * e;
+        ctx.setTransform(scale, 0, 0, scale, scale * (750 * b.x / 8), scale * yy);
+        ctx.drawImage(img, onShank(at, y) - 15, y + SOLO_TOP, 30, h, -w / 2, 0, w, stripLen + 0.6);
+      }
+    });
+  }
+  function drawPianoDots() {                                // little dots on the notes that belong to the key
+    if (!opts.dots || gridU < 1) return;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    opts.dots.white.forEach((on, i) => { if (on) { ctx.fillStyle = 'rgb(22, 12, 118)'; ctx.beginPath(); ctx.arc((i + 0.5) * 93.75, 900, 11, 0, 7); ctx.fill(); } });
+    opts.dots.black.forEach((on, i) => { if (on) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(750 * blacks[i].x / 8, BLACK_TOP + BLACK_LEN - 34, 10, 0, 7); ctx.fill(); } });
   }
   function drawTarget() {                                   // thin axis lines across the image and a ring at the pointer
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -144,7 +171,7 @@
       }
     }
     trail = trail.filter(p => now - p.t < 300);
-    osc.forEach(o => { o.dv += ((( o.down ? opts.dip : 0) - o.d) * KEY_K - o.dv * KEY_C) * dt; o.d += o.dv * dt; });   // keys: down fast, back with a small bounce
+    [...osc, ...blacks].forEach(o => { o.dv += ((( o.down ? opts.dip : 0) - o.d) * KEY_K - o.dv * KEY_C) * dt; o.d += o.dv * dt; });   // keys: down fast, back with a small bounce
     osc.forEach((o, i) => {                                 // the top of a swing: homeeggs.js may ring this shank's sound
       if (o.pv !== undefined && Math.sign(o.pv) !== Math.sign(o.v) && Math.abs(o.a) > 3 && now - (o.rang || 0) > 130 && !opts.collide) {
         const fresh = !opts.tight || Math.abs(o.a) > (o.peak || 0) * 0.9;   // tight: only a new push rings, not the dying swings after it
@@ -157,9 +184,15 @@
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, 750, 1000);
-    gridU = Math.max(0, Math.min(1, gridU + (mode === 'pad' ? dt : -dt) / GRID_S));
+    gridU = Math.max(0, Math.min(1, gridU + (desired && desired === layout ? dt : -dt) / GRID_S));   // changing layout: back to the real places first, then into the new one
+    if (gridU === 0) layout = desired;
+    if (layout === 'piano') {                               // a pressed white key takes a faint shade of the shanks' own blue
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      osc.forEach((o, i) => { if (o.d > 0.5) { ctx.fillStyle = `rgba(22, 12, 118, ${0.16 * Math.min(1, o.d / opts.dip)})`; ctx.fillRect(i * 93.75, 0, 93.75, 1000); } });
+    }
     osc.forEach((o, i) => drawShank(i + 1, o));
-    if (mode === 'pad' && gridU > 0.9) { pad.alpha = Math.min(1, pad.alpha + dt * 6); drawTarget(); } else pad.alpha = 0;
+    if (layout === 'piano') { blacks.forEach((b, i) => { b.x += (opts.blackAt[i] - b.x) * Math.min(1, dt * 9); }); drawPianoTop(); drawPianoDots(); }
+    if (layout === 'pad' && gridU > 0.9) { pad.alpha = Math.min(1, pad.alpha + dt * 6); drawTarget(); } else pad.alpha = 0;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     if (trail.length > 1) {                                 // faint streaks behind the gust
       ctx.lineCap = 'round';
@@ -177,15 +210,17 @@
     }
 
     // Everything still for a moment? Hand back to the real photo.
-    const moving = mode === 'pad' || gridU > 0 || trail.length || osc.some(o => Math.abs(o.a) > 0.15 || Math.abs(o.v) > 1 || o.down || Math.abs(o.d) > 0.1 || Math.abs(o.dv) > 1);
+    const moving = desired || gridU > 0 || blacks.some(b => b.down || Math.abs(b.d) > 0.1 || Math.abs(b.dv) > 1) || trail.length || osc.some(o => Math.abs(o.a) > 0.15 || Math.abs(o.v) > 1 || o.down || Math.abs(o.d) > 0.1 || Math.abs(o.dv) > 1);
     still = moving ? 0 : still + dt;
     if (still > 0.3 || paused) { settle(); return; }
     requestAnimationFrame(tick);
   }
-  function releaseAllKeys() { [...new Set(held.values())].forEach(k => window.shankRelease?.(k)); held.clear(); osc.forEach(o => { o.down = false; }); }
+  function releaseAllKeys() { [...new Set(held.values())].forEach(k => window.shankRelease?.(k)); held.clear(); [...osc, ...blacks].forEach(o => { o.down = false; }); }
   function settle() {                                       // back to the plain photo
     on = false;
-    gridU = 0; pad.alpha = 0;
+    gridU = 0; layout = null; pad.alpha = 0;
+    blacks.forEach((b, i) => { b.x = opts.blackAt[i]; });
+    blacks.forEach(b => { b.d = 0; b.dv = 0; b.down = false; });
     if (pad.down) { pad.down = false; pad.id = null; window.shankPad?.('up', pad.x / 750, pad.y / 1000); }
     osc.forEach(o => { o.a = 0; o.v = 0; o.d = 0; o.dv = 0; o.down = false; o.peak = 0; });
     releaseAllKeys();
@@ -196,14 +231,15 @@
   // homeeggs.js pauses the wind while an egg plays over the photo, then resumes it.
   window.shankWind = {
     pause() { paused = true; prev = null; settle(); },
-    resume() { paused = false; if (mode === 'pad') start(); },
+    resume() { paused = false; if (desired) start(); },
     peek() { return osc.map(o => o.a); },                   // for test tools
     // options: collide = neighbouring tips hit each other and call window.shankTouch(k, speed); gust = how hard the mouse pushes; tight = ring once per push; touchGap = how close tips count as touching (photo px); dip = how far a key goes down (photo px); stiff = stiff at the top and whippy at the tip.
     setMode(m, options = {}) {
       mode = m;
       opts = { ...DEFAULTS, ...options };
       releaseAllKeys();
-      if (m === 'pad') { const go = () => { if (mode === 'pad' && !start()) setTimeout(go, 200); }; go(); } else if (gridU > 0) start();   // the grid assembles or comes apart even with no input
+      desired = m === 'pad' ? 'pad' : m === 'keys' && options.layout === 'piano' ? 'piano' : null;
+      if (desired || gridU > 0) { const go = () => { if ((desired || gridU > 0) && !start()) setTimeout(go, 200); }; go(); }   // the layout assembles or comes apart even with no input
       box.style.touchAction = m === 'wind' ? 'pan-y' : 'none';   // playing keys shouldn't scroll the page
     },
   };
@@ -212,11 +248,16 @@
     const r = photo.getBoundingClientRect();
     return { x: (ev.clientX - r.left) / r.width * 750, y: (ev.clientY - r.top) / r.height * 1000 };
   }
+  function pianoKeyAt(p) {                                  // black keys sit on top, so they are checked first
+    if (p.y > BLACK_TOP && p.y < BLACK_TOP + BLACK_LEN) { const i = opts.blackAt.findIndex(at => Math.abs(p.x - 750 * at / 8) < 36); if (i >= 0) return 9 + i; }
+    return Math.max(1, Math.min(8, Math.floor(p.x / 93.75) + 1));
+  }
+  const keyAt = p => (layout === 'piano' && gridU > 0.5 ? pianoKeyAt(p) : nearest(p));
   const nearest = p => SHANKS.reduce((best, _, i) => (Math.abs(p.x - onShank(i + 1, p.y)) < Math.abs(p.x - onShank(best, p.y)) ? i + 1 : best), 1);
-  function press(id, k) { held.set(id, k); osc[k - 1].down = true; start(); window.shankSwing?.(k, 34); }
+  function press(id, k) { held.set(id, k); keyOf(k).down = true; start(); window.shankSwing?.(k, 34); }
   function release(id) {
     const k = held.get(id); held.delete(id);
-    if (k && ![...held.values()].includes(k)) { osc[k - 1].down = false; window.shankRelease?.(k); }   // another finger may still be on it
+    if (k && ![...held.values()].includes(k)) { keyOf(k).down = false; window.shankRelease?.(k); }   // another finger may still be on it
   }
   function padEvent(phase, ev) {
     const p = toPhoto(ev);
@@ -233,7 +274,7 @@
     if (mode === 'keys') {
       if (paused) return;
       try { box.setPointerCapture(ev.pointerId); } catch (e) { /* drags just stop at the photo's edge */ }
-      press(ev.pointerId, nearest(toPhoto(ev)));
+      press(ev.pointerId, keyAt(toPhoto(ev)));
       return;
     }
     prev = { ...toPhoto(ev), t: performance.now() };
@@ -250,7 +291,7 @@
     }
     if (mode === 'keys') {                                  // dragging onto another shank plays it
       if (!held.has(ev.pointerId)) return;
-      const k = nearest(p);
+      const k = keyAt(p);
       if (k !== held.get(ev.pointerId)) { release(ev.pointerId); press(ev.pointerId, k); }
       return;
     }

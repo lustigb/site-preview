@@ -15,7 +15,19 @@
   const sound = () => soundList().find(x => x.name === picks[instrument().name]) || soundList()[0];
   const pick = name => { picks[instrument().name] = name; store.set('picks', picks); };
   const musicalKey = () => KEYS.find(x => x.name === keyName) || KEYS[0];
+  // A real piano window: eight white keys from the key's home note, with the black keys wherever the real ones fall.
+  const WHITE = [0, 2, 4, 5, 7, 9, 11], HAS_SHARP = [0, 2, 5, 7, 9];
+  function realPiano() {
+    const { root, steps } = musicalKey(), pc = ((Math.round(12 * Math.log2(root / 261.63)) % 12) + 12) % 12, j = WHITE.indexOf(pc);
+    const white = n => WHITE[(j + n) % 7] + 12 * Math.floor((j + n) / 7) - WHITE[j];
+    const blackAt = [1, 2, 3, 4, 5, 6, 7].filter(d => HAS_SHARP.includes(WHITE[(j + d - 1) % 7]));
+    const inKey = semi => steps.includes(((semi % 12) + 12) % 12);
+    return { root, white, blackAt, dots: { white: Array.from({ length: 8 }, (_, n) => inKey(white(n))), black: blackAt.map(d => inKey(white(d - 1) + 1)) } };
+  }
+  const realOn = () => instrument().mode === 'keys' && current().shape && current().real;
   function keyHz(k) {                                     // the note for shank k in the current key, climbing through octaves as needed
+    if (realOn()) { const p = realPiano(); return p.root * 2 ** ((k <= 8 ? p.white(k - 1) : p.white(p.blackAt[k - 9] - 1) + 1) / 12); }
+    if (k > 8) return keyHz([1, 2, 4, 5, 6][k - 9]) * 2 ** (1 / 12);   // a black key: a semitone above the white key to its left
     const { root, steps } = musicalKey(), i = k - 1;
     return root * 2 ** ((12 * Math.floor(i / steps.length) + steps[i % steps.length]) / 12);
   }
@@ -23,7 +35,7 @@
   const settingKey = () => `${instrument().name}/${sound().name}`;
   function current() {
     const x = sound(), touch = x.trigger === 'touch';
-    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: false, range: 3, vib: 12, ...settings[settingKey()] };
+    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: false, range: 3, vib: 12, shape: true, real: true, dots: true, ...settings[settingKey()] };
   }
   function setSetting(id, value) {
     const next = { ...settings[settingKey()], [id]: value };
@@ -146,7 +158,7 @@
     b.addEventListener('click', click);
     return b;
   }
-  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff }; };
+  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}) }; };
   function drawControls(inst, set) {
     const nodes = (inst.controls || []).filter(c => !c.only || c.only(set)).map(c => {
       const box = document.createElement('div'); box.className = 'ctl';
@@ -173,7 +185,7 @@
     $('controls').replaceChildren(...nodes);
   }
   const keyLabel = document.createElement('div');         // which key the keyboard is in: the image's bottom left corner, as on the home page
-  keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); opacity:.65;';
+  keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   document.getElementById('home-photo').parentElement.appendChild(keyLabel);
   function draw() {
     stopTheremin();
