@@ -6,7 +6,7 @@
 //                                 'slide' (dur, f0, f1 in Hz), 'aah' (dur), 'splat', 'thud', 'tada', 'tweet', 'shuffle', 'creak' (dur), 'blip', 'chime' (hz, optional ring = how long it lasts, 1 = normal), 'harp' (hz), 'swish', 'comb' (dur), 'purr' (dur, phase, cycles), 'meow' (dur), 'yay' (dur), 'snap', 'wobble' (dur, rise), 'rewind' (dur),
 //                                 'flop', 'manHum' (dur, notes in Hz), 'paper' (dur, density = crackles per second, hz), 'bubble' (hz, glide = pitch ratio over the bubble),
 //                                 'clicks' (dur, list = [[position 0..1, Hz, loudness, ms], ...], buzz = true for square-wave buzzes), 'water' (dur, hz = how muffled), 'clack', 'tissuePop', 'crickets' (dur), 'honk' (dur),
-//                                 'squeak' (rust 0..1), 'bell', 'rush' (dur), 'digital' (dur, rise), 'pwip', 'piano' (hz).
+//                                 'squeak' (rust 0..1), 'bell', 'rush' (dur), 'digital' (dur, rise), 'pwip', 'piano' (hz), 'softClick'.
 //                                 v = loudness 0..1, pitch = 1 for normal, wet = reverb level (optional). Returns { stop() }.
 (function () {
   const VOLUME = 0.6;
@@ -401,6 +401,13 @@
       o.connect(l).connect(g); o.start(t); o.stop(t + 1.5);
     });
   }
+  function softClick(ac, out, t, v, pitch) {              // a small fidget click: a tiny tick of noise over a very short knock
+    const n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    n.buffer = noise(ac); f.type = 'bandpass'; f.Q.value = 1.5; f.frequency.value = 2600 * pitch;
+    g.gain.setValueAtTime(0.6 * v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.008);
+    n.connect(f).connect(g).connect(out); n.start(t, Math.random() * 0.8, 0.02);
+    tone(ac, out, 'sine', t, 900 * pitch, 500 * pitch, 0.012, 0.14 * v);
+  }
   function tweet(ac, out, t, v, pitch) {                  // one up-down chirp
     tone(ac, out, 'sine', t, 2500 * pitch, 3600 * pitch, 0.07, 0.16 * v);
     tone(ac, out, 'sine', t + 0.085, 3400 * pitch, 2300 * pitch, 0.09, 0.16 * v);
@@ -486,6 +493,7 @@
       if (h.kind === 'zip') { zip(ac, dest, t, h.v); return; }
       if (h.kind === 'pwip') { pwip(ac, dest, t, h.v); return; }
       if (h.kind === 'piano') { piano(ac, dest, t, h.v, h.hz); return; }
+      if (h.kind === 'softClick') { softClick(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'tweet') { tweet(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'shuffle') { shuffle(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'land') thump(ac, dest, t, h.v, h.pitch);

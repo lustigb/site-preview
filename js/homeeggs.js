@@ -114,17 +114,21 @@
   // The shanks are an instrument. Each has a way of being played (shankWind.setMode) and a sound (k = which shank 1..8, v = 0..1); the last "s" in the title steps through them.
   const PIANO = [0, 2, 4, 5, 7, 9, 11, 12].map(n => 261.63 * 2 ** (n / 12)), TUBES = [1047, 1175, 1319, 1568, 1760, 2093, 2349, 2637];
   const INSTRUMENTS = [
-    { name: 'Chimes', mode: 'wind', hit: (k, v) => ({ kind: 'chime', v: 0.25 * v, hz: TUBES[k - 1], ring: 1.6 }) },
+    { name: 'Soft click', mode: 'wind', options: { collide: true, gust: 3, touchGap: 45, stiff: true },   // the default: a click only when two shank tips touch (settings from the Instrument Lab)
+      hit: (k, v) => ({ kind: 'softClick', v, pitch: (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12) }) },
     { name: 'Piano',  mode: 'keys', hit: (k, v) => ({ kind: 'piano', v, hz: PIANO[k - 1] }) },
   ];
-  const INSTRUMENT_KEY = 'bs-instrument';
+  const INSTRUMENT_KEY = 'bs-instrument2';
   let instrument = 0;
   try { instrument = Math.max(0, INSTRUMENTS.findIndex(w => w.name === localStorage.getItem(INSTRUMENT_KEY))); } catch (e) { /* starts on the first one */ }
-  window.shankWind?.setMode(INSTRUMENTS[instrument].mode);
+  window.shankWind?.setMode(INSTRUMENTS[instrument].mode, INSTRUMENTS[instrument].options);
   const shankHit = (k, v, ms = 0) => ({ ms, ...INSTRUMENTS[instrument].hit(k, v) });
   const audioReady = () => eggAudio && eggAudio.state === 'running' && window.EggSfx;
   window.shankSwing = function (k, swing) {                // called by shankwind.js: a shank was played, swing = how hard in photo px
     if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, Math.min(1, swing / 45) ** 0.7)], eggMaster);
+  };
+  window.shankTouch = function (k, speed) {                // called by shankwind.js when two shank tips hit each other
+    if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, Math.min(1, speed / 1200) ** 0.6)], eggMaster);
   };
   let nudged = false;
   window.shankMoved = function () {                        // someone is playing with the shanks while sound is still locked: a small wiggle says the speaker is there
@@ -136,7 +140,7 @@
   window.nextInstrument = function () {                    // the last "s": move to the next one, say its name, and play a little run of it
     instrument = (instrument + 1) % INSTRUMENTS.length;
     try { localStorage.setItem(INSTRUMENT_KEY, INSTRUMENTS[instrument].name); } catch (e) { /* just this visit, then */ }
-    window.shankWind?.setMode(INSTRUMENTS[instrument].mode);
+    window.shankWind?.setMode(INSTRUMENTS[instrument].mode, INSTRUMENTS[instrument].options);
     if (audioReady()) window.EggSfx.play(eggAudio, [1, 3, 5, 8].map((k, i) => shankHit(k, 0.7, i * 90)), eggMaster);
     tag.style.top = title ? (title.offsetTop + title.offsetHeight + 8) + 'px' : 'calc(100% + 6px)';
     tag.textContent = INSTRUMENTS[instrument].name;
