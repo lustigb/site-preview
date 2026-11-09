@@ -150,15 +150,19 @@
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(thereminLevel(y) * lv, t + 0.05);
     f.connect(g).connect(set.echo ? echoBus : custom);
     thereminVoice = { g, oscs, lfo, lv };
+    beginClip('pad', padPoint(x, y));
   }
+  const padPoint = (x, y) => ({ x, y, hz: [thereminHz(x)], lvl: thereminLevel(y) * (levels[sound().name] ?? 1) });
   function moveTheremin(x, y) {
     if (!thereminVoice) return;
     const t = ac.currentTime, snap = current().snap && padKey(), hz = thereminHz(x);
     thereminVoice.oscs.forEach(({ o, mul }) => o.frequency.setTargetAtTime(hz * mul, t, snap ? 0.012 : 0.03));
     thereminVoice.g.gain.setTargetAtTime(thereminLevel(y) * thereminVoice.lv, t, 0.03);
+    clipPoint(padPoint(x, y));
   }
   function stopTheremin() {
     if (!thereminVoice) return;
+    endClip();
     const { g, oscs, lfo } = thereminVoice, t = ac.currentTime;
     g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05);
     oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4);
@@ -201,16 +205,20 @@
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(level(breath), t + x.attack);
     f.connect(g).connect(set.echo ? echoBus : custom);
     blowVoice = { g, f, oscs, lfo, n, nf, level, x, hz };
+    beginClip('blow', blowPoint(k, breath));
   }
+  const blowPoint = (k, breath) => { const x = sound(), lv = levels[x.name] ?? 1, h = blowHz(k); return { k, breath, hz: (x.section || [0]).map(s => blowHz(k + s)), lvl: 0.34 * lv * (0.3 + 0.7 * breath), fHz: h * (x.bright * (0.45 + 0.55 * breath)) }; };
   function moveBlow(k, breath, glide) {
     if (!blowVoice) return;
     const t = ac.currentTime, v = blowVoice;
     if (glide) { const hz = blowHz(k); v.hz = hz; v.oscs.forEach(({ o, mul, shift }) => o.frequency.setTargetAtTime(blowHz(k + shift) * mul, t, 0.022)); v.nf.frequency.setTargetAtTime(hz * 2, t, 0.03); }
     v.g.gain.setTargetAtTime(v.level(breath), t, 0.04);
     v.f.frequency.setTargetAtTime(v.hz * (v.x.bright * (0.45 + 0.55 * breath)), t, 0.04);
+    clipPoint(blowPoint(k, breath));
   }
   function stopBlow() {
     if (!blowVoice) return;
+    endClip();
     const { g, oscs, lfo, n } = blowVoice, t = ac.currentTime;
     g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05);
     oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4); n.stop(t + 0.4);
@@ -256,7 +264,7 @@
     o.connect(g).connect(custom); o.start(t); o.stop(t + 0.04);
   }
   // The sequencer: one bar, one line per instrument. Played notes join the current instrument's line while Record is on.
-  const TRACK_COLORS = { Drums: 'rgb(22, 12, 118)', Piano: '#c2410c', Strings: '#15803d' };   // Winds and Theremin need longer notes: not yet
+  const TRACK_COLORS = { Drums: 'rgb(22, 12, 118)', Piano: '#c2410c', Strings: '#15803d', Winds: '#7c3aed', Theremin: '#be185d' };
   const canTrack = () => !!TRACK_COLORS[instrument().name];
   const tracks = [];                                      // { name, color, steps: [[{ k, hz, sound, chk, skip }]], muted, stepEls }
   const trackFor = name => tracks.find(t => t.name === name);
@@ -265,6 +273,7 @@
     if (current().click && step % sig().beat === 0) metronome(ac.currentTime + delay, step === 0);
     tracks.forEach(t => {
       if (t.muted) return;
+      t.clips.filter(c => c.start === step).forEach(c => scheduleClip(t, c, delay));
       t.steps[step].forEach(ev => {
         if (ev.skip) { ev.skip = false; return; }         // you just played this one yourself
         const note = hit(ev.k, 0.85, delay, ev);
@@ -291,7 +300,7 @@
     renderRows();
     return true;
   }
-  function stopLoop() { if (!loop.on) return; clearInterval(loop.timer); loop.on = false; recording = false; setPlayhead(-1); renderRows(); }
+  function stopLoop() { if (!loop.on) return; endClip(); clearInterval(loop.timer); loop.on = false; recording = false; setPlayhead(-1); renderRows(); }
   function recordEvent(k) {
     if (!loop.on || !recording || !canTrack()) return;
     const t = trackFor(instrument().name), steps = sig().steps;
@@ -301,12 +310,79 @@
     if (at >= 0) list[at] = ev; else list.push(ev);       // layered on top; replaying the same note in a step just replaces it
     paintStep(t, step);
   }
+  // Held and sliding notes are recorded as a clip: when it starts, how long it lasts, and what it did along the way.
+  let activeClip = null;
+  const nowPos = () => loop.nextAbs - (loop.nextTime - ac.currentTime) / stepSec();
+  function beginClip(kind, point) {
+    if (!loop.on || !recording || !canTrack()) return;
+    activeClip = { kind, track: trackFor(instrument().name), sound: sound(), echo: current().echo, vib: current().vib, startPos: nowPos(), points: [{ t: 0, ...point }] };
+  }
+  function clipPoint(point) {
+    if (!activeClip) return;
+    const t = nowPos() - activeClip.startPos, last = activeClip.points[activeClip.points.length - 1];
+    if (t - last.t < 0.12) return;                        // plenty of detail without storing every mouse move
+    activeClip.points.push({ t, ...point });
+  }
+  function endClip() {
+    if (!activeClip || !loop.on) { activeClip = null; return; }
+    const c = activeClip, steps = sig().steps;
+    activeClip = null;
+    c.len = Math.min(steps, Math.max(0.5, nowPos() - c.startPos));
+    c.start = ((Math.round(c.startPos) % steps) + steps) % steps;   // the note's start snaps to a step; its length and shape stay as you played them
+    if (c.track) { c.track.clips.push(c); renderRows(); }
+  }
+  function scheduleClip(track, c, delay) {                // plays a whole recorded clip, all scheduled ahead so it stays in time
+    const x = c.sound, sec = stepSec(), t0 = ac.currentTime + delay, end = t0 + c.len * sec, blow = c.kind === 'blow', p0 = c.points[0];
+    const g = ac.createGain(), f = ac.createBiquadFilter(), lfo = ac.createOscillator(), depth = ac.createGain();
+    f.type = 'lowpass'; f.frequency.setValueAtTime(blow ? p0.fHz : x.filter || 12000, t0);
+    lfo.frequency.value = blow ? 5.2 : 5.5; depth.gain.value = c.vib; lfo.start(t0); lfo.stop(end + 0.4);
+    const players = blow ? (x.section || [0]).flatMap((_, player) => x.parts.map(part => ({ part, player }))) : x.voice.map(part => ({ part, player: 0 }));
+    const oscs = players.map(({ part: [type, mul, level], player }) => {
+      const o = ac.createOscillator(), l = ac.createGain();
+      o.type = type; o.frequency.setValueAtTime(p0.hz[player] * mul, t0); if (player) o.detune.value = player % 2 ? 7 : -6; l.gain.value = level; lfo.connect(depth).connect(o.detune);
+      o.connect(l).connect(f); o.start(t0 + player * 0.012); o.stop(end + 0.4);
+      return { o, mul, player };
+    });
+    if (blow) {
+      const len = ac.sampleRate, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i += 1) d[i] = Math.random() * 2 - 1;
+      const n = ac.createBufferSource(), nf = ac.createBiquadFilter(), ng = ac.createGain();
+      n.buffer = buf; n.loop = true; nf.type = 'bandpass'; nf.frequency.value = p0.hz[0] * 2; nf.Q.value = 1.2; ng.gain.value = x.breath * 1.6;
+      n.connect(nf).connect(ng).connect(f); n.start(t0); n.stop(end + 0.4);
+    }
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(p0.lvl, t0 + (blow ? x.attack : 0.05));
+    c.points.slice(1).forEach(p => {
+      const at = t0 + p.t * sec;
+      oscs.forEach(({ o, mul, player }) => o.frequency.setTargetAtTime(p.hz[player] * mul, at, 0.022));
+      g.gain.setTargetAtTime(p.lvl, at, 0.03);
+      if (blow) f.frequency.setTargetAtTime(p.fHz, at, 0.04);
+    });
+    g.gain.setTargetAtTime(0.0001, end, 0.05);
+    f.connect(g).connect(c.echo ? echoBus : custom);
+    const shown = () => loop.on && instrument().name === track.name, w = window.shankWind;   // and you can watch it play on the instrument
+    c.points.forEach(p => setTimeout(() => { if (shown()) { if (blow) w.showBlow(p.k, p.breath); else w.showTarget(p.x, p.y, true); } }, (delay + p.t * sec) * 1000));
+    setTimeout(() => { if (shown()) { if (blow) w.showBlow(0); else w.showTarget(c.points[c.points.length - 1].x, c.points[c.points.length - 1].y, false); } }, (delay + c.len * sec) * 1000);
+  }
+  function clipElement(t, c) {                            // a bar for winds, a wavy line for the theremin; tap to delete it
+    const n = sig().steps, left = (c.start + 0.5) / n * 100, width = Math.min(100 - left, c.len / n * 100);
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('aria-label', `${t.name} clip`);
+    b.style.cssText = `position:absolute; left:${left}%; width:${width}%; min-width:6px; top:4px; height:22px; border:0; padding:0; background:transparent; cursor:pointer; z-index:1;`;
+    if (c.kind === 'blow') b.innerHTML = `<span style="position:absolute; left:0; right:0; top:6px; height:10px; border-radius:5px; background:${t.color};"></span>`;
+    else {
+      const hz = c.points.map(p => Math.log2(p.hz[0])), lo = Math.min(...hz), hi = Math.max(...hz), range = hi - lo || 1;
+      const line = c.points.map((p, i) => `${(p.t / Math.max(c.len, 0.01) * 100).toFixed(1)},${(20 - (hz[i] - lo) / range * 18).toFixed(1)}`).join(' ');
+      b.innerHTML = `<svg width="100%" height="22" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="${line}" fill="none" stroke="${t.color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
+    }
+    b.addEventListener('click', () => { t.clips = t.clips.filter(x => x !== c); renderRows(); });
+    return b;
+  }
   function makeTrack(name) {
     if (trackFor(name)) { renderRows(); return; }
-    tracks.push({ name, color: TRACK_COLORS[name], steps: Array.from({ length: sig().steps }, () => []), muted: false, stepEls: [] });
+    tracks.push({ name, color: TRACK_COLORS[name], steps: Array.from({ length: sig().steps }, () => []), clips: [], muted: false, stepEls: [] });
     lastRowAdded = name; renderRows();
   }
-  function clearAllTracks() { tracks.forEach(t => { t.steps = Array.from({ length: sig().steps }, () => []); }); renderRows(); }
+  function clearAllTracks() { endClip(); tracks.forEach(t => { t.steps = Array.from({ length: sig().steps }, () => []); t.clips = []; }); renderRows(); }
   const seq = document.createElement('div');
   document.querySelector('.doors').prepend(seq);          // on the line under the title; each new track pushes the page down a little
   const ROW_H = 30, seqBtn = 'border:0; background:var(--bg, #f3f5f0); padding:0; cursor:pointer; color:#1a1f1c; font:600 12px/1 var(--font-ui, system-ui, sans-serif); display:flex; align-items:center; justify-content:center; height:30px; flex:none;';
@@ -329,7 +405,7 @@
       if (index === 0) left.append(button('Record', icon.rec(recording), 'width:30px;', () => toggleRecord()), button(loop.on ? 'Pause' : 'Play', loop.on ? icon.pause : icon.play, 'width:30px;', () => togglePlay()));   // record on the outside, so it can't be mistaken for a step's dot
       else { left.textContent = t.name; left.style.color = t.color; left.style.font = '600 11px/1 var(--font-ui, system-ui, sans-serif)'; }
       const cells = document.createElement('div');
-      cells.style.cssText = 'flex:1; display:flex; height:30px; min-width:0;';
+      cells.style.cssText = 'flex:1; display:flex; height:30px; min-width:0; position:relative;';
       t.stepEls = t.steps.map((_, step) => {
         const b = document.createElement('button'), big = step % sig().beat === 0;
         b.type = 'button'; b.setAttribute('aria-label', `${t.name} step ${step + 1}`);
@@ -338,7 +414,7 @@
         b.addEventListener('click', () => { t.steps[step] = []; paintStep(t, step); });
         return b;
       });
-      cells.replaceChildren(...t.stepEls);
+      cells.replaceChildren(...t.stepEls, ...t.clips.map(c => clipElement(t, c)));
       const right = document.createElement('div');
       right.style.cssText = 'flex:none; display:flex; align-items:center; gap:2px;';
       if (index === 0) right.append(button('Clear', 'Clear', 'padding:0 5px;', () => clearCurrent()));
@@ -360,10 +436,10 @@
     playheadAt = step;
   }
   function togglePlay() { unlock(); if (loop.on) stopLoop(); else startLoop(); }
-  function toggleRecord() { unlock(); recording = !recording; if (recording && !loop.on) startLoop(); else renderRows(); }
+  function toggleRecord() { unlock(); if (recording) endClip(); recording = !recording; if (recording && !loop.on) startLoop(); else renderRows(); }
   function clearCurrent() {                               // Clear empties the current instrument's line
     const t = trackFor(instrument().name) || tracks[0];
-    if (t) { t.steps = Array.from({ length: sig().steps }, () => []); renderRows(); say(`Cleared ${t.name}`); }
+    if (t) { t.steps = Array.from({ length: sig().steps }, () => []); t.clips = []; renderRows(); say(`Cleared ${t.name}`); }
   }
   function syncSequencer() { if (sequencerOpen && canTrack()) makeTrack(instrument().name); else renderRows(); }
   window.toggleLoop = () => {                             // n opens and closes the sequencer; closing it pauses, and the lines are kept
