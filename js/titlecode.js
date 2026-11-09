@@ -9,8 +9,8 @@
 // from homeeggs.js; the wind interaction stays the baseline whenever no animation is playing). The first
 // letter also calls window.prepareEgg() so the animation is ready by the end. Letters can be locked in any
 // order; all three in the wrong order (or the idle time running out) fades the keycaps and starts over. Viewing the source to read this is allowed and appreciated.
-// The end of "Sciences" has three more keys, not part of the code, held the same way: the last "s" steps to the next instrument, the last "e" to the next sound
-// for that instrument, and the second "c" to the next musical key (only pressable on keyboard instruments; otherwise it is just the code's fourth keycap).
+// The end of "Sciences" has more keys, not part of the code. Holding the last "s", the last "e" or the second "c" locks in like the other letters and then opens a list of instruments, sounds or musical keys
+// (drag and let go, or tap then tap an option). The second "c" only works where a key applies; otherwise it is just the code's fourth keycap.
 // On Drums, the second "c" is the time signature, the "n" before it opens and closes the loop sequencer (hold), and holding the "e" before that brings up a tempo slider (drag up or down).
 (function () {
   const h1 = document.querySelector(".home-page .hero h1");
@@ -18,7 +18,8 @@
   const CODE = ["a", "b", "c1"], HOLD_MS = 450, WINDOW_MS = 5000;   // idle time allowed between letters (paused while a letter is being held)
   const AUTO = "c2";                                  // the second c: not part of the code; fills in by itself on success
   const KEYS = { 0: "b", 3: "a", 7: "c1", 9: "tap", 10: "loop", 11: "c2", 12: "fx", 13: "snd" }; // B(0) r i a(3) n _ S c(7) i e(9) n(10) c(11) e(12) s(13)
-  const ACTIONS = { snd: "nextInstrument", fx: "nextSound", c2: "nextMusicalKey", loop: "toggleLoop" };   // the keys that do something on the spot
+  const ACTIONS = { loop: "toggleLoop" };
+  const MENUS = { snd: "instrument", fx: "sound", c2: "key" };   // press one of these letters and a list pops up: drag to an option and let go, or tap the letter and then tap an option   // the keys that do something on the spot
   const text = h1.textContent;
   h1.setAttribute("aria-label", text);
   h1.textContent = "";
@@ -50,6 +51,7 @@
     @keyframes tc-s{0%,100%{transform:translateX(0)}15%{transform:translateX(-5px)}35%{transform:translateX(5px)}55%{transform:translateX(-4px)}75%{transform:translateX(3px)}}
     @keyframes tc-w{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}40%{transform:rotate(7deg)}60%{transform:rotate(-5deg)}80%{transform:rotate(3deg)}}
     @keyframes tc-n{0%,100%{transform:rotate(0)}35%{transform:rotate(-4deg)}70%{transform:rotate(3deg)}}`;
+  st.textContent += ".tc-snd,.tc-fx,.tc-gated.tc-live,.tc-auto.tc-live{touch-action:none}";   // a finger can drag from these letters without scrolling the page
   document.head.appendChild(st);
 
   const keyLetterOn = () => !!window.keyLetterOn?.();  // is the second c pressable right now?
@@ -95,13 +97,15 @@
   // keycaps stay while the animation plays, then clear; wrong order -> a quick sideways shake, then they all fade
   // away (no colour cue, so it reads the same for colour-blind visitors).
   let playing = false;
-  function enter(k, el) {
+  const unKey = el => { el.classList.add("tc-undo"); setTimeout(() => el.classList.remove("tc-in", "tc-undo"), 320); };
+  function enter(k, el, ev) {
     if (playing) return;
-    if (ACTIONS[k]) {                                        // pop like a key, do its job, un-draw itself
+    if (ACTIONS[k] || MENUS[k]) {                            // pop like a key, then do its job
       if (got.length) windowTimer = setTimeout(reset, WINDOW_MS);   // a hold pauses the code's idle timer: start it again
       el.classList.add("tc-in"); anim(el, "tc-wiggle");
+      if (MENUS[k]) { openMenu(el, ev, MENUS[k]); if (menu) menu.keycap = el; else unKey(el); return; }   // the keycap stays until the list closes
       window[ACTIONS[k]]?.();
-      setTimeout(() => { el.classList.add("tc-undo"); setTimeout(() => el.classList.remove("tc-in", "tc-undo"), 320); }, 500);
+      setTimeout(() => unKey(el), 500);
       return;
     }
     if (got.includes(k)) { anim(el, "tc-nudge"); return; }   // already locked in
@@ -210,6 +214,52 @@
     hold = null;
   }
   h1.addEventListener("contextmenu", e => e.preventDefault());
+  // The pop-up list for the s, e and c letters. window.letterMenu(kind) gives { items: [names], current, pick(i) }.
+  let menu = null;
+  const ITEM_H = 36;
+  function closeMenu() { if (menu) { menu.box.remove(); if (menu.keycap) unKey(menu.keycap); menu = null; } }
+  function paintMenu() {
+    [...menu.box.children].forEach((b, i) => {
+      const on = i === menu.hover, here = i === menu.m.current;
+      b.style.background = on ? "rgb(22, 12, 118)" : "transparent"; b.style.color = on ? "#fff" : "var(--ink,#1a1f1c)"; b.style.fontWeight = here ? "700" : "500";
+    });
+  }
+  function openMenu(el, e, kind) {
+    closeMenu();
+    window.unlockEggAudio?.();
+    const m = window.letterMenu?.(kind);
+    if (!m || !m.items.length) return;
+    const box = document.createElement("div"), r = el.getBoundingClientRect(), h = m.items.length * ITEM_H + 8;
+    box.style.cssText = `position:fixed; z-index:60; width:168px; box-sizing:border-box; padding:4px; background:#fff; border:1px solid var(--line,#cfd6cb); border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.2); left:${Math.max(8, Math.min(innerWidth - 176, r.left + r.width / 2 - 84))}px; top:${Math.max(8, r.top - h - 10)}px;`;
+    m.items.forEach((name, i) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = name;
+      b.style.cssText = `display:block; width:100%; height:${ITEM_H}px; border:0; border-radius:8px; padding:0 10px; text-align:left; cursor:pointer; white-space:nowrap; font:500 15px/1 var(--font-ui,system-ui,sans-serif); -webkit-user-select:none; user-select:none;`;
+      b.addEventListener("click", () => { closeMenu(); if (i !== m.current) m.pick(i); });
+      box.appendChild(b);
+    });
+    document.body.appendChild(box);
+    menu = { box, m, id: e.pointerId, y: e.clientY, moved: false, hover: m.current };
+    paintMenu();
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* then only tapping an option will work */ }
+    el.style.touchAction = "none";
+  }
+  function menuMove(e) {
+    if (Math.abs(e.clientY - menu.y) > 6) menu.moved = true;
+    if (!menu.moved) return;
+    const r = menu.box.getBoundingClientRect(), i = Math.floor((e.clientY - r.top - 4) / ITEM_H);
+    menu.hover = i >= 0 && i < menu.m.items.length ? i : -1;
+    paintMenu();
+  }
+  function menuUp() {
+    if (!menu.moved) { menu.id = null; return; }           // a plain tap: the list stays open to tap an option
+    const { hover, m } = menu; closeMenu();
+    if (hover >= 0 && hover !== m.current) m.pick(hover);
+  }
+  h1.addEventListener("pointermove", e => { if (menu && e.pointerId === menu.id) menuMove(e); });
+  h1.addEventListener("pointerup", e => { if (menu && e.pointerId === menu.id) menuUp(); });
+  h1.addEventListener("pointercancel", e => { if (menu && e.pointerId === menu.id) closeMenu(); });
+  addEventListener("pointerdown", e => { if (menu && menu.id === null && !menu.box.contains(e.target)) closeMenu(); }, true);   // tapping anywhere else closes it
   let tempoDrag = null;
   h1.addEventListener("pointermove", e => { if (e.pointerId === tempoDrag) window.tempoSliderMove?.(e.clientY); });
   ["pointerup", "pointercancel"].forEach(ev => h1.addEventListener(ev, e => { if (e.pointerId === tempoDrag) { tempoDrag = null; window.tempoSliderEnd?.(); } }));
@@ -230,7 +280,7 @@
     el.classList.remove("tc-wiggle", "tc-nudge");
     el.classList.add("tc-holding");
     hold = { el, t0: performance.now(), raf: requestAnimationFrame(frame),
-             timer: setTimeout(() => { endHold(); enter(el.dataset.k, el); }, HOLD_MS) };   // completion by timer; rAF only shades
+             timer: setTimeout(() => { endHold(); enter(el.dataset.k, el, e); }, HOLD_MS) };   // completion by timer; rAF only shades
   });
   ["pointerup", "pointercancel"].forEach(ev => h1.addEventListener(ev, () => endHold(true)));
   h1.addEventListener("pointerup", e => { if (e.target.closest(".tc-key")) window.unlockEggAudio?.(); });   // phones count the lift-off as the tap

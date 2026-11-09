@@ -361,6 +361,16 @@
     });
   }
   function changed(text, quick) { stopTheremin(); stopBlow(); keysDown.length = 0; if (!isDrums()) { stopLoop(); sequencerOpen = false; } paintStrip(); saveState(); applyMode(); refreshInstrument(); say(text); demo(quick); }
+  window.letterMenu = kind => {                            // the lists behind the s, e and c letters
+    if (kind === 'instrument') return { items: INSTRUMENTS.map(x => x.name), current: state.instrument, pick: i => { state.instrument = i; changed(inst().name); } };
+    if (kind === 'sound') return { items: inst().sounds.map(x => x.name), current: inst().sounds.indexOf(sound()), pick: i => { state.sound[inst().name] = i; changed(sound().name, true); } };
+    if (isDrums()) return { items: SIGS.map(x => x.name), current: state.sig % SIGS.length, pick: i => { const was = loop.on; stopLoop(); state.sig = i; freshPattern(); if (was) startLoop(); changed(sig().name, true); } };
+    if (isBlow()) return { items: MUSICAL_KEYS.map(x => x.name), current: MUSICAL_KEYS.indexOf(windKey()), pick: i => { state.windKey[sound().name] = MUSICAL_KEYS[i].name; changed(windKey().name, true); } };
+    if (chordsOn()) return { items: CHORD_SETS.map(x => x.name), current: state.chordSet % CHORD_SETS.length, pick: i => { state.chordSet = i; state.chord[sound().name] = 0; changed(chordSet().name, true); } };
+    if (inst().mode === 'strings') return { items: sound().tunings.map(x => x.name), current: sound().tunings.indexOf(tuning()), pick: i => { state.tuning[sound().name] = i; changed(tuning().name, true); } };
+    if (inst().mode === 'pad') return { items: ['Free slide', ...MUSICAL_KEYS.map(x => x.name)], current: state.padKey + 1, pick: i => { state.padKey = i - 1; changed(padKey()?.name || 'Free slide', true); } };
+    return { items: MUSICAL_KEYS.map(x => x.name), current: state.key % MUSICAL_KEYS.length, pick: i => { state.key = i; changed(musicalKey().name, true); } };
+  };
   window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
   window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name, true); };
   window.nextMusicalKey = () => {

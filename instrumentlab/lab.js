@@ -411,6 +411,16 @@
   window.nextSound = () => { const list = soundList(); pick(list[(list.indexOf(sound()) + 1) % list.length].name); draw(); say(sound().name); setTimeout(() => demo(true), 30); };
   window.nextMusicalKey = () => { if (isDrums()) { sigName = SIGS[(SIGS.indexOf(sig()) + 1) % SIGS.length].name; store.set('sig', sigName); const was = loop.on; stopLoop(); freshPattern(); if (was) startLoop(); draw(); say(sigName); return; } if (chordsOn()) { setName = SETS[(SETS.indexOf(chordSet()) + 1) % SETS.length].name; store.set('chordSet', setName); homeChord(); draw(); say(setName); setTimeout(() => demo(true), 30); return; } if (isPad()) { const names = [null, ...KEYS.map(x => x.name)]; padKeyName = names[(names.indexOf(padKey()?.name ?? null) + 1) % names.length]; store.set('padKey', padKeyName); draw(); say(padKeyName || 'Free slide'); setTimeout(() => demo(true), 30); return; } if (isStrings()) { const list = sound().tunings; tuningPicks[sound().name] = list[(list.indexOf(tuning()) + 1) % list.length].name; store.set('tunings', tuningPicks); draw(); say(tuning().name); setTimeout(() => demo(true), 30); return; } if (instrument().keys) { setMusicalKey(KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name); draw(); say(musicalKey().name); setTimeout(() => demo(true), 30); } };
   window.keyLetterOn = () => !!instrument().keys || isDrums();
+  window.letterMenu = kind => {                           // the lists behind the s, e and c letters
+    const after = (text, quick = true) => { draw(); say(text); setTimeout(() => demo(quick), 30); };
+    if (kind === 'instrument') { const ready = instruments.filter(x => !x.soon); return { items: ready.map(x => x.name), current: ready.indexOf(instrument()), pick: i => { instrumentName = ready[i].name; store.set('instrument', instrumentName); after(instrumentName, false); } }; }
+    if (kind === 'sound') { const list = soundList(); return { items: list.map(x => x.name), current: list.indexOf(sound()), pick: i => { pick(list[i].name); after(list[i].name); } }; }
+    if (isDrums()) return { items: SIGS.map(x => x.name), current: SIGS.indexOf(sig()), pick: i => { sigName = SIGS[i].name; store.set('sig', sigName); const was = loop.on; stopLoop(); freshPattern(); if (was) startLoop(); draw(); say(sigName); } };
+    if (chordsOn()) return { items: SETS.map(x => x.name), current: SETS.indexOf(chordSet()), pick: i => { setName = SETS[i].name; store.set('chordSet', setName); homeChord(); after(setName); } };
+    if (isStrings()) { const list = sound().tunings; return { items: list.map(x => x.name), current: list.indexOf(tuning()), pick: i => { tuningPicks[sound().name] = list[i].name; store.set('tunings', tuningPicks); after(list[i].name); } }; }
+    if (isPad()) { const names = ['Free slide', ...KEYS.map(x => x.name)]; return { items: names, current: names.indexOf(padKeyName || 'Free slide'), pick: i => { padKeyName = i ? KEYS[i - 1].name : null; store.set('padKey', padKeyName); after(names[i]); } }; }
+    return { items: KEYS.map(x => x.name), current: KEYS.indexOf(musicalKey()), pick: i => { setMusicalKey(KEYS[i].name); after(KEYS[i].name); } };
+  };
   window.nextInstrument = () => {
     const ready = instruments.filter(x => !x.soon);
     instrumentName = ready[(ready.indexOf(instrument()) + 1) % ready.length].name;
