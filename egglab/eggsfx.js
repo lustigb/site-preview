@@ -6,7 +6,7 @@
 //                                 'slide' (dur, f0, f1 in Hz), 'aah' (dur), 'splat', 'thud', 'tada', 'tweet', 'shuffle', 'creak' (dur), 'blip', 'chime' (hz, optional ring = how long it lasts, 1 = normal), 'harp' (hz), 'swish', 'comb' (dur), 'purr' (dur, phase, cycles), 'meow' (dur), 'yay' (dur), 'snap', 'wobble' (dur, rise), 'rewind' (dur),
 //                                 'flop', 'manHum' (dur, notes in Hz), 'paper' (dur, density = crackles per second, hz), 'bubble' (hz, glide = pitch ratio over the bubble),
 //                                 'clicks' (dur, list = [[position 0..1, Hz, loudness, ms], ...], buzz = true for square-wave buzzes), 'water' (dur, hz = how muffled), 'clack', 'tissuePop', 'crickets' (dur), 'honk' (dur),
-//                                 'squeak' (rust 0..1), 'bell', 'rush' (dur), 'digital' (dur, rise), 'pwip', 'piano' (hz), 'softClick', 'bubbleWrap', 'glassTink', 'fingerSnap', 'keySwitch', 'epiano' (hz), 'musicBox' (hz), 'organ' (hz; held until release()), 'pluck' (hz, decay, soft, dur).
+//                                 'squeak' (rust 0..1), 'bell', 'rush' (dur), 'digital' (dur, rise), 'pwip', 'piano' (hz), 'softClick', 'bubbleWrap', 'glassTink', 'fingerSnap', 'keySwitch', 'epiano' (hz), 'musicBox' (hz), 'organ' (hz; held until release()), 'pluck' (hz, decay, soft, dur, lp, sub), 'chk'.
 //                                 v = loudness 0..1, pitch = 1 for normal, wet = reverb level (optional). Returns { stop(), release() }.
 (function () {
   const VOLUME = 0.6;
@@ -447,7 +447,8 @@
     g.connect(out);
   }
   // A plucked string (Karplus-Strong: a burst of noise fed back through a delay as long as one vibration). decay: closer to 1 rings longer; soft: more smoothing = a rounder, less bright pluck.
-  function pluck(ac, out, t, v, hz, decay = 0.996, soft = 1, dur = 2) {
+  // lp: an optional low-pass (Hz) that takes away the string's bright edge; sub: how much plain low tone to add underneath, for a bass.
+  function pluck(ac, out, t, v, hz, decay = 0.996, soft = 1, dur = 2, lp = 0, sub = 0) {
     const sr = ac.sampleRate, N = Math.max(2, Math.floor(sr / hz - 0.5)), len = Math.floor(sr * dur), buf = ac.createBuffer(1, len, sr), d = buf.getChannelData(0);
     for (let i = 0; i < N; i += 1) d[i] = Math.random() * 2 - 1;
     for (let pass = 0; pass < soft; pass += 1) for (let i = 1; i < N; i += 1) d[i] = 0.5 * (d[i] + d[i - 1]);
@@ -457,7 +458,13 @@
     const src = ac.createBufferSource(), g = ac.createGain();
     src.buffer = buf; src.playbackRate.value = (N + 0.5) * hz / sr;   // the delay can only be a whole number of samples: this corrects the tuning
     g.gain.value = 0.42 * v;
-    src.connect(g).connect(out); src.start(t);
+    if (lp) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; f.Q.value = 0.7; src.connect(f).connect(g).connect(out); } else src.connect(g).connect(out);
+    src.start(t);
+    if (sub) { tone(ac, out, 'sine', t, hz, hz * 0.999, dur * 0.7, 0.34 * sub * v); tone(ac, out, 'triangle', t, hz * 2, hz * 1.998, dur * 0.45, 0.2 * sub * v); }   // laptop speakers can't play the lowest notes, so the octave above carries them
+  }
+  function chk(ac, out, t, v, pitch) {                    // a muted strum: strings damped by the hand, just a short percussive scrape
+    burst(ac, out, t, 'bandpass', 1500 * pitch, 0.8, 0.035, 0.55 * v);
+    tone(ac, out, 'triangle', t, 190 * pitch, 95 * pitch, 0.04, 0.3 * v);
   }
   function tweet(ac, out, t, v, pitch) {                  // one up-down chirp
     tone(ac, out, 'sine', t, 2500 * pitch, 3600 * pitch, 0.07, 0.16 * v);
@@ -552,7 +559,8 @@
       if (h.kind === 'epiano') { epiano(ac, dest, t, h.v, h.hz); return; }
       if (h.kind === 'musicBox') { musicBox(ac, dest, t, h.v, h.hz); return; }
       if (h.kind === 'organ') { organ(ac, dest, t, h.v, h.hz); return; }
-      if (h.kind === 'pluck') { pluck(ac, dest, t, h.v, h.hz, h.decay, h.soft, h.dur); return; }
+      if (h.kind === 'pluck') { pluck(ac, dest, t, h.v, h.hz, h.decay, h.soft, h.dur, h.lp, h.sub); return; }
+      if (h.kind === 'chk') { chk(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'tweet') { tweet(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'shuffle') { shuffle(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'land') thump(ac, dest, t, h.v, h.pitch);

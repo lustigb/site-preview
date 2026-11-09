@@ -62,7 +62,7 @@
   const osc = SHANKS.map(() => ({ a: 0, v: 0, d: 0, dv: 0, down: false }));   // a, v: sideways swing; d, dv: how far it is pressed down, as a key
   let on = false, last = 0, still = 0, prev = null, trail = [], paused = false, mode = 'wind';
   const held = new Map();                                   // pointer id -> the shank it is pressing (several fingers at once are fine)
-  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null, count: 6, ring: 1.1, hoverStrum: true, guides: null };
+  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null, count: 6, ring: 1.1, hoverStrum: true, guides: null, chords: null, chordOn: -1, chordKeys: null };
   let opts = { ...DEFAULTS };                               // see setMode
   const TIP_X = SHANKS.map((sh, i) => onShank(i + 1, sh.tip)), BOUNCE = 0.45;
   const touched = SHANKS.map(() => 0);
@@ -79,7 +79,7 @@
   let quietUntil = 0;                                       // a demo nudging the shanks shouldn't set off extra sounds
   const GRID_S = 0.85, ease = u => u * u * (3 - 2 * u);
   const strings = SHANKS.map(() => ({ pull: 0, grab: 0.5, held: false, amp: 0, phase: 0 }));   // pull: held out by a finger; amp: how hard it is ringing
-  const NUT_Y = 44, BRIDGE_Y = 956, stringCount = () => parseInt(layout.slice(7), 10);
+  const CHORD_H = 232, NUT_PLAIN = 44, nutY = () => (opts.chords ? CHORD_H + 22 : NUT_PLAIN), BRIDGE_Y = 956, stringCount = () => parseInt(layout.slice(7), 10);
   const stringX = (i, n) => 750 * (i + 0.5) / n;
   function stringShape(k, u) {                              // how far string k is off its line at height u (0 = nut, 1 = bridge)
     const st = strings[k - 1];
@@ -88,9 +88,9 @@
   }
   function gridPoint(k, y, lay = layout) {                  // where a point on this shank sits in that layout (photo px)
     if (lay && lay.startsWith('strings')) {
-      const n = parseInt(lay.slice(7), 10), bars = n < 8, u = (y + SOLO_TOP) / (SHANKS[k - 1].tip + SOLO_TOP), top = bars ? NUT_Y : -10, bottom = bars ? BRIDGE_Y : 1010;
+      const n = parseInt(lay.slice(7), 10), bars = n < 8, u = (y + SOLO_TOP) / (SHANKS[k - 1].tip + SOLO_TOP), top = bars ? nutY() : -10, bottom = bars ? BRIDGE_Y : 1010;
       if (k <= n) return [stringX(k - 1, n) + stringShape(k, u) * Math.min(1, gridU * 2 - 1 > 0 ? gridU * 2 - 1 : 0), top + u * (bottom - top)];
-      if (k === n + 1) return [-20 + u * 790, NUT_Y];       // the nut
+      if (k === n + 1) return [-20 + u * 790, nutY()];      // the nut
       if (k === n + 2) return [-20 + u * 790, BRIDGE_Y];    // the bridge
       return [onShank(k, y), y - 1300];                     // not needed: lifted off the top
     }
@@ -142,6 +142,21 @@
       ctx.beginPath(); ctx.moveTo(x, 36); ctx.lineTo(x, 1000); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillRect(x - 15, 8, 30, 26);
       ctx.fillStyle = '#1a1f1c'; ctx.font = `${g.root ? 700 : 500} 22px system-ui, sans-serif`; ctx.fillText(g.label, x, 10);
+    });
+  }
+  const chordCell = i => ({ x: 10 + (i % 4) * 185.5, y: 8 + Math.floor(i / 4) * 110, w: 173, h: 102 });   // two rows of four, big enough for a fingertip on a phone
+  function drawChords() {                                   // the chord strip, in the shanks' own blue
+    if (!opts.chords || gridU < 0.9) return;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 46px system-ui, sans-serif';
+    opts.chords.forEach((name, i) => {
+      const c = chordCell(i), on = i === opts.chordOn;
+      ctx.beginPath(); ctx.roundRect(c.x, c.y, c.w, c.h, 14);
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgb(22, 12, 118)'; ctx.stroke();
+      if (on) { ctx.fillStyle = 'rgb(22, 12, 118)'; ctx.fill(); }
+      ctx.fillStyle = on ? '#fff' : 'rgb(22, 12, 118)';
+      ctx.fillText(name, c.x + c.w / 2, c.y + c.h / 2 + 2);
+      if (opts.chordKeys) { ctx.font = '500 22px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(opts.chordKeys[i], c.x + 11, c.y + 9); ctx.font = '600 46px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; }   // which keyboard key picks it
     });
   }
   function drawTarget() {                                   // thin axis lines across the image and a ring at the pointer
@@ -229,6 +244,7 @@
     osc.forEach((o, i) => drawShank(i + 1, o));
     if (layout === 'piano') { blacks.forEach((b, i) => { b.x += (opts.blackAt[i] - b.x) * Math.min(1, dt * 9); }); drawPianoTop(ease(Math.max(0, (gridU - 0.6) / 0.4))); drawPianoDots(); }
     else if (fromLayout === 'piano') drawPianoTop(ease(Math.max(0, 1 - gridU / 0.4)));   // leaving the piano: the black keys melt away
+    if (layout && layout.startsWith('strings')) drawChords();
     if (layout === 'pad' && gridU > 0.9) drawGuides();
     if (layout === 'pad' && gridU > 0.9) { pad.alpha = Math.min(1, pad.alpha + dt * 6); drawTarget(); } else pad.alpha = 0;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -279,6 +295,7 @@
     showPress(k, ms) { keyOf(k).down = true; start(); setTimeout(() => { if (![...held.values()].includes(k)) keyOf(k).down = false; }, ms); },
     showBump(k, dir) { quietUntil = performance.now() + 700; osc[k - 1].v += dir * 300; start(); },
     showTarget(x, y, on) { pad.x = x * 750; pad.y = y * 1000; pad.demo = on; start(); },
+    setChord(i) { opts.chordOn = i; },
     vibrate(i, strength) { if (layout && layout.startsWith('strings') && strings[i]) { strings[i].amp = Math.max(strings[i].amp, 4 + 26 * strength); start(); } },
     peek() { return osc.map(o => o.a); },                   // for test tools
     // options: collide = neighbouring tips hit each other and call window.shankTouch(k, speed); gust = how hard the mouse pushes; tight = ring once per push; touchGap = how close tips count as touching (photo px); dip = how far a key goes down (photo px); stiff = stiff at the top and whippy at the tip.
@@ -313,19 +330,24 @@
   const GRAB_DIST = 42, SLIP = 70;                          // how close counts as grabbing a string, and how far it can be pulled before it slips off the finger
   function pluckString(i, strength) {
     const st = strings[i];
-    st.held = false; st.pull = 0; st.amp = Math.max(st.amp, 4 + 26 * strength); st.phase = 0;
+    const muted = opts.chords && opts.chordOn < 0;          // no chord held: a muted string barely moves
+    st.held = false; st.pull = 0; st.amp = Math.max(st.amp, (4 + 26 * strength) * (muted ? 0.2 : 1)); st.phase = 0;
     window.shankString?.(i + 1, strength);
   }
   function stringsReady() { return layout && layout.startsWith('strings') && gridU > 0.9; }
+  function chordAt(p) { return opts.chords && p.y < CHORD_H ? opts.chords.findIndex((_, i) => { const c = chordCell(i); return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h; }) : -1; }
   function stringsDown(ev) {
-    const p = toPhoto(ev), n = stringCount(), i = Math.max(0, Math.min(n - 1, Math.floor(p.x / 750 * n)));
+    const hit = toPhoto(ev);
+    if (opts.chords && hit.y < CHORD_H) { const c = chordAt(hit); if (c >= 0) window.shankChord?.(c); return; }   // the strip only picks a chord
+    const p = hit, n = stringCount(), i = Math.max(0, Math.min(n - 1, Math.floor(p.x / 750 * n)));
     const near = Math.abs(p.x - stringX(i, n)) < GRAB_DIST;
     const state = { x: p.x, y: p.y, grab: near ? i : -1, down: true };
     pointers.set(ev.pointerId, state);
-    if (near) { const st = strings[i]; st.held = true; st.grab = Math.max(0.15, Math.min(0.85, p.y / 1000)); st.pull = 0; st.amp = 0; }
+    if (near) { const st = strings[i], top = opts.chords ? nutY() : 0; st.held = true; st.grab = Math.max(0.15, Math.min(0.85, (p.y - top) / (1000 - top))); st.pull = 0; st.amp = 0; }
   }
   function stringsMove(ev, state) {
     const p = toPhoto(ev), n = stringCount();
+    if (opts.chords && p.y < CHORD_H && state.grab < 0) { state.x = p.x; return; }   // passing over the strip doesn't strum
     if (state.grab >= 0) {
       const st = strings[state.grab], pull = p.x - stringX(state.grab, n);
       if (Math.abs(pull) > SLIP) { pluckString(state.grab, Math.min(1, Math.abs(pull) / SLIP)); state.grab = -1; state.x = p.x; return; }   // pulled too far: it slips away and rings

@@ -3,7 +3,7 @@
 //   s.p (a pitch factor: a little higher to the right, with a small random change on every hit),
 //   and helpers s.tone(type, f0, f1, seconds, level) and s.burst(filter, hz, q, seconds, level).
 //   s.egg(hit) plays a sound from egglab/eggsfx.js, e.g. s.egg({ kind: 'snap', v: 1, pitch: 1 }).
-//   When a sound plays under Sway: trigger: 'touch' = only when two shank tips actually hit each other (the shanks then collide and push harder);
+//   When a sound plays under Fidget: trigger: 'touch' = only when two shank tips actually hit each other (the shanks then collide and push harder);
 //   trail: true = on every swing as a shank dies down; neither = once per push.
 window.LAB_SOUNDS = [
   { group: 'Fidget', name: 'Soft click', trigger: 'touch', play: s => {
@@ -40,9 +40,16 @@ window.LAB_KEYS = [                                       // the same list as th
   { name: 'A minor', root: 220.0, steps: MINOR }, { name: 'E minor', root: 164.81, steps: MINOR },
   { name: 'C pentatonic', root: 261.63, steps: [0, 2, 4, 7, 9] }, { name: 'A minor pentatonic', root: 220.0, steps: [0, 3, 5, 7, 10] }, { name: 'A blues', root: 220.0, steps: [0, 3, 5, 6, 7, 10] },
 ];
+// Chord sets for the strip, one per key. Same spot, same job in every major key: top row I IV V vi, bottom row ii iii, then two popular borrowed chords (the flat VII, and the major III).
+const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const parseChord = text => { const [, letter, accidental, minor] = text.match(/^([A-G])([#b]?)(m?)$/); return { name: text.replace('#', '♯').replace(/([A-G])b/, '$1♭'), root: (PC[letter] + (accidental === '#' ? 1 : accidental === 'b' ? 11 : 0)) % 12, minor: !!minor }; };
+window.LAB_CHORD_SETS = [
+  ['Key of C', 'C F G Am Dm Em Bb E'], ['Key of G', 'G C D Em Am Bm F B'], ['Key of D', 'D G A Bm Em F#m C F#'], ['Key of A', 'A D E F#m Bm C#m G C#'],
+  ['Key of E', 'E A B C#m F#m G#m D G#'], ['Key of F', 'F Bb C Dm Gm Am Eb A'], ['A minor', 'Am Dm Em F C G E D'], ['E minor', 'Em Am Bm C G D B A'],
+].map(([name, list]) => ({ name, chords: list.split(' ').map(parseChord) }));
 const ECHO = { id: 'echo', type: 'check', label: 'Room echo' };
 window.LAB_INSTRUMENTS = [
-  { name: 'Sway', note: 'move across the shanks', mode: 'wind', controls: [
+  { name: 'Fidget', note: 'move across the shanks', mode: 'wind', controls: [
       { id: 'trigger', type: 'radio', label: 'Sound plays', options: [['push', 'Once per push'], ['swing', 'Every swing as it dies down'], ['touch', 'Only when shank tips touch']] },
       ECHO,
       { id: 'stiff', type: 'check', label: 'Stiff at the top, whippy at the tip' },
@@ -56,23 +63,24 @@ window.LAB_INSTRUMENTS = [
       { name: 'Warm organ', hold: true, play: s => s.egg({ kind: 'organ', v: s.v, hz: s.hz }) },   // hold: sounds until the key is let go
   ] },
   { name: 'Strings', note: 'pluck or strum', mode: 'strings', keys: true, controls: [
+      { id: 'chords', type: 'check', label: 'Chord strip', only: v => v.canChord },
       { id: 'hover', type: 'check', label: 'Strum by moving the mouse' }, ECHO,
   ], sounds: [                                            // count: strings, in order low to high from the left; ring: how long they visibly shake; tunings: pressed through with C
-      { name: 'Guitar', count: 6, ring: 1.1, decay: 0.996, soft: 1, dur: 2.2, tunings: [
+      { name: 'Guitar', chords: true, count: 6, ring: 1.1, decay: 0.996, soft: 1, dur: 2.2, tunings: [
         { name: 'Standard', notes: [82.41, 110, 146.83, 196, 246.94, 329.63] }, { name: 'Drop D', notes: [73.42, 110, 146.83, 196, 246.94, 329.63] },
         { name: 'Open G', notes: [73.42, 98, 146.83, 196, 246.94, 293.66] }, { name: 'DADGAD', notes: [73.42, 110, 146.83, 196, 220, 293.66] },
       ] },
-      { name: 'Bass', count: 4, ring: 1.4, decay: 0.998, soft: 2, dur: 2.4, tunings: [
+      { name: 'Bass', chords: true, rootOnly: true, count: 4, ring: 1.4, decay: 0.996, soft: 8, dur: 1.8, lp: 750, sub: 1.5, tunings: [
         { name: 'Standard', notes: [41.2, 55, 73.42, 98] }, { name: 'Drop D', notes: [36.71, 55, 73.42, 98] },
       ] },
-      { name: 'Banjo', count: 5, ring: 0.5, decay: 0.985, soft: 0, dur: 1, tunings: [
+      { name: 'Banjo', chords: true, drone: true, count: 5, ring: 0.5, decay: 0.985, soft: 0, dur: 1, tunings: [
         { name: 'Open G', notes: [392, 146.83, 196, 246.94, 293.66] }, { name: 'Double C', notes: [392, 130.81, 196, 261.63, 293.66] },
       ] },
-      { name: 'Ukulele', count: 4, ring: 0.7, decay: 0.992, soft: 1, dur: 1.2, tunings: [
+      { name: 'Ukulele', chords: true, count: 4, ring: 0.7, decay: 0.992, soft: 1, dur: 1.2, tunings: [
         { name: 'Standard', notes: [392, 261.63, 329.63, 440] }, { name: 'Low G', notes: [196, 261.63, 329.63, 440] }, { name: 'D tuning', notes: [440, 293.66, 369.99, 493.88] },
       ] },
       { name: 'Harp', count: 8, ring: 1.6, decay: 0.998, soft: 3, dur: 2.4, tunings: window.LAB_KEYS.map(key => ({ name: key.name, notes: Array.from({ length: 8 }, (_, i) => key.root * 2 ** ((12 * Math.floor(i / key.steps.length) + key.steps[i % key.steps.length]) / 12)) })) },
-  ].map(x => ({ ...x, play: s => s.egg({ kind: 'pluck', v: s.v, hz: s.hz, decay: x.decay, soft: x.soft, dur: x.dur }) })) },
+  ].map(x => ({ ...x, play: s => s.egg({ kind: 'pluck', v: s.v, hz: s.hz, decay: x.decay, soft: x.soft, dur: x.dur, lp: x.lp, sub: x.sub }) })) },
   { name: 'Theremin', note: 'press and move on the grid', mode: 'pad', keys: true, controls: [
       { id: 'snap', type: 'check', label: 'Snap to the notes of the key', only: v => v.keyed },
       { id: 'guides', type: 'check', label: 'Show the note guide', only: v => v.keyed }, ECHO,

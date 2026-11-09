@@ -9,7 +9,7 @@
   const instruments = window.LAB_INSTRUMENTS, KEYS = window.LAB_KEYS;
   let instrumentName = store.get('instrument', instruments[0].name), keyName = store.get('key', KEYS[0].name);
   const levels = store.get('levels', {}), picks = store.get('picks', {});   // picks: the chosen sound, per instrument
-  if (!picks.Sway) picks.Sway = store.get('sound-v2', null);
+  if (!picks.Fidget) picks.Fidget = picks.Sway || store.get('sound-v2', null);
   const instrument = () => instruments.find(x => x.name === instrumentName && !x.soon) || instruments[0];
   const soundList = () => instrument().sounds || window.LAB_SOUNDS;
   const sound = () => soundList().find(x => x.name === picks[instrument().name]) || soundList()[0];
@@ -27,7 +27,15 @@
   // Strings: each instrument has its own tunings, and each remembers which one you were on.
   const tuningPicks = store.get('tunings', {});
   const isStrings = () => instrument().mode === 'strings';
-  const tuning = () => { const list = sound().tunings; return list.find(x => x.name === tuningPicks[sound().name]) || list[0]; };
+  const chordPicks = store.get('chords', {});             // the selected chord per sound, or none for open strings
+  const chordsOn = () => isStrings() && sound().chords && current().chords;
+  const SETS = window.LAB_CHORD_SETS;
+  let setName = store.get('chordSet', SETS[0].name);
+  const chordSet = () => SETS.find(x => x.name === setName) || SETS[0];
+  const chordPick = () => (chordPicks[sound().name] === undefined ? 0 : chordPicks[sound().name]);   // the home chord unless you've released it (null)
+  const chordNow = () => (chordsOn() && chordPick() != null ? chordSet().chords[chordPick()] : null);
+  const homeChord = () => { chordPicks[sound().name] = 0; store.set('chords', chordPicks); };   // browsing keys always lands on the home chord
+  const tuning = () => { const list = sound().tunings; return (!chordsOn() && list.find(x => x.name === tuningPicks[sound().name])) || list[0]; };   // with the chord strip, always standard tuning
   // Theremin: Free slide (no key), or one of the keys, which brings the snap and the note guide into play.
   let padKeyName = store.get('padKey', null);
   const isPad = () => instrument().mode === 'pad';
@@ -39,17 +47,24 @@
   }
   const realOn = () => instrument().mode === 'keys' && current().shape && current().real;
   function keyHz(k) {                                     // the note for shank k in the current key, climbing through octaves as needed
-    if (isStrings()) return tuning().notes[k - 1];
+    if (isStrings()) {
+      const open = tuning().notes[k - 1], c = chordNow();
+      if (!c || (sound().drone && k === 1)) return open;   // a banjo's short first string stays open, as on the real thing
+      const pcs = sound().rootOnly ? [c.root] : [c.root, c.root + (c.minor ? 3 : 4), c.root + 7].map(n => n % 12), pc = ((Math.round(12 * Math.log2(open / 440)) + 69) % 12 + 12) % 12;
+      let fret = 0; while (fret < 11 && !pcs.includes((pc + fret) % 12)) fret += 1;   // the lowest fret on this string that is in the chord: this gives the real open chord shapes
+      return open * 2 ** (fret / 12);
+    }
     if (realOn()) { const p = realPiano(); return p.root * 2 ** ((k <= 8 ? p.white(k - 1) : p.white(p.blackAt[k - 9] - 1) + 1) / 12); }
     if (k > 8) return keyHz([1, 2, 4, 5, 6][k - 9]) * 2 ** (1 / 12);   // a black key: a semitone above the white key to its left
     const { root, steps } = musicalKey(), i = k - 1;
     return root * 2 ** ((12 * Math.floor(i / steps.length) + steps[i % steps.length]) / 12);
   }
-  const settings = store.get('settings-v2', {});             // the Interaction box's choices, per instrument and sound
+  const settings = Object.fromEntries(Object.entries(store.get('settings-v2', {})).map(([key, value]) => [key.replace(/^Sway\//, 'Fidget/'), value]));   // the old name for Fidget
+  //             // the Interaction box's choices, per instrument and sound
   const settingKey = () => `${instrument().name}/${sound().name}`;
   function current() {
     const x = sound(), touch = x.trigger === 'touch';
-    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: true, guides: true, keyed: !!padKey(), range: 3, vib: 12, shape: true, real: true, dots: true, hover: true, ...settings[settingKey()] };
+    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: true, guides: true, keyed: !!padKey(), range: 3, vib: 12, shape: true, real: true, dots: true, hover: true, chords: true, canChord: !!sound().chords, ...settings[settingKey()] };
   }
   function setSetting(id, value) {
     const next = { ...settings[settingKey()], [id]: value };
@@ -93,6 +108,7 @@
     };
     const s = { ac, out: custom, t, k, v: v * lv, hz: keyHz(k), p: (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12), tone, burst,
                 egg: h => window.EggSfx.play(ac, [{ ms: delay * 1000, ...h, ...(set.echo ? { wet: 3 } : {}) }], master) };
+    if (chordsOn() && !chordNow()) return s.egg({ kind: 'chk', v: s.v, pitch: s.p * (sound().rootOnly ? 0.6 : 1) });   // no chord held: a muted strum
     return sound().play?.(s);
   }
   const heldNotes = new Map();                            // shank -> its sounding note, for sounds that hold while pressed
@@ -141,6 +157,18 @@
     thereminVoice = null;
   }
   window.shankString = (k, strength) => hit(k, 0.35 + 0.65 * strength);
+  window.shankChord = i => {                              // tap a chord or press its key to select it, again for open strings
+    const name = sound().name, next = chordPick() === i ? null : i;
+    chordPicks[name] = next; store.set('chords', chordPicks);
+    window.shankWind.setChord(next ?? -1);
+    say(next == null ? 'Muted' : chordSet().chords[next].name);
+  };
+  const CHORD_KEYS = 'qwerasdf';                          // the top row of the strip on q w e r, the bottom on a s d f
+  addEventListener('keydown', ev => {
+    if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey || !chordsOn()) return;
+    const i = CHORD_KEYS.indexOf(ev.key.toLowerCase());
+    if (i >= 0) window.shankChord(i);
+  });
   window.shankPad = (phase, x, y) => { if (phase === 'down') startTheremin(x, y); else if (phase === 'move') moveTheremin(x, y); else stopTheremin(); };
 
   // The little demo after a change: once the shanks have finished moving, a few notes are played on the new layout, and you see them played.
@@ -184,7 +212,7 @@
   }
   window.unlockEggAudio = unlock;                         // the title's clickable letters (site/js/titlecode.js) work here too, and the last s steps through the instruments
   window.nextSound = () => { const list = soundList(); pick(list[(list.indexOf(sound()) + 1) % list.length].name); draw(); say(sound().name); setTimeout(() => demo(true), 30); };
-  window.nextMusicalKey = () => { if (isPad()) { const names = [null, ...KEYS.map(x => x.name)]; padKeyName = names[(names.indexOf(padKey()?.name ?? null) + 1) % names.length]; store.set('padKey', padKeyName); draw(); say(padKeyName || 'Free slide'); setTimeout(() => demo(true), 30); return; } if (isStrings()) { const list = sound().tunings; tuningPicks[sound().name] = list[(list.indexOf(tuning()) + 1) % list.length].name; store.set('tunings', tuningPicks); draw(); say(tuning().name); setTimeout(() => demo(true), 30); return; } if (instrument().keys) { keyName = KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name; store.set('key', keyName); draw(); say(musicalKey().name); setTimeout(() => demo(true), 30); } };
+  window.nextMusicalKey = () => { if (chordsOn()) { setName = SETS[(SETS.indexOf(chordSet()) + 1) % SETS.length].name; store.set('chordSet', setName); homeChord(); draw(); say(setName); setTimeout(() => demo(true), 30); return; } if (isPad()) { const names = [null, ...KEYS.map(x => x.name)]; padKeyName = names[(names.indexOf(padKey()?.name ?? null) + 1) % names.length]; store.set('padKey', padKeyName); draw(); say(padKeyName || 'Free slide'); setTimeout(() => demo(true), 30); return; } if (isStrings()) { const list = sound().tunings; tuningPicks[sound().name] = list[(list.indexOf(tuning()) + 1) % list.length].name; store.set('tunings', tuningPicks); draw(); say(tuning().name); setTimeout(() => demo(true), 30); return; } if (instrument().keys) { keyName = KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name; store.set('key', keyName); draw(); say(musicalKey().name); setTimeout(() => demo(true), 30); } };
   window.keyLetterOn = () => !!instrument().keys;
   window.nextInstrument = () => {
     const ready = instruments.filter(x => !x.soon);
@@ -202,7 +230,7 @@
     b.addEventListener('click', click);
     return b;
   }
-  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}), ...(inst.mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: !!v.hover } : {}), ...(inst.mode === 'pad' && padKey() && v.guides ? { guides: noteGuides(padKey(), v.range) } : {}) }; };
+  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}), ...(inst.mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: !!v.hover, chords: sound().chords && v.chords ? chordSet().chords.map(c => c.name) : null, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {}), ...(inst.mode === 'pad' && padKey() && v.guides ? { guides: noteGuides(padKey(), v.range) } : {}) }; };
   function drawControls(inst, set) {
     const nodes = (inst.controls || []).filter(c => !c.only || c.only(set)).map(c => {
       const box = document.createElement('div'); box.className = 'ctl';
@@ -248,13 +276,15 @@
     });
     $('sounds').replaceChildren(...list);
     $('boxKey').style.display = inst.keys ? '' : 'none';
-    $('keyHead').textContent = isStrings() ? 'Tuning' : 'Musical key';
-    $('keys').replaceChildren(...(isStrings()
+    $('keyHead').textContent = chordsOn() ? 'Key' : isStrings() ? 'Tuning' : 'Musical key';
+    $('keys').replaceChildren(...(chordsOn()
+      ? SETS.map(x => row(x, x === chordSet(), () => { setName = x.name; store.set('chordSet', x.name); homeChord(); unlock(); draw(); setTimeout(() => demo(true), 30); }))
+      : isStrings()
       ? sound().tunings.map(x => row(x, x === tuning(), () => { tuningPicks[sound().name] = x.name; store.set('tunings', tuningPicks); unlock(); draw(); setTimeout(() => demo(true), 30); }))
       : isPad()
         ? [{ name: 'Free slide' }, ...KEYS].map(x => row(x, x.name === (padKeyName || 'Free slide'), () => { padKeyName = x.name === 'Free slide' ? null : x.name; store.set('padKey', padKeyName); unlock(); draw(); setTimeout(() => demo(true), 30); }))
         : KEYS.map(x => row(x, x === musicalKey(), () => { keyName = x.name; store.set('key', x.name); unlock(); draw(); setTimeout(() => demo(true), 30); }))));
-    keyLabel.textContent = isStrings() ? tuning().name : isPad() ? (padKeyName || 'Free slide') : musicalKey().name;
+    keyLabel.textContent = chordsOn() ? chordSet().name : isStrings() ? tuning().name : isPad() ? (padKeyName || 'Free slide') : musicalKey().name;
     keyLabel.style.display = inst.keys ? '' : 'none';
     document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst.keys);
     const lv = levels[sound().name] ?? 1;

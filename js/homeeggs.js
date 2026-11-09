@@ -137,17 +137,17 @@
       { name: 'Warm organ', hit: voice('organ'), hold: true },
     ] },
     { name: 'Strings', mode: 'strings', sounds: [          // count: strings, low to high from the left; tunings: stepped through with the second c
-      { name: 'Guitar', count: 6, ring: 1.1, decay: 0.996, soft: 1, dur: 2.2, tunings: [
+      { name: 'Guitar', chords: true, count: 6, ring: 1.1, decay: 0.996, soft: 1, dur: 2.2, tunings: [
         { name: 'Standard', notes: [82.41, 110, 146.83, 196, 246.94, 329.63] }, { name: 'Drop D', notes: [73.42, 110, 146.83, 196, 246.94, 329.63] },
         { name: 'Open G', notes: [73.42, 98, 146.83, 196, 246.94, 293.66] }, { name: 'DADGAD', notes: [73.42, 110, 146.83, 196, 220, 293.66] },
       ] },
-      { name: 'Bass', count: 4, ring: 1.4, decay: 0.998, soft: 2, dur: 2.4, tunings: [{ name: 'Standard', notes: [41.2, 55, 73.42, 98] }, { name: 'Drop D', notes: [36.71, 55, 73.42, 98] }] },
-      { name: 'Banjo', count: 5, ring: 0.5, decay: 0.985, soft: 0, dur: 1, tunings: [{ name: 'Open G', notes: [392, 146.83, 196, 246.94, 293.66] }, { name: 'Double C', notes: [392, 130.81, 196, 261.63, 293.66] }] },
-      { name: 'Ukulele', count: 4, ring: 0.7, decay: 0.992, soft: 1, dur: 1.2, tunings: [
+      { name: 'Bass', chords: true, rootOnly: true, count: 4, ring: 1.4, decay: 0.996, soft: 8, dur: 1.8, lp: 750, sub: 1.5, tunings: [{ name: 'Standard', notes: [41.2, 55, 73.42, 98] }, { name: 'Drop D', notes: [36.71, 55, 73.42, 98] }] },
+      { name: 'Banjo', chords: true, drone: true, count: 5, ring: 0.5, decay: 0.985, soft: 0, dur: 1, tunings: [{ name: 'Open G', notes: [392, 146.83, 196, 246.94, 293.66] }, { name: 'Double C', notes: [392, 130.81, 196, 261.63, 293.66] }] },
+      { name: 'Ukulele', chords: true, count: 4, ring: 0.7, decay: 0.992, soft: 1, dur: 1.2, tunings: [
         { name: 'Standard', notes: [392, 261.63, 329.63, 440] }, { name: 'Low G', notes: [196, 261.63, 329.63, 440] }, { name: 'D tuning', notes: [440, 293.66, 369.99, 493.88] },
       ] },
       { name: 'Harp', count: 8, ring: 1.6, decay: 0.998, soft: 3, dur: 2.4, tunings: MUSICAL_KEYS.map(key => ({ name: key.name, notes: Array.from({ length: 8 }, (_, i) => key.root * 2 ** ((12 * Math.floor(i / key.steps.length) + key.steps[i % key.steps.length]) / 12)) })) },
-    ].map(x => ({ ...x, hit: (k, v, hz) => ({ kind: 'pluck', v, hz, decay: x.decay, soft: x.soft, dur: x.dur }) })) },
+    ].map(x => ({ ...x, hit: (k, v, hz) => ({ kind: 'pluck', v, hz, decay: x.decay, soft: x.soft, dur: x.dur, lp: x.lp, sub: x.sub }) })) },
     { name: 'Theremin', mode: 'pad', sounds: [             // the shanks form a grid; left to right is pitch, top is loud and bottom quiet (settings from the Instrument Lab)
       { name: 'Classic', voice: [['sine', 1, 1], ['sine', 2, 0.15]] },
       { name: 'Warm', filter: 1100, voice: [['triangle', 1, 1], ['sine', 0.5, 0.25]] },
@@ -155,7 +155,7 @@
     ] },
   ];
   const STATE_KEY = 'bs-instruments';
-  let state = { instrument: 0, sound: {}, key: 0, padKey: -1, tuning: {} };   // padKey: the Theremin's key, -1 = Free slide
+  let state = { instrument: 0, sound: {}, key: 0, padKey: -1, tuning: {}, chordSet: 0, chord: {} };   // chord: per sound, the selected chord; null = released (a muted strum)   // padKey: the Theremin's key, -1 = Free slide
   try { state = { ...state, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (e) { /* starts on the defaults */ }
   state.instrument = INSTRUMENTS[state.instrument] ? state.instrument : 0;
   const saveState = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { /* just this visit, then */ } };
@@ -171,9 +171,26 @@
     const inKey = semi => steps.includes(((semi % 12) + 12) % 12);
     return { root, white, blackAt, dots: { white: Array.from({ length: 8 }, (_, n) => inKey(white(n))), black: blackAt.map(d => inKey(white(d - 1) + 1)) } };
   }
+  // Chord strip: one set of eight chords per key. In the major keys the same spot does the same job everywhere: top row I IV V vi, bottom row ii iii, then two popular borrowed chords.
+  const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const parseChord = text => { const [, letter, accidental, minor] = text.match(/^([A-G])([#b]?)(m?)$/); return { name: text.replace('#', '♯').replace(/([A-G])b/, '$1♭'), root: (PC[letter] + (accidental === '#' ? 1 : accidental === 'b' ? 11 : 0)) % 12, minor: !!minor }; };
+  const CHORD_SETS = [
+    ['Key of C', 'C F G Am Dm Em Bb E'], ['Key of G', 'G C D Em Am Bm F B'], ['Key of D', 'D G A Bm Em F#m C F#'], ['Key of A', 'A D E F#m Bm C#m G C#'],
+    ['Key of E', 'E A B C#m F#m G#m D G#'], ['Key of F', 'F Bb C Dm Gm Am Eb A'], ['A minor', 'Am Dm Em F C G E D'], ['E minor', 'Em Am Bm C G D B A'],
+  ].map(([name, list]) => ({ name, chords: list.split(' ').map(parseChord) }));
+  const chordsOn = () => inst().mode === 'strings' && !!sound().chords;
+  const chordSet = () => CHORD_SETS[state.chordSet % CHORD_SETS.length];
+  const chordPick = () => (state.chord[sound().name] === undefined ? 0 : state.chord[sound().name]);   // the home chord unless it's been released
+  const chordNow = () => (chordsOn() && chordPick() != null ? chordSet().chords[chordPick()] : null);
   const tuning = () => sound().tunings[(state.tuning[sound().name] || 0) % sound().tunings.length];
   function keyHz(k) {                                      // the note for key k: 1..8 white, 9..13 black (or string k)
-    if (inst().mode === 'strings') return tuning().notes[k - 1];
+    if (inst().mode === 'strings') {
+      const open = tuning().notes[k - 1], c = chordNow();
+      if (!c || (sound().drone && k === 1)) return open;   // a banjo's short first string stays open, as on the real thing
+      const pcs = sound().rootOnly ? [c.root] : [c.root, c.root + (c.minor ? 3 : 4), c.root + 7].map(n => n % 12), pc = ((Math.round(12 * Math.log2(open / 440)) + 69) % 12 + 12) % 12;
+      let fret = 0; while (fret < 11 && !pcs.includes((pc + fret) % 12)) fret += 1;   // the lowest fret on this string that is in the chord: this gives the real open chord shapes
+      return open * 2 ** (fret / 12);
+    }
     const p = realPiano();
     return p.root * 2 ** ((k <= 8 ? p.white(k - 1) : p.white(p.blackAt[k - 9] - 1) + 1) / 12);
   }
@@ -186,14 +203,14 @@
   }
   function applyMode() {                                   // tell the shanks how to be played; a keyboard also needs its black keys and dots for the current key
     const p = inst().keys ? realPiano() : null, guides = inst().mode === 'pad' && padKey() ? noteGuides(padKey(), 3) : null;
-    const strings = inst().mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: true } : {};
+    const strings = inst().mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: true, chords: chordsOn() ? chordSet().chords.map(c => c.name) : null, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {};
     window.shankWind?.setMode(inst().mode, p ? { ...inst().options, blackAt: p.blackAt, dots: p.dots } : { ...inst().options, guides, ...strings });
   }
   const keyLabel = document.createElement('div');          // which key the keyboard is in: the image's bottom left corner
   keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   box.appendChild(keyLabel);
   function refreshInstrument() {
-    keyLabel.textContent = inst().mode === 'pad' ? (padKey()?.name || 'Free slide') : inst().mode === 'strings' ? tuning().name : musicalKey().name;
+    keyLabel.textContent = inst().mode === 'pad' ? (padKey()?.name || 'Free slide') : chordsOn() ? chordSet().name : inst().mode === 'strings' ? tuning().name : musicalKey().name;
     keyLabel.style.display = hasKeyLetter() && !busy ? '' : 'none';
     document.querySelector('.tc-auto')?.classList.toggle('tc-live', hasKeyLetter());
   }
@@ -201,7 +218,7 @@
   applyMode();
   refreshInstrument();
   const audioReady = () => eggAudio && eggAudio.state === 'running' && window.EggSfx;
-  const shankHit = (k, v, ms = 0) => ({ ms, ...sound().hit(k, v, keyHz(k)) });
+  const shankHit = (k, v, ms = 0) => ({ ms, ...(chordsOn() && !chordNow() ? { kind: 'chk', v, pitch: pitchOf(k) * (sound().rootOnly ? 0.6 : 1) } : sound().hit(k, v, keyHz(k))) });   // no chord held: a muted strum
   const heldNotes = new Map();                             // shank -> its sounding note, for sounds that hold while pressed
   window.shankSwing = function (k, swing) {                // called by shankwind.js: a shank was played, swing = how hard in photo px
     if (!audioReady()) return;
@@ -210,6 +227,18 @@
   };
   window.shankRelease = function (k) { heldNotes.get(k)?.release(); heldNotes.delete(k); };
   window.shankString = function (k, strength) { if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, 0.35 + 0.65 * strength)], eggMaster); };
+  window.shankChord = function (i) {                       // tap a chord or press its key to select it, again to release it
+    const next = chordPick() === i ? null : i;
+    state.chord[sound().name] = next;
+    saveState();
+    window.shankWind?.setChord(next ?? -1);
+    say(next == null ? 'Muted' : chordSet().chords[next].name);
+  };
+  addEventListener('keydown', ev => {                      // the chord strip on the keyboard: top row q w e r, bottom row a s d f
+    if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey || !chordsOn() || busy) return;
+    const i = 'qwerasdf'.indexOf(ev.key.toLowerCase());
+    if (i >= 0) window.shankChord(i);
+  });
   function thereminHz(x) {                                 // Free slide, or snapped to the nearest note of the key
     const free = 130.81 * 2 ** (3 * x);
     if (!padKey()) return free;
@@ -304,7 +333,7 @@
   function changed(text, quick) { stopTheremin(); saveState(); applyMode(); refreshInstrument(); say(text); demo(quick); }
   window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
   window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name, true); };
-  window.nextMusicalKey = () => { if (inst().mode === 'strings') { state.tuning[sound().name] = ((state.tuning[sound().name] || 0) + 1) % sound().tunings.length; changed(tuning().name, true); return; } if (inst().mode === 'pad') { state.padKey = state.padKey + 1 >= MUSICAL_KEYS.length ? -1 : state.padKey + 1; changed(padKey()?.name || 'Free slide', true); return; } if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name, true); } };
+  window.nextMusicalKey = () => { if (chordsOn()) { state.chordSet = (state.chordSet + 1) % CHORD_SETS.length; state.chord[sound().name] = 0; changed(chordSet().name, true); return; } if (inst().mode === 'strings') { state.tuning[sound().name] = ((state.tuning[sound().name] || 0) + 1) % sound().tunings.length; changed(tuning().name, true); return; } if (inst().mode === 'pad') { state.padKey = state.padKey + 1 >= MUSICAL_KEYS.length ? -1 : state.padKey + 1; changed(padKey()?.name || 'Free slide', true); return; } if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name, true); } };
   ['pointerdown', 'pointerup', 'keydown'].forEach(ev => addEventListener(ev, () => window.unlockEggAudio(), { once: true }));   // browsers allow sound after the visitor's first click, tap or key
 
   function eggMusic(m) {
