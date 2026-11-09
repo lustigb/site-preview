@@ -18,6 +18,7 @@
 // tab only, gone when it closes, never sent anywhere (no cookies).
 // Sound: phones only allow audio that starts from a tap on THIS page (not the egg's iframe), so titlecode.js calls
 // window.unlockEggAudio() while you press the code letters, and eggs with music (pixelRoll) get it played from here.
+// A small speaker button, always there at the right end of the home page's divider, turns all egg sound on or off; the choice is kept in localStorage.
 (function () {
   const photo = document.getElementById('home-photo');
   if (!photo) return;
@@ -62,11 +63,44 @@
   }
   const hideTag = () => { tag.style.opacity = 0; };
 
-  let eggAudio = null;                                     // AudioContext, unlocked by a tap on a code letter
+  let eggAudio = null, eggMaster = null;                   // AudioContext, unlocked by a tap on a code letter, and the gain all egg sound goes through
+  const MUTE_KEY = 'bs-eggs-muted';
+  let muted = false;
+  try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { /* storage blocked: starts with sound on */ }
+
+  const soundBtn = document.createElement('button');
+  soundBtn.type = 'button';
+  soundBtn.className = 'egg-sound';
+  soundBtn.style.cssText = 'position:absolute; right:-4px; bottom:3px; width:34px; height:30px; padding:0; border:0; background:transparent;'
+                         + 'color:var(--ink, #1a1f1c); opacity:.5; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2;';
+  const soundLocked = () => !eggAudio || eggAudio.state !== 'running';   // browsers allow no sound until the visitor's first click, tap or key
+  function paintSoundBtn() {
+    const off = muted || soundLocked(), label = off ? 'Sound off' : 'Sound on';
+    soundBtn.setAttribute('aria-label', label); soundBtn.title = label; soundBtn.setAttribute('aria-pressed', String(!off));
+    soundBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/>'
+      + `<path d="${off ? 'M16 9l5 6M21 9l-5 6' : 'M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12'}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+  }
+  let lockedAtPress = false;
+  soundBtn.addEventListener('pointerdown', () => { lockedAtPress = soundLocked(); });   // before the page-wide listener below unlocks audio
+  soundBtn.addEventListener('click', () => {
+    muted = lockedAtPress || soundLocked() ? false : !muted;   // while sound is locked, this click is the one that turns it on
+    lockedAtPress = false;
+    window.unlockEggAudio();
+    try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch (e) { /* just this visit, then */ }
+    if (eggMaster) eggMaster.gain.value = muted ? 0 : 1;
+    paintSoundBtn();
+  });
+  soundBtn.addEventListener('pointerenter', () => { soundBtn.style.opacity = 1; });
+  soundBtn.addEventListener('pointerleave', () => { soundBtn.style.opacity = .5; });
+  paintSoundBtn();
+  const hero = box.closest('.hero') || box;                // at the right end of the divider under the title, clear of the cards
+  if (getComputedStyle(hero).position === 'static') hero.style.position = 'relative';
+  hero.appendChild(soundBtn);
   window.unlockEggAudio = function () {
     try {
       eggAudio = eggAudio || new (window.AudioContext || window.webkitAudioContext)();
       eggAudio.resume();
+      if (!eggMaster) { eggMaster = eggAudio.createGain(); eggMaster.gain.value = muted ? 0 : 1; eggMaster.connect(eggAudio.destination); eggAudio.addEventListener('statechange', paintSoundBtn); }
       const b = eggAudio.createBuffer(1, 1, 22050), s = eggAudio.createBufferSource();   // a silent blip unlocks iOS
       s.buffer = b; s.connect(eggAudio.destination); s.start(0);
     } catch (e) { /* no audio: the eggs still play, silently */ }
@@ -77,10 +111,45 @@
       document.head.appendChild(sc);
     });
   };
+  // The shanks are an instrument. Each has a way of being played (shankWind.setMode) and a sound (k = which shank 1..8, v = 0..1); the last "s" in the title steps through them.
+  const PIANO = [0, 2, 4, 5, 7, 9, 11, 12].map(n => 261.63 * 2 ** (n / 12)), TUBES = [1047, 1175, 1319, 1568, 1760, 2093, 2349, 2637];
+  const INSTRUMENTS = [
+    { name: 'Chimes', mode: 'wind', hit: (k, v) => ({ kind: 'chime', v: 0.25 * v, hz: TUBES[k - 1], ring: 1.6 }) },
+    { name: 'Piano',  mode: 'keys', hit: (k, v) => ({ kind: 'piano', v, hz: PIANO[k - 1] }) },
+  ];
+  const INSTRUMENT_KEY = 'bs-instrument';
+  let instrument = 0;
+  try { instrument = Math.max(0, INSTRUMENTS.findIndex(w => w.name === localStorage.getItem(INSTRUMENT_KEY))); } catch (e) { /* starts on the first one */ }
+  window.shankWind?.setMode(INSTRUMENTS[instrument].mode);
+  const shankHit = (k, v, ms = 0) => ({ ms, ...INSTRUMENTS[instrument].hit(k, v) });
+  const audioReady = () => eggAudio && eggAudio.state === 'running' && window.EggSfx;
+  window.shankSwing = function (k, swing) {                // called by shankwind.js: a shank was played, swing = how hard in photo px
+    if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, Math.min(1, swing / 45) ** 0.7)], eggMaster);
+  };
+  let nudged = false;
+  window.shankMoved = function () {                        // someone is playing with the shanks while sound is still locked: a small wiggle says the speaker is there
+    if (nudged || !soundLocked()) return;
+    nudged = true;
+    soundBtn.animate([0, -9, 7, -5, 3, 0].map(deg => ({ transform: `rotate(${deg}deg)` })), { duration: 450, easing: 'ease-in-out' });
+  };
+  let nameTimer = null;
+  window.nextInstrument = function () {                    // the last "s": move to the next one, say its name, and play a little run of it
+    instrument = (instrument + 1) % INSTRUMENTS.length;
+    try { localStorage.setItem(INSTRUMENT_KEY, INSTRUMENTS[instrument].name); } catch (e) { /* just this visit, then */ }
+    window.shankWind?.setMode(INSTRUMENTS[instrument].mode);
+    if (audioReady()) window.EggSfx.play(eggAudio, [1, 3, 5, 8].map((k, i) => shankHit(k, 0.7, i * 90)), eggMaster);
+    tag.style.top = title ? (title.offsetTop + title.offsetHeight + 8) + 'px' : 'calc(100% + 6px)';
+    tag.textContent = INSTRUMENTS[instrument].name;
+    tag.style.opacity = 1;
+    clearTimeout(nameTimer);
+    nameTimer = setTimeout(() => { if (!busy) hideTag(); }, 1400);
+  };
+  ['pointerdown', 'pointerup', 'keydown'].forEach(ev => addEventListener(ev, () => window.unlockEggAudio(), { once: true }));   // browsers allow sound after the visitor's first click, tap or key
+
   function eggMusic(m) {
     if (m.name === 'pixelRoll' && eggAudio && window.PixelRoll)
-      window.PixelRoll.playMusic(eggAudio, eggAudio.currentTime + window.PixelRoll.IN);
-    if (m.sfx && eggAudio && window.EggSfx) window.EggSfx.play(eggAudio, m.sfx);
+      window.PixelRoll.playMusic(eggAudio, eggAudio.currentTime + window.PixelRoll.IN, eggMaster);
+    if (m.sfx && eggAudio && window.EggSfx) window.EggSfx.play(eggAudio, m.sfx, eggMaster);
   }
 
   function makeFrame() {

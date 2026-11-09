@@ -198,7 +198,8 @@ const EGGS = {
     frames: { sneak: 'f0_sneak', up: 'f1_peek_up', look: 'f2_look', waveA: 'f3_wave_a',
               waveB: 'f4_wave_b', blink: 'f5_blink' },
     steps: [
-      { show: 'sneak', ms: 500, to: { x: HIDDEN } },            // nothing to see yet
+      { show: 'sneak', ms: 1, to: { x: HIDDEN } },              // start already behind the shank
+      { show: 'sneak', ms: 500 },                               // nothing to see yet
       { show: 'sneak', ms: 900, to: { x: PEEK - 4 } },          // slowly lean out
       { show: 'up',    ms: 700, to: { x: PEEK - 2 } },          // glance up
       { show: 'look',  ms: 500, to: { x: PEEK } },              // spot the viewer
@@ -209,6 +210,14 @@ const EGGS = {
       { show: 'sneak', ms: 350, to: { x: HIDDEN } },            // duck back in
       { show: 'sneak', ms: 200 },
     ],
+    sfx() {
+      const at = i => this.plan[i].t0, out = [
+        { ms: at(2), kind: 'creak', dur: this.plan[2].ms / 1000, v: 1 },         // slowly leaning out
+        { ms: at(9) + 60, kind: 'whooshOut', dur: 0.22, v: 0.4 },                // a soft fwip as he ducks back
+      ];
+      for (let i = 0; i < 8; i += 1) out.push({ ms: at(7) + i * 200, kind: 'blip', v: 1, pitch: i % 2 ? 1.25 : 1 });   // one on each swing of the wave
+      return out;
+    },
   },
 
   poleLand: {
@@ -223,6 +232,12 @@ const EGGS = {
       { show: 'tada',   ms: 1000 },
       { show: ['walk_a', 'walk_b'], every: 170, ms: 2600, ease: 'linear', to: { x: -50 } },
     ],
+    sfx() {
+      const at = i => this.plan[i].t0, secs = i => this.plan[i].ms / 1000;
+      return [{ ms: at(1) + 425, kind: 'slide', dur: secs(1) - 0.425, v: 0.2, f0: 1900, f1: 520 },   // starts once his feet are in the photo, like poleFall
+              { ms: at(3), kind: 'thud', v: 0.9 },                               // sticks the landing
+              { ms: at(4), kind: 'tada', v: 0.55 }];
+    },
   },
 
   poleFall: {
@@ -242,6 +257,17 @@ const EGGS = {
       { show: 'pushup', ms: 1000 },
       { show: ['crawl_a', 'crawl_b'], every: 280, ms: 4200, ease: 'linear', to: { x: 810 } },
     ],
+    sfx() {                                                              // tied to the steps above (plan[i] = step i)
+      const at = i => this.plan[i].t0, secs = i => this.plan[i].ms / 1000, out = [
+        { ms: at(1) + 400, kind: 'slide', dur: secs(1) - 0.4, v: 0.2, f0: 1900, f1: 520 },   // wheee: starts once his feet are about 25 px into the photo, ends as he comes off
+        { ms: at(2) + 230, kind: 'aah', dur: (at(4) - at(2) - 230) / 1000, v: 0.4 },   // a short pause, then panic until the splat cuts it off
+        { ms: at(4), kind: 'splat', v: 1 },
+        { ms: at(6), kind: 'squish', v: 0.3, pitch: 1.3 },                         // the little bounce settling
+      ];
+      for (let i = 0; i < 12; i += 1) out.push({ ms: at(7) + i * 225, kind: 'tweet', v: 0.6 + 0.4 * Math.sin(i * 0.9), pitch: i % 2 ? 1.12 : 1 });   // birdies circling his head
+      for (let i = 0; i < 15; i += 1) out.push({ ms: at(10) + i * 280, kind: 'shuffle', v: 0.33 * Math.min(1, (15 - i) / 4), pitch: i % 2 ? 0.82 : 1 });   // fades as he crawls off
+      return out;
+    },
   },
 };
 
@@ -255,6 +281,7 @@ function wave(label, note, order) {
     label, note, mode: 'lights',
     duration: START + order.length * GAP + 600,
     level: (k, t) => Math.max(0, ...order.map((sk, i) => sk === k ? pulse(t, START + i * GAP, SIGMA) : 0)),
+    sfx: () => order.map((sk, i) => ({ ms: START + i * GAP - 40, kind: 'harp', v: 1, hz: NOTES[sk - 1] * 2 })),   // each shank's piano note, an octave up, as the light reaches it
   };
 }
 const LR = [1, 2, 3, 4, 5, 6, 7, 8], RL = [...LR].reverse();
@@ -267,6 +294,7 @@ Object.assign(EGGS, {
       this.flashes = Array.from({ length: 18 }, () => ({
         k: 1 + Math.floor(Math.random() * 8), t0: Math.random() * 6000 }));
     },
+    sfx() { return this.flashes.map(f => ({ ms: f.t0 + 30, kind: 'chime', v: 1, hz: NOTES[f.k - 1] * 4 })); },   // each flash rings that shank's piano note, two octaves up
     level(k, t) {
       const RISE = 120, HOLD = 220, FALL = 500;
       let lvl = 0;
@@ -328,6 +356,10 @@ EGGS.skiFree = {
   mode: 'free', art: 'art/ski/', steps: skiSteps(),
   frames: { ski_down: 'ski_down', ski_side: 'ski_side', ski_turn: 'ski_turn' },
   prepare() { this.steps = skiSteps(); compile(this); },
+  sfx() {                                                 // one carve per turn while he's on the photo, loudest right at the turn
+    return this.plan.filter(s => s.shows[0] === 'ski_turn' && s.pose.y > 20 && s.pose.y < 1040)
+      .map((s, i) => ({ ms: s.t0 - 120, kind: 'swish', v: 1, pitch: i % 2 ? 0.85 : 1 }));
+  },
 };
 
 // ---- catComb: the probe was a comb all along ----------------------------------------------------
@@ -427,6 +459,11 @@ EGGS.catComb = {
     zzz:    track([[8000, 0], [8800, 1], [11600, 1], [12200, 0]]),
     spine:  track([[6000, 0], [7000, 1], [12000, 1], [13000, 0]]),
   },
+  sfx() {                                                 // times match the combX and combY tracks above
+    const strokes = [2000, 4800, 10200].map(ms => ({ ms, kind: 'comb', dur: 1.2, v: 1 }));
+    const P0 = 6500, P1 = 13500;                          // the purr fades in as the camera starts to reveal the cat; it swells with the cat's breathing (render's sin(t / 700))
+    return [{ ms: 250, kind: 'meow', dur: 0.55, v: 1 }, ...strokes, { ms: P0, kind: 'purr', dur: (P1 - P0) / 1000, v: 0.4, phase: P0 / 700, cycles: (P1 - P0) / (700 * 2 * Math.PI) }];
+  },
   enter() {
     if (!this.scene) this.scene = buildCatScene();
     [...FUR_LAYERS, 'spine'].forEach(id => { document.getElementById(id).style.display = 'block'; });
@@ -497,6 +534,9 @@ EGGS.shankShuffle = {
     shuffled().forEach(k => { ev.push({ t, k, pose: { rot: 0, dx: 0, dy: 0 } }); t += 260; });
     this.events = ev.sort((a, b) => a.t - b.t);
     this.duration = t + 600;
+  },
+  sfx() {                                                 // one snap per move: low, a bit higher for the re-shuffle, low again to finish; every snap varies slightly
+    return this.events.map((e, i) => ({ ms: e.t + 20, kind: 'snap', v: 1, wet: 3, pitch: [0.92, 1.12, 0.92][Math.floor(i / 8)] * (0.95 + Math.random() * 0.1) }));
   },
   enter() {
     const layer = document.getElementById('shankSolo');
@@ -701,13 +741,14 @@ const PLUCK_REL = 3400;                                   // ms: he lets go
 EGGS.pluckGuy = {                                          // the guy's part (played inside shankPluck)
   hidden: true, label: 'pluckGuy', note: '', mode: 'free', art: 'art/pole/',
   steps: [
-    { show: 'walk_a', ms: 400, to: { x: -40, y: GROUND, rot: 0, flip: -1, layer: 'front' } },
+    { show: 'walk_a', ms: 1, to: { x: -40, y: GROUND, rot: 0, flip: -1, layer: 'front' } },   // start off-stage
+    { show: 'walk_a', ms: 399 },
     { show: ['walk_a', 'walk_b'], every: 170, ms: 1800, ease: 'linear', to: { x: 88 } },   // walk on
     { show: 'pluck_reach', ms: 400 },                                                       // grab the tip
     { show: 'pluck_pull',  ms: 800, to: { x: 18 } },                                        // pull it back
     { show: 'pluck_sit',   ms: 250, ease: 'out', to: { x: 8 } },                           // let go: whump
     { show: 'pluck_sit',   ms: 700 },
-    { show: 'crouch',      ms: 200 },
+    { show: 'crouch',      ms: 200, to: { x: 40 } },                                       // gets up, a bit to the right so he's fully in frame
     { show: 'pluck_watch', ms: 1700 },                                                      // whoa
     { show: 'tada',        ms: 800 },
     { show: ['walk_a', 'walk_b'], every: 170, ms: 1500, ease: 'linear', to: { x: -50, flip: 1 } },
@@ -717,6 +758,18 @@ EGGS.pluckGuy = {                                          // the guy's part (pl
 EGGS.shankPluck = {
   label: 'shankPluck', note: 'the guy walks on, plucks shank 1, and the shanks ripple like a curtain',
   mode: 'scene', duration: 9200,
+  sfx() {
+    const guy = EGGS.pluckGuy.plan, out = [], TUBES = [1047, 1175, 1319, 1568, 1760, 2093, 2349, 2637];   // a wind chime: one tube per shank, on a pentatonic scale
+    for (let k = 0; k < 8; k += 1) {                      // each tube is struck when the ripple reaches its shank, then less and less often as the shank swings (period 340 ms) and dies
+      out.push({ ms: PLUCK_REL + k * 90, kind: 'chime', v: 0.6, hz: TUBES[k], ring: 2.5, wet: 3 });
+      for (let u = 340; u < 3500; u += 340) if (Math.random() < Math.max(0.25, Math.exp(-u / 1800)))
+        out.push({ ms: PLUCK_REL + k * 90 + u + Math.random() * 90, kind: 'chime', v: 0.6 * Math.exp(-u / 2200), hz: TUBES[k], ring: 2.5, wet: 3 });
+    }
+    const steps = (i, fade) => { for (let n = 0, N = Math.floor(guy[i].ms / guy[i].every); n < N; n += 1) out.push({ ms: guy[i].t0 + n * guy[i].every, kind: 'tick', v: 0.5 * Math.min(1, fade ? (N - n) / 3 : 1), pitch: n % 2 ? 0.4 : 0.48 }); };
+    steps(2); steps(10, true);                            // tiny footsteps on the way in and out; the way out fades as he leaves
+    out.push({ ms: guy[9].t0, kind: 'yay', dur: 0.4, v: 1 });   // a tiny cheer on the victory pose (a ta-da clashed with the chimes)
+    return out;
+  },
   enter() { ropesOn(true); },
   hand(t) {                                               // where his hand is while he holds the tip
     const st = stateAt(EGGS.pluckGuy, t);
@@ -757,6 +810,16 @@ EGGS.noodleDrop = {
     this.release = SHANKS.map((s, i) => this.T0 + order.indexOf(i + 1) * 170 + Math.random() * 60);
     const { start, prev } = noodleStart(this.T0);
     this.sim = lazySim(start, prev, this.release, this.T0, this.T1);
+  },
+  sfx() {
+    const out = [{ ms: 600, kind: 'wobble', dur: 3, v: 0.6, rise: true },            // jelly wobble building as W does, fading as they let go
+                 { ms: this.REW, kind: 'rewind', dur: (this.REW_END - this.REW) / 1000, v: 1 },
+                 { ms: this.REW_END, kind: 'wobble', dur: 1.8, v: 0.6, rise: false }];   // the wobble again, backwards
+    this.release.forEach(r => {                           // a noodle's body lands about 670 ms after letting go (measured from the simulation)
+      const hit = r + 670 + Math.random() * 90 - 45;
+      out.push({ ms: hit, kind: 'flop', v: 1, pitch: 0.8 + Math.random() * 0.35 });
+    });
+    return out;
   },
   enter() { ropesOn(true); },
   render(t) {
@@ -842,6 +905,19 @@ EGGS.pasta = {
     this.sim = lazySim(start, prev, this.release, this.T0, this.T1, { friction: 0.6, bowl: 60 });
     this.coil = null;
     this.reinsert = shuffled().map((k, i) => ({ k, t: 15900 + i * 260 }));
+  },
+  sfx() {                                                 // times match the tracks above
+    const out = [{ ms: 500, kind: 'wobble', dur: 2.17, v: 0.6, rise: true },         // peaks as the drop starts, like noodleDrop
+                 { ms: 5600, kind: 'splink', v: 0.35 },                              // the fork touches the plate
+                 { ms: 5600, kind: 'manHum', dur: 2.6, v: 1, notes: [147, 165, 196, 165, 147] },   // the giant hums to himself, one note per turn of the fork
+                 { ms: 12350, kind: 'manHum', dur: 0.75, v: 1, notes: [175, 205, 165] },   // "mmm..." while the word is up
+                 { ms: 13200, kind: 'manHum', dur: 0.32, v: 1, notes: [190, 235] }];       // "...hm!"
+    this.release.forEach(r => {
+      const hit = r + 670 + Math.random() * 90 - 45;
+      out.push({ ms: hit, kind: 'flop', v: 1, pitch: 0.8 + Math.random() * 0.35 });
+    });
+    this.reinsert.forEach(({ k, t }) => out.push({ ms: t + 120, kind: 'blip', v: 1, pitch: NOTES[k - 1] / NOTES[0] }));   // a little pip as each new shank drops in, in its own note
+    return out;
   },
   // Where each bit of pasta sits once it's twirled onto the fork (fork-local coordinates).
   makeCoil() {
@@ -1115,6 +1191,12 @@ EGGS.sheetFall = {
     for (let i = 0; i < last.length; i += 2) { cx += last[i]; cy += last[i + 1]; }
     this.ball = { cx: cx / (last.length / 2), cy: cy / (last.length / 2) };
   },
+  sfx() {
+    return [{ ms: this.FOLD[0], kind: 'paper', dur: (this.FOLD[1] - this.FOLD[0]) / 1000, v: 0.7, density: 40, hz: 4200 },   // peeling down
+            { ms: this.FOLD[1], kind: 'paper', dur: 1.3, v: 1, density: 95, hz: 2800 },                                      // crumpling into a ball
+            { ms: this.ROLL[0], kind: 'paper', dur: (this.ROLL[1] - this.ROLL[0]) / 1000, v: 0.4, density: 25, hz: 1800 },   // rolling away
+            { ms: this.NEW[0], kind: 'paper', dur: (this.NEW[1] - this.NEW[0]) / 1000, v: 0.5, density: 40, hz: 4200 }];     // the fresh sheet sliding down
+  },
   enter() {
     ropesOn(true);
     document.getElementById('backdrop').style.display = 'block';
@@ -1151,6 +1233,17 @@ EGGS.fillUp = {
   prepare() {
     this.fills = shuffled().map((k, i) => ({ k, t0: 300 + i * 330 + Math.random() * 120, ms: 2000 + Math.random() * 600 }));
     this.drain = { t0: 5800, ms: 1500 };
+  },
+  sfx() {
+    const out = [];
+    this.fills.forEach(f => {
+      for (let t = f.t0 + 120; t < f.t0 + f.ms - 60; t += 110 + Math.random() * 170)   // bubbles rising in pitch as this tube fills
+        out.push({ ms: t, kind: 'bubble', v: 0.6 + Math.random() * 0.4, hz: (340 + 620 * this.level(f, t)) * (0.92 + Math.random() * 0.16), glide: 1.6 });
+      const d0 = this.drain.t0 + (8 - f.k) * 60;
+      for (let t = d0 + 80; t < d0 + this.drain.ms; t += 70 + Math.random() * 90)      // a lower, quicker gurgle falling as it drains
+        out.push({ ms: t, kind: 'bubble', v: 0.75, hz: (150 + 330 * this.level(f, t)) * (0.9 + Math.random() * 0.2), glide: 0.7 });
+    });
+    return out;
   },
   enter() { ropesOn(true); },
   level(f, t) {                                           // 0 = empty ... 1 = full to the photo's top
@@ -1218,6 +1311,16 @@ EGGS.galton = {
                         fall: Math.sqrt(2 * (restY - (G.pegY0 + (G.rows - 1) * G.pegDY)) / 2500) * 1000 });
     }
     this.counts = perBin;
+  },
+  sfx() {                                                 // thousands of clicks would be too many separate sounds, so they go out as one pre-mixed clatter
+    const R = Math.random, hits = [];                     // [ms, Hz, loudness, length in ms]
+    this.beads.forEach(b => {
+      for (let r = 0; r < GALTON.rows; r += 1) if (R() < 0.3) hits.push([b.t0 + 260 + r * 120, 3400 + R() * 1800, 0.09 + R() * 0.05, 8]);   // tiny clicks on a third of the pegs
+      hits.push([b.t0 + 260 + (GALTON.rows - 1) * 120 + b.fall, 1100 + R() * 600, 0.16 + R() * 0.08, 14]);                                   // landing on the pile
+    });
+    for (let n = 0; n < 70; n += 1) hits.push([this.DRAIN + R() ** 1.5 * 700, 900 + R() * 600, 0.1 + R() * 0.08, 12]);                       // the floor opens and they all fall out
+    const end = Math.max(...hits.map(h => h[0])) + 200, dur = (end - this.RELEASE) / 1000;
+    return [{ ms: this.RELEASE, kind: 'clicks', dur, v: 1, list: hits.map(([ms, hz, amp, len]) => [(ms - this.RELEASE) / (dur * 1000), hz, amp, len]) }];
   },
   enter() { ropesOn(true); },
   beadAt(b, t) {                                          // position of one bead at time t (or null)
@@ -1405,6 +1508,7 @@ function draw(egg, st) {
 EGGS.pixelRoll = {
   label: 'pixelRoll', note: 'the photo pixelates into a tiny 8-bit stage: a pixel guy dances to a chiptune hook',
   mode: 'scene', duration: Math.round((PixelRoll.IN + PixelRoll.SONG + PixelRoll.OUT) * 1000),
+  sfx() { return [{ ms: 200, kind: 'digital', dur: 0.6, v: 0.3, rise: false }, { ms: (PixelRoll.IN + PixelRoll.SONG) * 1000 + 100, kind: 'digital', dur: 0.6, v: 0.3, rise: true }]; },   // the sound pixelates along with the picture
   enter() {
     const cv = this.cv = document.createElement('canvas');
     cv.width = PixelRoll.W; cv.height = PixelRoll.H;
@@ -1469,14 +1573,6 @@ EGGS.icicleDrop = {
   },
   enter() {
     ropesOn(true);
-    if (PLAYER) return;                                   // on the home page, homeeggs.js plays the sfx() list itself
-    const run = this.soundRun = {}, t0 = performance.now();
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    audio.resume().then(() => {
-      if (this.soundRun !== run) return;                  // the egg ended before sound was allowed
-      const gone = performance.now() - t0;
-      this.sound = EggSfx.play(audio, this.sfx().filter(h => h.ms > gone).map(h => ({ ...h, ms: (h.ms - gone) / speed })));
-    });
   },
   sfx() {                                                 // every sound, in ms from the egg's start
     return this.drops.flatMap(d => {
@@ -1574,9 +1670,6 @@ EGGS.icicleDrop = {
     this.drawFloor(t);
   },
   exit() {
-    this.soundRun = null;
-    if (this.sound) this.sound.stop();
-    this.sound = null;
     restorePhoto();
   },
 };
@@ -1667,6 +1760,20 @@ EGGS.aquarium = {
       this.fish.push({ kind: AQ_NEON, size: aqR(0.26, 0.32), back: false, swim: 0.024, offT: i, lag: i * 90,
                        ox: aqR(-46, 46), oy: aqR(-36, 36), way: school });
     }
+  },
+  sfx() {
+    const out = [{ ms: AQ.FILL_AT, kind: 'water', dur: AQ.FILL_MS / 1000, v: 1, hz: 700 },                       // pouring in
+                 { ms: AQ.FILL_AT + AQ.FILL_MS - 400, kind: 'water', dur: (AQ.DRAIN - AQ.FILL_AT - AQ.FILL_MS + 800) / 1000, v: 0.3, hz: 320 },   // a quiet, muffled underwater bed
+                 { ms: AQ.DRAIN, kind: 'water', dur: AQ.DRAIN_MS / 1000, v: 0.9, hz: 500 }];                     // draining
+    for (let n = 0; n < 34; n += 1) { const u = Math.random(); out.push({ ms: AQ.FILL_AT + u * AQ.FILL_MS, kind: 'bubble', v: 0.7, hz: aqR(300, 480) + 500 * u, glide: 1.6 }); }   // bubbling as it fills
+    this.bubbles.forEach(b => {                           // a blip as each visible bubble leaves the sand; small bubbles are higher, as in real water
+      for (let n = 1; (n - b.phase) * b.period < AQ.DRAIN; n += 1) {
+        const ms = (n - b.phase) * b.period;
+        if (ms > AQ.FILL_AT + AQ.FILL_MS) out.push({ ms, kind: 'bubble', v: 0.55, hz: 3000 / b.r, glide: 1.5 });
+      }
+    });
+    for (let ms = AQ.DRAIN + 80; ms < AQ.DRAIN + AQ.DRAIN_MS; ms += aqR(70, 150)) out.push({ ms, kind: 'bubble', v: 0.8, hz: 150 + 330 * (1 - (ms - AQ.DRAIN) / AQ.DRAIN_MS) * Math.random() + 60, glide: 0.7 });   // a gurgle
+    return out;
   },
   enter() { ropesOn(true); },
   level(t) {
@@ -1979,6 +2086,18 @@ EGGS.antSwarm = {
     this.applied = 0;
     this.lastT = -1;
   },
+  sfx() {                                                 // one pre-mixed crowd (see galton), built from what the swarm really does
+    const R = Math.random, { X, frames, dt } = this.sim, N = ANT.N, list = [];     // [ms, Hz, loudness, length in ms]
+    for (let f = 3; f < frames; f += 3) {                 // feet: every 100 ms, a pinch of tiny ticks for however many ants are walking on the photo
+      let walking = 0;
+      for (let i = 0; i < N; i += 1) { const x = X[i * frames + f], dx = x - X[i * frames + f - 1]; if (x > 0 && x < 765 && Math.abs(dx) > 0.2) walking += 1; }
+      for (let n = Math.round(walking / 18); n > 0; n -= 1) list.push([f * dt + R() * 100, 6000 + R() * 3000, 0.02 + R() * 0.03, 3]);
+    }
+    this.bites.forEach(b => { if (b.final || R() < 0.12) list.push([b.t + R() * 33, 1700 + R() * 1100, b.final ? 0.03 + R() * 0.03 : 0.025, 7]); });   // nibbles (spread out: the simulation runs in 33 ms steps); the last bite of a spot is the crunch
+    const end = Math.max(...list.map(h => h[0])) + 200, dur = (end - ANT.FIRST) / 1000;
+    return [{ ms: ANT.FIRST, kind: 'clicks', dur, v: 1, list: list.filter(h => h[0] >= ANT.FIRST).map(([ms, hz, amp, len]) => [(ms - ANT.FIRST) / (dur * 1000), hz, amp, len]) },
+            ...this.bigBones.map(b => ({ ms: b.drop, kind: 'clack', v: 0.5, pitch: 0.82 + R() * 0.4 }))];
+  },
   enter() {
     if (!this.eaten) {
       this.eaten = document.createElement('canvas'); this.eaten.width = 750; this.eaten.height = 1000;
@@ -2274,6 +2393,16 @@ EGGS.brainRecording = {
     }
   },
   prepare() { this.simulateInsertion(); this.buildNetwork(); },
+  sfx() {
+    const tips = SHANKS.map((sh, i) => [onShank(i + 1, sh.tip), sh.tip]), R = Math.random;
+    const pops = this.ins.filter(p => p.popped).map(p => ({ ms: p.popped, kind: 'tissuePop', v: 1, pitch: 0.8 + R() * 0.4 }));   // each shank breaking through
+    const list = this.spikes.filter(s => s.t >= BRAIN.REC_AT && s.t < BRAIN.OUT).map(s => {   // the audio monitor: a click per spike once the recording starts, louder the nearer the cell is to a shank tip
+      const near = Math.min(...tips.map(([x, y]) => Math.hypot(s.c.x - x, s.c.y - y)));
+      return [s.t + R() * 4, 1500 + R() * 1100, 0.22 * s.b * Math.max(0.3, Math.exp(-near / 70)), 3];
+    });
+    const dur = (BRAIN.OUT - BRAIN.REC_AT + 50) / 1000;
+    return [...pops, { ms: BRAIN.REC_AT, kind: 'clicks', dur, v: 1, list: list.map(([ms, hz, amp, len]) => [(ms - BRAIN.REC_AT) / (dur * 1000), hz, amp, len]) }];
+  },
   enter() { this.buildTissue(); ropesOn(true); },
   brainDrop(t) {                                          // how far below its resting place the brain is
     const u = (t - BRAIN.BRAIN_AT) / 1000;
@@ -2432,7 +2561,7 @@ setTimeout(() => EGGS.brainRecording.buildTissue(), 1800);   // painted once the
 // exactly the photo, so when the hole collapses in a white flash, c simply goes back to zero and the photo is there as the white fades.
 // On file:// (the lab opened from disk) browsers refuse to give WebGL the photo, so img/photo64.js supplies a copy as a data URL.
 const HOLE = {
-  X: 590, Y: 230, CMAX: 960000, PULL_AT: 1400, PULL_MS: 12300, SWALLOWED: 13700, COLLAPSE: 15300, FLASH: 15650, WHITE_HOLD: 120, WHITE_FADE: 1000, END: 12950,
+  X: 590, Y: 230, CMAX: 960000, PULL_AT: 1400, PULL_MS: 12300, SWALLOWED: 13700, COLLAPSE: 15540, FLASH: 15650, WHITE_HOLD: 120, WHITE_FADE: 1000, END: 12950,
   SPEED: 1.35,            // everything up to the flash runs this much faster than the times above (the flash and fade do not)
   VERT: 'attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }',
   FRAG: `precision highp float;
@@ -2543,20 +2672,14 @@ EGGS.blackHole = {
   },
   sfx() {                                                 // ms from the egg's start, sped up to match
     const S = HOLE.SPEED;
-    return [{ ms: 1300 / S, kind: 'whoosh', dur: 12.8 / S, v: 0.65 }, { ms: 2200 / S, kind: 'rumble', dur: 13.2 / S, v: 0.9 },
-            { ms: (HOLE.FLASH - 20) / S, kind: 'splink', v: 1 }];
+    const F = HOLE.COLLAPSE / S;                          // real time when the hole starts its fast collapse: the hum cuts dead and the splink hits; the white follows about 80 ms later
+    return [{ ms: 400 / S, kind: 'zip', v: 1 },           // the tear opening
+            { ms: 2200 / S, kind: 'rumble', dur: (HOLE.COLLAPSE - 2200) / S / 1000, v: 0.9, abrupt: true },
+            { ms: F, kind: 'pwip', v: 1, wet: 3 }];
   },
   enter() {
     this.useGL = this.setupGL();
     if (this.useGL) this.cv.style.display = 'block'; else ropesOn(true);
-    if (PLAYER) return;                                   // on the home page, homeeggs.js plays the sfx() list itself
-    const run = this.soundRun = {}, t0 = performance.now();
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    audio.resume().then(() => {
-      if (this.soundRun !== run) return;
-      const gone = performance.now() - t0;
-      this.sound = EggSfx.play(audio, this.sfx().filter(h => h.ms > gone).map(h => ({ ...h, ms: (h.ms - gone) / speed, dur: h.dur && h.dur / speed })));
-    });
   },
   levels(t) {
     const rise = (a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
@@ -2569,7 +2692,7 @@ EGGS.blackHole = {
     const pull = Math.min(1, Math.max(0, (t - HOLE.PULL_AT) / HOLE.PULL_MS));
     let c = HOLE.CMAX * pull ** 3.4;
     if (t >= HOLE.FLASH) c = 0;                           // behind the full white, the picture is simply back
-    const flash = t < HOLE.COLLAPSE ? 0 : t < HOLE.FLASH ? EASE.in(rise(HOLE.COLLAPSE, HOLE.FLASH)) : 1 - rise(HOLE.FLASH + HOLE.WHITE_HOLD, HOLE.FLASH + HOLE.WHITE_HOLD + HOLE.WHITE_FADE);
+    const flash = t < HOLE.FLASH ? 0 : 1 - rise(HOLE.FLASH + HOLE.WHITE_HOLD, HOLE.FLASH + HOLE.WHITE_HOLD + HOLE.WHITE_FADE);   // no ramp: the white arrives all at once
     const after = t >= HOLE.FLASH;
     return {
       rh: after ? 0 : rh, c, flash,
@@ -2596,9 +2719,6 @@ EGGS.blackHole = {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   },
   exit() {
-    this.soundRun = null;
-    if (this.sound) this.sound.stop();
-    this.sound = null;
     if (this.cv) this.cv.style.display = 'none';
     if (!this.useGL) restorePhoto();
   },
@@ -2657,7 +2777,18 @@ EGGS.shankBlasters = {
         rx: Math.random() * 750, ry: Math.random() * 1000 }));
     });
   },
-  sfx() { return this.soundList; },
+  sfx() {                                                 // the game's own sounds, plus a buzzing swarm for the blocks flying out and back (one pre-mixed sound each way, see galton)
+    const R = Math.random, swarm = (start, ms, lead) => {
+      const list = [], dur = (ms + lead) / 1000;
+      if (lead) for (let n = 0; n < 70; n += 1) list.push([R() * lead / (lead + ms), 150 + R() * 170, 0.018, 16 + R() * 18]);   // the shanks starting to shiver apart
+      this.blocks.forEach(b => {
+        const u = R();                                    // one little buzz per block somewhere on its flight, all in one steady band of pitches
+        list.push([(lead + (lead ? b.lag * 0.4 : 0) + u * (ms - (lead ? b.lag * 0.4 : 0))) / (lead + ms), 280 + R() * 620, 0.02 + R() * 0.012, 15 + R() * 20]);
+      });
+      return { ms: start - lead, kind: 'clicks', buzz: true, dur, v: 1, list };
+    };
+    return [...this.soundList, swarm(BL.FLY, BL.FLY_MS + 450, BL.FLY - BL.BREAK), swarm(this.backAt, BL.BACK_MS, 0)];
+  },
   alive() { return this.aliens.some(a => a.alive); },
   reset() {
     let z = this.seed;                                    // a small seeded random-number generator, so every re-run is identical
@@ -2735,14 +2866,6 @@ EGGS.shankBlasters = {
   },
   enter() {
     ropesOn(true);
-    if (PLAYER) return;                                   // on the home page, homeeggs.js plays the sfx() list itself
-    const run = this.soundRun = {}, t0 = performance.now();
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    audio.resume().then(() => {
-      if (this.soundRun !== run) return;
-      const gone = performance.now() - t0;
-      this.sound = EggSfx.play(audio, this.sfx().filter(h => h.ms > gone).map(h => ({ ...h, ms: (h.ms - gone) / speed })));
-    });
   },
   drawAlien(a, x, y, t) {
     const sp = BL.SPRITES[a.type], frame = Math.floor(t / 320 + a.col) % 2 ? sp.b : sp.a, P = BL.PX, w = frame[0].length, h = frame.length;
@@ -2814,9 +2937,6 @@ EGGS.shankBlasters = {
     if (formed && back === 0) blDigits(rctx, this.score, 18, 14, 4, '#2a2a33');
   },
   exit() {
-    this.soundRun = null;
-    if (this.sound) this.sound.stop();
-    this.sound = null;
     restorePhoto();
   },
 };
@@ -2843,6 +2963,11 @@ function seasonAt(t) {                                    // 0..4, slowing near 
   const x = seClamp((t - SEASON.START) / (SEASON.EACH * SEASON.COUNT)) * SEASON.COUNT, n = Math.min(SEASON.COUNT - 1, Math.floor(x)), u = x - n;
   return n + u - 0.7 * Math.sin(2 * Math.PI * u) / (2 * Math.PI);
 }
+function seasonTime(s) {                                  // the moment the year reaches s
+  let lo = SEASON.START, hi = SEASON.END;
+  for (let i = 0; i < 26; i += 1) { const m = (lo + hi) / 2; if (seasonAt(m) < s) lo = m; else hi = m; }
+  return lo;
+}
 function seasonColour(stops, s, alpha) {
   const n = Math.min(stops.length - 2, Math.floor(s)), u = seSmooth(s - n), m = i => Math.round(stops[n][i] + (stops[n + 1][i] - stops[n][i]) * u);
   return alpha === undefined ? `rgb(${m(0)}, ${m(1)}, ${m(2)})` : `rgba(${m(0)}, ${m(1)}, ${m(2)}, ${alpha})`;
@@ -2852,9 +2977,23 @@ function seMix(a, b, u) { return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1])
 EGGS.fourSeasons = {
   label: 'fourSeasons', note: 'the shanks become a row of trees and a whole year goes by, from winter round to winter',
   mode: 'scene', duration: SEASON.END + SEASON.FADE + 250,
+  sfx() {
+    const at = seasonTime, R = (a, b) => a + Math.random() * (b - a), out = [];
+    const between = (a, b) => ({ ms: at(a), dur: (at(b) - at(a)) / 1000 });
+    out.push({ ms: 300, dur: (at(0.55) - 300) / 1000, kind: 'water', v: 0.3, hz: 750 });                 // winter: a hushed wind over the snow
+    out.push({ ...between(2.65, 3.5), kind: 'water', v: 0.55, hz: 1300 });                                // autumn: a stronger, leafier wind
+    out.push({ ms: at(3.45), dur: (SEASON.END + SEASON.FADE - at(3.45)) / 1000, kind: 'water', v: 0.3, hz: 750 });   // and winter again
+    for (let t = at(0.65); t < at(1.45); t += R(700, 1500)) {                                             // spring: phrases of birdsong
+      const base = R(0.8, 1.3), n = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i += 1) out.push({ ms: t + i * 150, kind: 'tweet', v: R(0.4, 0.8), pitch: base * (i % 2 ? 1.1 : 1) });
+    }
+    out.push({ ...between(1.65, 2.45), kind: 'crickets', v: 1 });                                         // summer
+    for (let t = this.flockAt + 300; t < this.flockAt + this.flockMs - 300; t += R(320, 900)) out.push({ ms: t, kind: 'honk', dur: 0.2, v: R(0.5, 1), pitch: R(0.85, 1.15) });   // the geese going over
+    return out;
+  },
   prepare() {
     const R = (a, b) => a + Math.random() * (b - a);
-    const toTime = s => { let lo = SEASON.START, hi = SEASON.END; for (let i = 0; i < 26; i += 1) { const m = (lo + hi) / 2; if (seasonAt(m) < s) lo = m; else hi = m; } return lo; };
+    const toTime = seasonTime;
     const tipLine = x => SHANKS[0].tip + (x - onShank(1, SHANKS[0].tip)) * (SHANKS[7].tip - SHANKS[0].tip) / (onShank(8, SHANKS[7].tip) - onShank(1, SHANKS[0].tip));
     this.groundAt = x => tipLine(x) - 26 + 5 * Math.sin(x / 83 + 2) + 3 * Math.sin(x / 37);
     this.branches = []; this.leaves = [];
@@ -3048,23 +3187,15 @@ EGGS.shankHum = {
     };
     this.tints = SHANKS.map((s, i) => ({ red: paint(i + 1, 'rgb(255, 34, 70)'), cyan: paint(i + 1, 'rgb(0, 226, 255)') }));
   },
-  sfx() {
-    const out = [{ ms: HUM.ON_AT, kind: 'hum', dur: (HUM.SNAP - HUM.ON_AT) / 1000, v: 2.8 }];
-    for (let k = 1; k <= 8; k += 1) { out.push({ ms: this.onAt[k], kind: 'tick', v: 0.45, pitch: 0.8 }); out.push({ ms: this.offAt[k], kind: 'tick', v: 1, pitch: 1.5 }); }
-    out.push({ ms: HUM.SNAP + 8 * HUM.SNAP_GAP - 40, kind: 'ringout', v: 0.5 });
-    return out;
+  sfx() {                                                 // a tick alone is too short to sound loud, so each one gets a clack for body
+    const out = [{ ms: HUM.ON_AT, kind: 'hum', dur: (HUM.SNAP - HUM.ON_AT) / 1000, v: 1.5 }];
+    for (let k = 1; k <= 8; k += 1) { out.push({ ms: this.onAt[k], kind: 'tick', v: 1, pitch: 0.8 }, { ms: this.onAt[k], kind: 'clack', v: 1.2, pitch: 0.7 }); out.push({ ms: this.offAt[k], kind: 'tick', v: 2.8, pitch: 1.5 }, { ms: this.offAt[k], kind: 'clack', v: 2, pitch: 1.25 }); }
+    out.push({ ms: HUM.SNAP + 8 * HUM.SNAP_GAP - 40, kind: 'ringout', v: 0.8 });
+    return out.map(h => ({ ...h, v: h.v * 1.15 }));       // the whole egg's level (higher can clip when snap sounds line up)
   },
   enter() {
     this.buildTints();
     ropesOn(true);
-    if (PLAYER) return;                                   // on the home page, homeeggs.js plays the sfx() list itself
-    const run = this.soundRun = {}, t0 = performance.now();
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    audio.resume().then(() => {
-      if (this.soundRun !== run) return;
-      const gone = performance.now() - t0;
-      this.sound = EggSfx.play(audio, this.sfx().filter(h => h.ms > gone).map(h => ({ ...h, ms: (h.ms - gone) / speed, dur: h.dur && h.dur / speed })));
-    });
   },
   drawTint(tint, pts, h) {                                // like drawShankAlong, but from a straightened coloured copy
     const n = pts.length / 2;
@@ -3126,8 +3257,8 @@ EGGS.shankHum = {
       else if (t < this.onAt[k] + HUM.KICK_MS) this.drawTint(T.cyan, shankCurve(k, 0, 8, f), 8);                                                 // the kick as it joins in
       else drawShankAlong(k, shankCurve(k, -8, 8, f), -8, 8);
     }
-    if (L > 0.55 && t < HUM.SNAP) {                       // whole bands of the picture slip sideways
-      const bands = 1 + Math.floor((L - 0.55) / 0.45 * 10);
+    if (L > 0.85 && t < HUM.SNAP) {                       // whole bands of the picture slip sideways, kept for the last of the climb and the sustained top
+      const bands = 1 + Math.floor((L - 0.85) / 0.15 * 10);
       rctx.setTransform(1, 0, 0, 1, 0, 0);
       for (let b = 0; b < bands; b += 1) {
         const y = Math.floor(humHash(n, b + seed) * 1960), h = 10 + Math.floor(humHash(n, b * 3 + seed) * 92), dx = (humHash(b, n * 2 + seed) - 0.5) * 150 * L;
@@ -3137,9 +3268,6 @@ EGGS.shankHum = {
     }
   },
   exit() {
-    this.soundRun = null;
-    if (this.sound) this.sound.stop();
-    this.sound = null;
     restorePhoto();
   },
 };
@@ -3154,6 +3282,20 @@ function drawRaisedShanks(raise) {                        // the 8 shanks, slid 
 EGGS.pelicanRide = {
   label: 'pelicanRide', note: 'a sunny road: pelicans ride past on bicycles, each attempt better than the last, from crude blobs to a feathered finale',
   mode: 'scene', duration: PelicanRide.DURATION,
+  sfx() {                                                 // each attempt sounds better than the last: rusty squeaks up to a smooth ride, with a tiny bell for the finale
+    const { FIRST, EVERY, PASSES, HERO_AT, HERO_MS } = PelicanRide, R = Math.random, out = [];
+    for (let i = 0; i < PASSES; i += 1) {
+      const t0 = FIRST + i * EVERY, rust = Math.max(0, 1 - i / 6);
+      if (rust > 0) for (let t = t0 + 350; t < t0 + 2100; t += 340 + R() * 160) out.push({ ms: t, kind: 'squeak', v: 0.35 + 0.65 * rust, pitch: 0.85 + R() * 0.35, rust });
+      else for (let t = t0 + 350; t < t0 + 2100; t += 200) out.push({ ms: t, kind: 'tick', v: 0.14, pitch: 1.1 });   // the later bikes just tick along
+    }
+    const list = [], dur = HERO_MS / 1000;                // the hero: a smooth freewheel tick, pre-mixed, and a little bell
+    for (let t = 0; t < HERO_MS; t += 70) list.push([t / HERO_MS, 2200 + R() * 500, 0.045 * Math.min(1, t / 500, (HERO_MS - t) / 500), 4]);
+    out.push({ ms: HERO_AT, kind: 'clicks', dur, v: 1, list });
+    [1500, 1640].forEach(d => out.push({ ms: HERO_AT + d, kind: 'bell', v: 1 }));   // one tinny ding-ding
+    out.push({ ms: HERO_AT + 4300, kind: 'rush', dur: 0.9, v: 1 }, { ms: HERO_AT + 6700, kind: 'rush', dur: 0.8, v: 0.85 });   // the wings opening and folding (times as in drawHeroPass's spread)
+    return out;
+  },
   enter() { ropesOn(true); },
   render(t) {
     photoToRopes(Math.min(1, t / 200, (this.duration - t) / 200));
@@ -3167,6 +3309,25 @@ setTimeout(() => PelicanRide.warm(), 1500);               // paint the scenery a
 // ---- Playback -----------------------------------------------------------------------------------
 let speed = 1, current = null, lastName = null, plays = 0;
 
+// Sound: any egg with an sfx() method (a list of sounds in ms from its start) gets it played and stopped here.
+// On the home page homeeggs.js plays the list instead, because phones only allow sound that starts on the tapped page.
+function startSound(egg) {
+  if (PLAYER || !egg.sfx) return;
+  const run = egg.soundRun = {}, t0 = performance.now();
+  audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+  audio.resume().then(() => {
+    if (egg.soundRun !== run) return;                     // the egg ended before sound was allowed
+    const gone = (performance.now() - t0) * speed;
+    // A sound due in the moments before audio woke up still plays, just late; only ones well past are dropped.
+    egg.sound = EggSfx.play(audio, egg.sfx().filter(h => h.ms > gone - 150).map(h => ({ ...h, ms: Math.max(0, h.ms - gone) / speed, dur: h.dur && h.dur / speed })));
+  });
+}
+function stopSound(egg) {
+  egg.soundRun = null;
+  if (egg.sound) egg.sound.stop();
+  egg.sound = null;
+}
+
 function play(egg, reason) {
   if (current) return;
   if (LIVE.on) liveStop();                  // an egg takes the stage from live shanks
@@ -3175,6 +3336,7 @@ function play(egg, reason) {
   plays += 1;
   if (egg.prepare) egg.prepare();
   if (egg.enter) egg.enter();
+  startSound(egg);
   if (egg.btn) egg.btn.classList.add('playing');
   const run = egg.run = (egg.run || 0) + 1;  // a stop() bumps this, which ends the old loop
   let t = 0, prev = performance.now();
@@ -3210,6 +3372,7 @@ function clearEgg(egg) {
 // Ends an egg now (finished, or cut short from its card): clear it off the stage.
 function stop(egg) {
   egg.run = (egg.run || 0) + 1;
+  stopSound(egg);
   try { clearEgg(egg); } catch (err) { console.error(err); restorePhoto(); }
   if (egg.btn) egg.btn.classList.remove('playing');
   if (current === egg) current = null;

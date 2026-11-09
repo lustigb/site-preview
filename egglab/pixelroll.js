@@ -22,10 +22,10 @@
   const LEAD = [HOOK_A, HOOK_B, HOOK_A, HOOK_B];   // one phrase per bar
   const BASS_ROOTS = [37, 39, 36, 41];             // Db2 Eb2 C2 F2, one per bar
 
-  function playMusic(ac, t0) {
+  function playMusic(ac, t0, dest) {
     const out = ac.createGain();
     out.gain.value = 0.8;
-    out.connect(ac.destination);
+    out.connect(dest || ac.destination);
     const tone = (type, f, t, dur, vol) => {
       const o = ac.createOscillator(), v = ac.createGain();
       o.type = type; o.frequency.value = f;

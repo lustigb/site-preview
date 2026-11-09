@@ -6,6 +6,9 @@
 // shanks from their own pixels (img/home/shank/shank_k.png, each shank alone, extended 60 px above
 // the photo) on white, the photo's own background; once all is still the canvas hides and the
 // untouched photo shows again.
+//
+// shankWind.setMode('wind' | 'keys') picks how the shanks are played. 'keys': each shank is a key; press one (or drag across them) and it dips
+// down and springs back. homeeggs.js picks the sound (window.shankSwing).
 (function () {
   const photo = document.getElementById('home-photo');
   if (!photo) return;
@@ -53,18 +56,24 @@
                              userSelect: 'none', webkitUserSelect: 'none', webkitTouchCallout: 'none' });
   photo.draggable = false;
 
-  const osc = SHANKS.map(() => ({ a: 0, v: 0 }));
-  let on = false, last = 0, still = 0, prev = null, trail = [], paused = false;
+  const osc = SHANKS.map(() => ({ a: 0, v: 0, d: 0, dv: 0, down: false }));   // a, v: sideways swing; d, dv: how far it is pressed down, as a key
+  let on = false, last = 0, still = 0, prev = null, trail = [], paused = false, mode = 'wind';
+  const held = new Map();                                   // pointer id -> the shank it is pressing (several fingers at once are fine)
+  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false };
+  let opts = { ...DEFAULTS };                               // see setMode
+  const TIP_X = SHANKS.map((sh, i) => onShank(i + 1, sh.tip)), BOUNCE = 0.45;
+  const touched = SHANKS.map(() => 0);
+  const KEY_K = 900, KEY_C = 33;                            // the spring that moves a pressed key
 
   // How a shank bends: quadratic from its anchor far above the photo down to the tip.
-  const bend = (k, y) => ((y + ANCHOR) / (SHANKS[k - 1].tip + ANCHOR)) ** 2;
+  const bend = (k, y) => { const A = opts.stiff ? SOLO_TOP : ANCHOR; return ((y + A) / (SHANKS[k - 1].tip + A)) ** 2; };   // stiff: clamped just above the photo, so the top barely moves
 
   function drawShank(k, o) {                                // the shank's own pixels, in 8 px strips along the curve
     const img = solo[k - 1], h = 8;
     for (let y = -SOLO_TOP; y <= SHANKS[k - 1].tip + 2; y += h) {
       const x0 = onShank(k, y) + o.a * bend(k, y), x1 = onShank(k, y + h) + o.a * bend(k, y + h);
       const dx = x1 - x0, len = Math.hypot(dx, h), c = scale * h / len, s = -scale * dx / len;
-      ctx.setTransform(c, s, -s, c, scale * x0, scale * y);   // move to the strip's top, turn along the curve
+      ctx.setTransform(c, s, -s, c, scale * (x0 + SHANKS[k - 1].a * o.d), scale * (y + o.d));   // move to the strip's top, turn along the curve
       ctx.drawImage(img, onShank(k, y) - 15, y + SOLO_TOP, 30, h, -15, 0, 30, len + 0.6);
     }
   }
@@ -95,8 +104,26 @@
         o.v += (-(OMEGA ** 2) * o.a - 2 * ZETA * OMEGA * o.v + COUPLE * pull) * h;
         o.a += o.v * h;
       });
+      if (opts.collide) for (let i = 0; i < 7; i += 1) {    // neighbouring tips meet: they bounce apart, and that is the sound
+        const L = osc[i], R = osc[i + 1], over = opts.touchGap - ((TIP_X[i + 1] + R.a) - (TIP_X[i] + L.a)), closing = L.v - R.v;
+        if (over <= 0) continue;
+        L.a -= over / 2; R.a += over / 2;
+        if (closing <= 0) continue;
+        const dv = (1 + BOUNCE) * closing / 2;
+        L.v -= dv; R.v += dv;
+        if (closing > 60 && now - touched[i] > 70) { touched[i] = now; window.shankTouch?.(i + 1, closing); }
+      }
     }
     trail = trail.filter(p => now - p.t < 300);
+    osc.forEach(o => { o.dv += ((( o.down ? opts.dip : 0) - o.d) * KEY_K - o.dv * KEY_C) * dt; o.d += o.dv * dt; });   // keys: down fast, back with a small bounce
+    osc.forEach((o, i) => {                                 // the top of a swing: homeeggs.js may ring this shank's sound
+      if (o.pv !== undefined && Math.sign(o.pv) !== Math.sign(o.v) && Math.abs(o.a) > 3 && now - (o.rang || 0) > 130 && !opts.collide) {
+        const fresh = !opts.tight || Math.abs(o.a) > (o.peak || 0) * 0.9;   // tight: only a new push rings, not the dying swings after it
+        o.peak = Math.abs(o.a);
+        if (fresh) { o.rang = now; window.shankSwing?.(i + 1, Math.abs(o.a)); }
+      }
+      o.pv = o.v;
+    });
 
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.fillStyle = '#fff';
@@ -119,14 +146,15 @@
     }
 
     // Everything still for a moment? Hand back to the real photo.
-    const moving = trail.length || osc.some(o => Math.abs(o.a) > 0.15 || Math.abs(o.v) > 1);
+    const moving = trail.length || osc.some(o => Math.abs(o.a) > 0.15 || Math.abs(o.v) > 1 || o.down || Math.abs(o.d) > 0.1 || Math.abs(o.dv) > 1);
     still = moving ? 0 : still + dt;
     if (still > 0.3 || paused) { settle(); return; }
     requestAnimationFrame(tick);
   }
   function settle() {                                       // back to the plain photo
     on = false;
-    osc.forEach(o => { o.a = 0; o.v = 0; });
+    osc.forEach(o => { o.a = 0; o.v = 0; o.d = 0; o.dv = 0; o.down = false; o.peak = 0; });
+    held.clear();
     trail = [];
     canvas.style.display = 'none';
   }
@@ -135,24 +163,55 @@
   window.shankWind = {
     pause() { paused = true; prev = null; settle(); },
     resume() { paused = false; },
+    peek() { return osc.map(o => o.a); },                   // for test tools
+    // options: collide = neighbouring tips hit each other and call window.shankTouch(k, speed); gust = how hard the mouse pushes; tight = ring once per push; touchGap = how close tips count as touching (photo px); dip = how far a key goes down (photo px); stiff = stiff at the top and whippy at the tip.
+    setMode(m, options = {}) {
+      mode = m;
+      opts = { ...DEFAULTS, ...options };
+      held.clear(); osc.forEach(o => { o.down = false; });
+      box.style.touchAction = m === 'wind' ? 'pan-y' : 'none';   // playing keys shouldn't scroll the page
+    },
   };
 
   function toPhoto(ev) {
     const r = photo.getBoundingClientRect();
     return { x: (ev.clientX - r.left) / r.width * 750, y: (ev.clientY - r.top) / r.height * 1000 };
   }
-  box.addEventListener('pointerdown', ev => { prev = { ...toPhoto(ev), t: performance.now() }; });
+  const nearest = p => SHANKS.reduce((best, _, i) => (Math.abs(p.x - onShank(i + 1, p.y)) < Math.abs(p.x - onShank(best, p.y)) ? i + 1 : best), 1);
+  function press(id, k) { held.set(id, k); osc[k - 1].down = true; start(); window.shankSwing?.(k, 34); }
+  function release(id) {
+    const k = held.get(id); held.delete(id);
+    if (k && ![...held.values()].includes(k)) osc[k - 1].down = false;   // another finger may still be on it
+  }
+  box.addEventListener('pointerdown', ev => {
+    if (mode === 'keys') {
+      if (paused) return;
+      try { box.setPointerCapture(ev.pointerId); } catch (e) { /* drags just stop at the photo's edge */ }
+      press(ev.pointerId, nearest(toPhoto(ev)));
+      return;
+    }
+    prev = { ...toPhoto(ev), t: performance.now() };
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => box.addEventListener(type, ev => { if (mode === 'keys') release(ev.pointerId); }));
   box.addEventListener('pointermove', ev => {
     const p = toPhoto(ev), now = performance.now();
+    if (mode === 'keys') {                                  // dragging onto another shank plays it
+      if (!held.has(ev.pointerId)) return;
+      const k = nearest(p);
+      if (k !== held.get(ev.pointerId)) { release(ev.pointerId); press(ev.pointerId, k); }
+      return;
+    }
     if (prev) {
       const dts = Math.max(0.008, (now - prev.t) / 1000);
       const vx = Math.max(-4000, Math.min(4000, (p.x - prev.x) / dts));
       if (Math.abs(vx) > 60 && start()) {
+        window.shankMoved?.();
         trail.push({ x: p.x, y: p.y, t: now });
         osc.forEach((o, i) => {
           const near = Math.exp(-(((p.x - onShank(i + 1, p.y)) / 70) ** 2));
-          const leverage = Math.max(0, (p.y + ANCHOR) / (SHANKS[i].tip + ANCHOR));
-          o.v += vx * 0.2 * near * leverage;
+          const u = Math.max(0, Math.min(1, p.y / SHANKS[i].tip));
+          const leverage = opts.stiff ? u * u * (3 - u) / 2 : Math.max(0, (p.y + ANCHOR) / (SHANKS[i].tip + ANCHOR));   // stiff: a clamped beam, so pushing near the top moves the tip very little
+          o.v += vx * 0.2 * near * leverage * opts.gust;
         });
       }
     }

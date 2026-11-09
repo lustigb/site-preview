@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instrument Lab</title>
+<meta name="robots" content="noindex">
+<base href="../">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/a-notebook.css">
+<style>
+  body { margin-right: 344px; }
+  #lab { position: fixed; top: 0; right: 0; bottom: 0; width: 344px; box-sizing: border-box; padding: 14px; overflow-y: auto;
+         background: #fff; border-left: 1px solid var(--line, #cfd6cb); font: 13px/1.35 var(--font-ui, system-ui, sans-serif); color: var(--ink, #1a1f1c); }
+  #lab h1 { font-size: 17px; margin: 0 0 2px; font-weight: 600; }
+  #status { color: #5b625c; margin: 0 0 12px; }
+  #status.ready { color: #1a1f1c; }
+  .box { border: 1px solid var(--line, #cfd6cb); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .box summary { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: #f3f5f0; cursor: pointer; list-style: none; -webkit-user-select: none; user-select: none; }
+  .box summary::-webkit-details-marker { display: none; }
+  .box summary::after { content: '▾'; color: #5b625c; }
+  .box:not([open]) summary::after { content: '▸'; }
+  .box h2 { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; margin: 0; color: #5b625c; font-weight: 600; }
+  .group { font-size: 11px; color: #5b625c; padding: 6px 10px 3px; }
+  .row { display: flex; width: 100%; justify-content: space-between; gap: 8px; padding: 7px 10px; border: 0; border-top: 1px solid #eceee9;
+         background: #fff; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .row:hover:not(:disabled) { background: #f3f5f0; }
+  .row.on { background: #1a1f1c; color: #fff; }
+  .row small { color: #7a817b; font-size: 11px; }
+  .row.on small { color: #c9cec9; }
+  .row:disabled { cursor: default; color: #a3a9a4; }
+  #levelBox { padding: 9px 10px; border-top: 1px solid #eceee9; }
+  #levelBox label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  #levelBox input { width: 100%; }
+  .note { color: #5b625c; padding: 7px 10px; border-top: 1px solid #eceee9; }
+  .dim { opacity: .45; }
+  .ctl { padding: 7px 10px; border-top: 1px solid #eceee9; }
+  .ctl > div { margin-bottom: 3px; color: #5b625c; }
+  .ctl label { display: flex; align-items: center; gap: 6px; padding: 1px 0; cursor: pointer; }
+  .ctl .head { display: flex; justify-content: space-between; color: #5b625c; margin-bottom: 3px; }
+  .ctl input[type=range] { width: 100%; }
+  @media (max-width: 900px) { body { margin-right: 0; } #lab { position: static; width: auto; border-left: 0; border-top: 1px solid var(--line, #cfd6cb); } }
+</style>
+</head>
+<body>
+<main class="home-page">
+  <section class="hero">
+    <div class="signature photo"><img id="home-photo" src="img/home/probe24_full.jpg" alt="Silicon probe shanks under the microscope"></div>
+    <div class="hero-text"><h1>Brian Sciences</h1></div>
+  </section>
+  <section class="doors">
+    <div class="door-grid">
+      <a class="door"><h3>Research</h3><p>Neuroscience work.</p></a>
+      <a class="door"><h3>Projects</h3><p>Other work and fun stuff.</p></a>
+      <a class="door"><h3>About</h3><p>Background, CV, people, and links.</p></a>
+    </div>
+  </section>
+</main>
+
+<aside id="lab">
+  <h1>Instrument Lab</h1>
+  <p id="status">Click anywhere once to turn sound on.</p>
+  <details class="box" id="boxInstrument" open><summary><h2>Instrument</h2></summary><div id="instruments"></div></details>
+  <details class="box" id="boxInteraction" open><summary><h2>Interaction</h2></summary><div id="controls"></div></details>
+  <details class="box" id="soundsBox" open><summary><h2>Sound</h2></summary><div id="sounds"></div>
+    <div id="levelBox"><label for="level"><span id="levelName"></span><span id="levelValue"></span></label><input id="level" type="range" min="0" max="2" step="0.05"></div>
+  </details>
+</aside>
+
+<script src="egglab/eggsfx.js"></script>
+<script src="js/shankwind.js"></script>
+<script src="instrumentlab/sounds.js"></script>
+<script src="instrumentlab/lab.js"></script>
+<script src="js/titlecode.js"></script>
+</body>
+</html>

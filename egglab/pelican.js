@@ -841,5 +841,5 @@
     }
   }
 
-  window.PelicanRide = { render, warm, DURATION };
+  window.PelicanRide = { render, warm, DURATION, FIRST, EVERY, PASSES, HERO_AT, HERO_MS };
 })();
