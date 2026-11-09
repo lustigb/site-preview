@@ -136,6 +136,11 @@
       { name: 'Piano', hit: voice('piano') }, { name: 'Electric piano', hit: voice('epiano') }, { name: 'Music box', hit: voice('musicBox') },
       { name: 'Warm organ', hit: voice('organ'), hold: true },
     ] },
+    { name: 'Theremin', mode: 'pad', sounds: [             // the shanks form a grid; left to right is pitch, top is loud and bottom quiet (settings from the Instrument Lab)
+      { name: 'Classic', voice: [['sine', 1, 1], ['sine', 2, 0.15]] },
+      { name: 'Warm', filter: 1100, voice: [['triangle', 1, 1], ['sine', 0.5, 0.25]] },
+      { name: 'Reed', filter: 1900, voice: [['sawtooth', 1, 0.45], ['square', 2, 0.08]] },
+    ] },
   ];
   const STATE_KEY = 'bs-instruments';
   let state = { instrument: 0, sound: {}, key: 0 };
@@ -169,6 +174,47 @@
     if (sound().hold) { heldNotes.get(k)?.release(); heldNotes.set(k, note); }
   };
   window.shankRelease = function (k) { heldNotes.get(k)?.release(); heldNotes.delete(k); };
+  const thereminHz = x => 130.81 * 2 ** (3 * x), thereminLevel = y => 0.27 * Math.max(0.02, 1 - y) ** 1.3;
+  let thereminVoice = null, padDown = false;
+  function stopTheremin() {
+    if (!thereminVoice) return;
+    const { g, oscs, lfo } = thereminVoice, t = eggAudio.currentTime;
+    g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05);
+    oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4);
+    thereminVoice = null;
+  }
+  function startTheremin(x, y) {
+    stopTheremin();
+    if (!eggAudio || eggAudio.state !== 'running') return;
+    const t = eggAudio.currentTime, g = eggAudio.createGain(), lfo = eggAudio.createOscillator(), depth = eggAudio.createGain(), f = eggAudio.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = sound().filter || 12000;
+    lfo.frequency.value = 5.5; depth.gain.value = 12; lfo.start(t);
+    const oscs = sound().voice.map(([type, mul, level]) => {
+      const o = eggAudio.createOscillator(), l = eggAudio.createGain();
+      o.type = type; o.frequency.value = thereminHz(x) * mul; l.gain.value = level; lfo.connect(depth).connect(o.detune);
+      o.connect(l).connect(f); o.start(t);
+      return { o, mul };
+    });
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(thereminLevel(y), t + 0.05);
+    f.connect(g).connect(eggMaster);
+    thereminVoice = { g, oscs, lfo };
+  }
+  function moveTheremin(x, y) {
+    if (!thereminVoice) return;
+    const t = eggAudio.currentTime;
+    thereminVoice.oscs.forEach(({ o, mul }) => o.frequency.setTargetAtTime(thereminHz(x) * mul, t, 0.03));
+    thereminVoice.g.gain.setTargetAtTime(thereminLevel(y), t, 0.03);
+  }
+  let padX = 0, padY = 0;
+  window.shankPad = function (phase, x, y) {               // from shankwind.js: pressed, moved or lifted on the grid (x, y = 0..1)
+    padX = x; padY = y;
+    if (phase === 'down') {
+      padDown = true;
+      startTheremin(x, y);
+      if (!thereminVoice) setTimeout(() => { if (padDown && !thereminVoice) startTheremin(padX, padY); }, 150);   // the press itself may be what allows sound
+    } else if (phase === 'move') moveTheremin(x, y);
+    else { padDown = false; stopTheremin(); }
+  };
   window.shankTouch = function (k, speed) {                // called by shankwind.js when two shank tips hit each other
     if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, Math.min(1, speed / 1200) ** 0.6)], eggMaster);
   };
@@ -188,13 +234,19 @@
   }
   function demo() {                                        // a little run of notes
     if (!audioReady()) return;
+    if (inst().mode === 'pad') {                           // a little glide up
+      startTheremin(0.2, 0.3);
+      [0.3, 0.45, 0.6, 0.75].forEach((x, i) => setTimeout(() => moveTheremin(x, 0.3), 90 * (i + 1)));
+      setTimeout(stopTheremin, 500);
+      return;
+    }
     if (!sound().hold) { window.EggSfx.play(eggAudio, [1, 3, 5, 8].map((k, i) => shankHit(k, 0.7, i * 90)), eggMaster); return; }
     [1, 3, 5, 8].forEach((k, i) => setTimeout(() => {
       const note = window.EggSfx.play(eggAudio, [shankHit(k, 0.7)], eggMaster);
       setTimeout(() => note.release(), 170);
     }, i * 190));
   }
-  function changed(text) { saveState(); window.shankWind?.setMode(inst().mode, inst().options); refreshInstrument(); say(text); demo(); }
+  function changed(text) { stopTheremin(); saveState(); window.shankWind?.setMode(inst().mode, inst().options); refreshInstrument(); say(text); demo(); }
   window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
   window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name); };
   window.nextMusicalKey = () => { if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name); } };

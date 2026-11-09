@@ -55,7 +55,14 @@ window.LAB_INSTRUMENTS = [
       { name: 'Music box', play: s => s.egg({ kind: 'musicBox', v: s.v, hz: s.hz }) },
       { name: 'Warm organ', hold: true, play: s => s.egg({ kind: 'organ', v: s.v, hz: s.hz }) },   // hold: sounds until the key is let go
   ] },
-  { name: 'Theremin', note: 'not built yet', soon: true },
-  { name: 'Organ', note: 'not built yet', soon: true },
+  { name: 'Theremin', note: 'press and move on the grid', mode: 'pad', keys: true, controls: [
+      { id: 'snap', type: 'check', label: 'Snap to the notes of the key' }, ECHO,
+      { id: 'range', type: 'range', label: 'Range (octaves)', min: 1, max: 4, step: 0.5 },
+      { id: 'vib', type: 'range', label: 'Vibrato', min: 0, max: 40, step: 1 },
+  ], sounds: [
+      { name: 'Classic', voice: [['sine', 1, 1], ['sine', 2, 0.15]] },
+      { name: 'Warm', filter: 1100, voice: [['triangle', 1, 1], ['sine', 0.5, 0.25]] },
+      { name: 'Reed', filter: 1900, voice: [['sawtooth', 1, 0.45], ['square', 2, 0.08]] },
+  ] },
   { name: 'Drums', note: 'not built yet', soon: true },
 ];

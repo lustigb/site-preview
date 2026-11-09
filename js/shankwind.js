@@ -7,7 +7,8 @@
 // the photo) on white, the photo's own background; once all is still the canvas hides and the
 // untouched photo shows again.
 //
-// shankWind.setMode('wind' | 'keys') picks how the shanks are played. 'keys': each shank is a key; press one (or drag across them) and it dips
+// 'pad' mode: the shanks leave their places and form a grid (odd shanks upright, even shanks across), a tracking target follows the pointer, and window.shankPad(phase, x, y) reports it (x, y = 0..1).
+// shankWind.setMode('wind' | 'keys' | 'pad') picks how the shanks are played. 'keys': each shank is a key; press one (or drag across them) and it dips
 // down and springs back. homeeggs.js picks the sound (window.shankSwing).
 (function () {
   const photo = document.getElementById('home-photo');
@@ -68,7 +69,35 @@
   // How a shank bends: quadratic from its anchor far above the photo down to the tip.
   const bend = (k, y) => { const A = opts.stiff ? SOLO_TOP : ANCHOR; return ((y + A) / (SHANKS[k - 1].tip + A)) ** 2; };   // stiff: clamped just above the photo, so the top barely moves
 
+  let gridU = 0;                                            // 0 = the shanks in their real places, 1 = the grid
+  const pad = { x: 375, y: 500, alpha: 0, down: false, id: null };
+  const GRID_S = 0.9, ease = u => u * u * (3 - 2 * u);
+  function gridPoint(k, y) {                                // where a point on this shank sits in the grid (photo px)
+    const midY = (SHANKS[k - 1].tip - SOLO_TOP) / 2, i = Math.floor((k - 1) / 2);
+    return k % 2 ? [150 * (i + 1), 500 + (y - midY)] : [375 + (y - midY), 200 * (i + 1)];
+  }
+  function drawGridShank(k, e) {                            // part way between its real place and the grid
+    const img = solo[k - 1], h = 8, at = y => { const [gx, gy] = gridPoint(k, y); return [onShank(k, y) + (gx - onShank(k, y)) * e, y + (gy - y) * e]; };
+    for (let y = -SOLO_TOP; y <= SHANKS[k - 1].tip + 2; y += h) {
+      const [x0, y0] = at(y), [x1, y1] = at(y + h), dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy), c = scale * dy / len, s = -scale * dx / len;
+      ctx.setTransform(c, s, -s, c, scale * x0, scale * y0);
+      ctx.drawImage(img, onShank(k, y) - 15, y + SOLO_TOP, 30, h, -15, 0, 30, len + 0.6);
+    }
+  }
+  function drawTarget() {                                   // thin axis lines across the image and a ring at the pointer
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.globalAlpha = pad.alpha;
+    ctx.strokeStyle = '#1a1f1c'; ctx.fillStyle = '#1a1f1c';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, pad.y); ctx.lineTo(750, pad.y); ctx.moveTo(pad.x, 0); ctx.lineTo(pad.x, 1000); ctx.stroke();
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(pad.x, pad.y, pad.down ? 44 : 34, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(pad.x, pad.y, 5, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
   function drawShank(k, o) {                                // the shank's own pixels, in 8 px strips along the curve
+    if (gridU > 0) { drawGridShank(k, ease(gridU)); return; }
     const img = solo[k - 1], h = 8;
     for (let y = -SOLO_TOP; y <= SHANKS[k - 1].tip + 2; y += h) {
       const x0 = onShank(k, y) + o.a * bend(k, y), x1 = onShank(k, y + h) + o.a * bend(k, y + h);
@@ -128,7 +157,9 @@
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, 750, 1000);
+    gridU = Math.max(0, Math.min(1, gridU + (mode === 'pad' ? dt : -dt) / GRID_S));
     osc.forEach((o, i) => drawShank(i + 1, o));
+    if (mode === 'pad' && gridU > 0.9) { pad.alpha = Math.min(1, pad.alpha + dt * 6); drawTarget(); } else pad.alpha = 0;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     if (trail.length > 1) {                                 // faint streaks behind the gust
       ctx.lineCap = 'round';
@@ -146,7 +177,7 @@
     }
 
     // Everything still for a moment? Hand back to the real photo.
-    const moving = trail.length || osc.some(o => Math.abs(o.a) > 0.15 || Math.abs(o.v) > 1 || o.down || Math.abs(o.d) > 0.1 || Math.abs(o.dv) > 1);
+    const moving = mode === 'pad' || gridU > 0 || trail.length || osc.some(o => Math.abs(o.a) > 0.15 || Math.abs(o.v) > 1 || o.down || Math.abs(o.d) > 0.1 || Math.abs(o.dv) > 1);
     still = moving ? 0 : still + dt;
     if (still > 0.3 || paused) { settle(); return; }
     requestAnimationFrame(tick);
@@ -154,6 +185,8 @@
   function releaseAllKeys() { [...new Set(held.values())].forEach(k => window.shankRelease?.(k)); held.clear(); osc.forEach(o => { o.down = false; }); }
   function settle() {                                       // back to the plain photo
     on = false;
+    gridU = 0; pad.alpha = 0;
+    if (pad.down) { pad.down = false; pad.id = null; window.shankPad?.('up', pad.x / 750, pad.y / 1000); }
     osc.forEach(o => { o.a = 0; o.v = 0; o.d = 0; o.dv = 0; o.down = false; o.peak = 0; });
     releaseAllKeys();
     trail = [];
@@ -163,13 +196,14 @@
   // homeeggs.js pauses the wind while an egg plays over the photo, then resumes it.
   window.shankWind = {
     pause() { paused = true; prev = null; settle(); },
-    resume() { paused = false; },
+    resume() { paused = false; if (mode === 'pad') start(); },
     peek() { return osc.map(o => o.a); },                   // for test tools
     // options: collide = neighbouring tips hit each other and call window.shankTouch(k, speed); gust = how hard the mouse pushes; tight = ring once per push; touchGap = how close tips count as touching (photo px); dip = how far a key goes down (photo px); stiff = stiff at the top and whippy at the tip.
     setMode(m, options = {}) {
       mode = m;
       opts = { ...DEFAULTS, ...options };
       releaseAllKeys();
+      if (m === 'pad') { const go = () => { if (mode === 'pad' && !start()) setTimeout(go, 200); }; go(); } else if (gridU > 0) start();   // the grid assembles or comes apart even with no input
       box.style.touchAction = m === 'wind' ? 'pan-y' : 'none';   // playing keys shouldn't scroll the page
     },
   };
@@ -184,7 +218,18 @@
     const k = held.get(id); held.delete(id);
     if (k && ![...held.values()].includes(k)) { osc[k - 1].down = false; window.shankRelease?.(k); }   // another finger may still be on it
   }
+  function padEvent(phase, ev) {
+    const p = toPhoto(ev);
+    pad.x = Math.max(0, Math.min(750, p.x)); pad.y = Math.max(0, Math.min(1000, p.y));
+    if (phase) window.shankPad?.(phase, pad.x / 750, pad.y / 1000);
+  }
   box.addEventListener('pointerdown', ev => {
+    if (mode === 'pad') {
+      if (paused || pad.down) return;
+      try { box.setPointerCapture(ev.pointerId); } catch (e) { /* drags just stop at the photo's edge */ }
+      pad.down = true; pad.id = ev.pointerId; padEvent('down', ev);
+      return;
+    }
     if (mode === 'keys') {
       if (paused) return;
       try { box.setPointerCapture(ev.pointerId); } catch (e) { /* drags just stop at the photo's edge */ }
@@ -193,9 +238,16 @@
     }
     prev = { ...toPhoto(ev), t: performance.now() };
   });
-  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => box.addEventListener(type, ev => { if (mode === 'keys') release(ev.pointerId); }));
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => box.addEventListener(type, ev => {
+    if (mode === 'keys') release(ev.pointerId);
+    if (mode === 'pad' && pad.down && ev.pointerId === pad.id) { pad.down = false; pad.id = null; padEvent('up', ev); }
+  }));
   box.addEventListener('pointermove', ev => {
     const p = toPhoto(ev), now = performance.now();
+    if (mode === 'pad') {                                   // a mouse moves the target without playing; pressing plays
+      if (pad.down && ev.pointerId === pad.id) padEvent('move', ev); else if (!pad.down && ev.pointerType !== 'touch') padEvent(null, ev);
+      return;
+    }
     if (mode === 'keys') {                                  // dragging onto another shank plays it
       if (!held.has(ev.pointerId)) return;
       const k = nearest(p);

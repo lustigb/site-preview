@@ -23,7 +23,7 @@
   const settingKey = () => `${instrument().name}/${sound().name}`;
   function current() {
     const x = sound(), touch = x.trigger === 'touch';
-    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, ...settings[settingKey()] };
+    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: false, range: 3, vib: 12, ...settings[settingKey()] };
   }
   function setSetting(id, value) {
     const next = { ...settings[settingKey()], [id]: value };
@@ -67,7 +67,7 @@
     };
     const s = { ac, out: custom, t, k, v: v * lv, hz: keyHz(k), p: (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12), tone, burst,
                 egg: h => window.EggSfx.play(ac, [{ ms: delay * 1000, ...h, ...(set.echo ? { wet: 3 } : {}) }], master) };
-    return sound().play(s);
+    return sound().play?.(s);
   }
   const heldNotes = new Map();                            // shank -> its sounding note, for sounds that hold while pressed
   window.shankSwing = (k, swing) => {
@@ -76,7 +76,53 @@
   };
   window.shankRelease = k => { heldNotes.get(k)?.release(); heldNotes.delete(k); };
   window.shankTouch = (k, speed) => hit(k, Math.min(1, speed / 1200) ** 0.6);
+  // The theremin: one continuous voice. Left to right is pitch; the top of the pad is loud and the bottom quiet.
+  let thereminVoice = null;
+  function thereminHz(x) {
+    const set = current(), low = 130.81, free = low * 2 ** (set.range * x);
+    if (!set.snap) return free;
+    const { root, steps } = musicalKey(), semis = 12 * Math.log2(free / root), oct = Math.floor(semis / 12), near = [...steps.map(n => n + 12 * oct), 12 * (oct + 1)].reduce((a, b) => (Math.abs(b - semis) < Math.abs(a - semis) ? b : a));
+    return root * 2 ** (near / 12);
+  }
+  const thereminLevel = y => 0.45 * Math.max(0.02, 1 - y) ** 1.3;
+  function startTheremin(x, y) {
+    stopTheremin();
+    if (!ac || ac.state !== 'running') return;
+    const set = current(), t = ac.currentTime, lv = levels[sound().name] ?? 1, g = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain(), f = ac.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = sound().filter || 12000;
+    lfo.frequency.value = 5.5; lg.gain.value = set.vib; lfo.start(t);
+    const oscs = sound().voice.map(([type, mul, level]) => {
+      const o = ac.createOscillator(), l = ac.createGain();
+      o.type = type; o.frequency.value = thereminHz(x) * mul; l.gain.value = level; lfo.connect(lg).connect(o.detune);
+      o.connect(l).connect(f); o.start(t);
+      return { o, mul };
+    });
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(thereminLevel(y) * lv, t + 0.05);
+    f.connect(g).connect(set.echo ? echoBus : custom);
+    thereminVoice = { g, oscs, lfo, lv };
+  }
+  function moveTheremin(x, y) {
+    if (!thereminVoice) return;
+    const t = ac.currentTime, snap = current().snap, hz = thereminHz(x);
+    thereminVoice.oscs.forEach(({ o, mul }) => o.frequency.setTargetAtTime(hz * mul, t, snap ? 0.012 : 0.03));
+    thereminVoice.g.gain.setTargetAtTime(thereminLevel(y) * thereminVoice.lv, t, 0.03);
+  }
+  function stopTheremin() {
+    if (!thereminVoice) return;
+    const { g, oscs, lfo } = thereminVoice, t = ac.currentTime;
+    g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05);
+    oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4);
+    thereminVoice = null;
+  }
+  window.shankPad = (phase, x, y) => { if (phase === 'down') startTheremin(x, y); else if (phase === 'move') moveTheremin(x, y); else stopTheremin(); };
+
   function demo() {
+    if (instrument().mode === 'pad') {                    // a little glide up
+      startTheremin(0.2, 0.3);
+      [0.3, 0.45, 0.6, 0.75].forEach((x, i) => setTimeout(() => moveTheremin(x, 0.3), 90 * (i + 1)));
+      setTimeout(stopTheremin, 500);
+      return;
+    }
     if (!sound().hold) { [1, 3, 5, 8].forEach((k, i) => hit(k, 0.7, i * 0.09)); return; }
     [1, 3, 5, 8].forEach((k, i) => setTimeout(() => { const note = hit(k, 0.7); if (note) setTimeout(() => note.release(), 170); }, i * 190));
   }
@@ -130,6 +176,7 @@
   keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); opacity:.65;';
   document.getElementById('home-photo').parentElement.appendChild(keyLabel);
   function draw() {
+    stopTheremin();
     const inst = instrument();
     const set = current();
     window.shankWind.setMode(inst.mode, modeOptions(inst, set));
