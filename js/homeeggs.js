@@ -167,11 +167,8 @@
       return { name, kit, hit: (k, v) => ({ kind: 'drum', v, kit, drum: ['kick', 'snare', 'hat', 'open', 'clap', 'tom', 'low', 'crash'][k - 1] }) };
     }) },
   ];
-  const STATE_KEY = 'bs-instruments';
+  // Instruments and settings last only until the page is reloaded, so every visit starts fresh on Fidget. (The sound button is the one thing that's remembered.)
   let state = { instrument: 0, sound: {}, key: 0, padKey: -1, tuning: {}, chordSet: 0, chord: {}, windKey: {}, bpm: 100, sig: 0 };   // chord: per sound, the selected chord; null = released (a muted strum)   // padKey: the Theremin's key, -1 = Free slide
-  try { state = { ...state, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (e) { /* starts on the defaults */ }
-  state.instrument = INSTRUMENTS[state.instrument] ? state.instrument : 0;
-  const saveState = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { /* just this visit, then */ } };
   const inst = () => INSTRUMENTS[state.instrument];
   const sound = () => inst().sounds[(state.sound[inst().name] || 0) % inst().sounds.length];
   const musicalKey = () => MUSICAL_KEYS[state.key % MUSICAL_KEYS.length];
@@ -255,7 +252,7 @@
   window.shankChord = function (i) {                       // tap a chord or press its key to select it, again to release it
     const next = chordPick() === i ? null : i;
     state.chord[sound().name] = next;
-    saveState();
+   
     window.shankWind?.setChord(next ?? -1);
     say(next == null ? 'Muted' : chordSet().chords[next].name);
   };
@@ -360,7 +357,7 @@
       }
     });
   }
-  function changed(text, quick) { stopTheremin(); stopBlow(); keysDown.length = 0; if (!isDrums()) { stopLoop(); sequencerOpen = false; } paintStrip(); saveState(); applyMode(); refreshInstrument(); say(text); demo(quick); }
+  function changed(text, quick) { stopTheremin(); stopBlow(); keysDown.length = 0; if (!isDrums()) { stopLoop(); sequencerOpen = false; } paintStrip(); applyMode(); refreshInstrument(); say(text); demo(quick); }
   window.letterMenu = kind => {                            // the lists behind the s, e and c letters
     if (kind === 'instrument') return { items: INSTRUMENTS.map(x => x.name), current: state.instrument, pick: i => { state.instrument = i; changed(inst().name); } };
     if (kind === 'sound') return { items: inst().sounds.map(x => x.name), current: inst().sounds.indexOf(sound()), pick: i => { state.sound[inst().name] = i; changed(sound().name, true); } };
@@ -533,13 +530,13 @@
     tempoBox.style.left = `${r.left + r.width / 2 - 32}px`; tempoBox.style.top = `${Math.max(8, r.top - 214)}px`; tempoBox.style.display = 'block';
     paintTempo();
   };
-  window.tempoSliderMove = y => { state.bpm = Math.round(Math.max(BPM_MIN, Math.min(BPM_MAX, tempoDrag.bpm + (tempoDrag.y - y) * (BPM_MAX - BPM_MIN) / TRACK))); saveState(); paintTempo(); refreshDrumLabel(); };
+  window.tempoSliderMove = y => { state.bpm = Math.round(Math.max(BPM_MIN, Math.min(BPM_MAX, tempoDrag.bpm + (tempoDrag.y - y) * (BPM_MAX - BPM_MIN) / TRACK))); paintTempo(); refreshDrumLabel(); };
   window.tempoSliderEnd = () => { tempoBox.style.display = 'none'; say(`${state.bpm} BPM`); };
   addEventListener('keydown', ev => {                      // drums on the keyboard: pads on q w e r / a s d f; arrows change the tempo; n opens the sequencer; space plays or pauses it
     if (ev.metaKey || ev.ctrlKey || ev.altKey || !isDrums() || busy || (ev.repeat && !ev.key.startsWith('Arrow'))) return;
     const key = ev.key.toLowerCase(), i = 'qwerasdf'.indexOf(key) + 1;
     if (i) { window.shankWind.showPad(i); playPad(i, 0.9); }
-    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); state.bpm = Math.max(BPM_MIN, Math.min(BPM_MAX, state.bpm + (ev.key === 'ArrowUp' ? 2 : -2))); saveState(); refreshDrumLabel(); say(`${state.bpm} BPM`); }
+    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); state.bpm = Math.max(BPM_MIN, Math.min(BPM_MAX, state.bpm + (ev.key === 'ArrowUp' ? 2 : -2))); refreshDrumLabel(); say(`${state.bpm} BPM`); }
     if (key === 'n') window.toggleLoop();
     if (key === ' ' && sequencerOpen) { ev.preventDefault(); togglePlay(); }
   });
