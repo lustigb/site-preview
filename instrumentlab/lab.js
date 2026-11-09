@@ -96,9 +96,9 @@
   }
   ['pointerdown', 'pointerup', 'keydown'].forEach(ev => addEventListener(ev, unlock));
 
-  function hit(k, v, delay = 0) {                         // play the current instrument's sound for shank k
+  function hit(k, v, delay = 0, frozen = null) {                         // play the current instrument's sound for shank k
     if (!ac || ac.state !== 'running') return null;
-    const t = ac.currentTime + 0.005 + delay, lv = levels[sound().name] ?? 1, set = current(), dest = set.echo ? echoBus : custom;
+    const x = frozen?.sound || sound(), t = ac.currentTime + 0.005 + delay, lv = levels[x.name] ?? 1, set = current(), dest = set.echo ? echoBus : custom;
     const tone = (type, f0, f1, dur, level) => {
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
@@ -113,15 +113,16 @@
       g.gain.setValueAtTime(level, at); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
       n.connect(f).connect(g).connect(dest); n.start(at);
     };
-    const s = { ac, out: custom, t, k, v: v * lv, hz: keyHz(k), p: (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12), tone, burst,
+    const s = { ac, out: custom, t, k, v: v * lv, hz: frozen ? frozen.hz : keyHz(k), p: (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12), tone, burst,
                 egg: h => window.EggSfx.play(ac, [{ ms: delay * 1000, ...h, ...(set.echo ? { wet: 3 } : {}) }], master) };
-    if (chordsOn() && !chordNow()) return s.egg({ kind: 'chk', v: s.v, pitch: s.p * (sound().rootOnly ? 0.6 : 1) });   // no chord held: a muted strum
-    return sound().play?.(s);
+    if (frozen ? frozen.chk : chordsOn() && !chordNow()) return s.egg({ kind: 'chk', v: s.v, pitch: s.p * (x.rootOnly ? 0.6 : 1) });   // no chord held: a muted strum
+    return x.play?.(s);
   }
   const heldNotes = new Map();                            // shank -> its sounding note, for sounds that hold while pressed
   window.shankSwing = (k, swing) => {
     const note = hit(k, Math.min(1, swing / 45) ** 0.7);
     if (note && sound().hold) { heldNotes.get(k)?.release(); heldNotes.set(k, note); }
+    if (instrument().mode === 'keys') recordEvent(k);
   };
   window.shankRelease = k => { heldNotes.get(k)?.release(); heldNotes.delete(k); };
   window.shankTouch = (k, speed) => hit(k, Math.min(1, speed / 1200) ** 0.6);
@@ -163,7 +164,7 @@
     oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4);
     thereminVoice = null;
   }
-  window.shankString = (k, strength) => hit(k, 0.35 + 0.65 * strength);
+  window.shankString = (k, strength) => { hit(k, 0.35 + 0.65 * strength); recordEvent(k); };
   window.shankChord = i => {                              // tap a chord or press its key to select it, again for open strings
     const name = sound().name, next = chordPick() === i ? null : i;
     chordPicks[name] = next; store.set('chords', chordPicks);
@@ -243,9 +244,10 @@
   let sigName = store.get('sig', SIGS[0].name);
   const sig = () => SIGS.find(x => x.name === sigName) || SIGS[0];
   const stepSec = () => 60 / bpm / sig().perBeat;
-  const loop = { on: false, pattern: [], skip: [], nextAbs: 0, nextTime: 0, timer: null };
+  const loop = { on: false, nextAbs: 0, nextTime: 0, timer: null };
   const isDrums = () => instrument().mode === 'pads';
-  window.drumLettersOn = isDrums;
+  const lettersOn = () => instrument().name !== 'Fidget' || sequencerOpen || tracks.length > 0;   // the left e (tempo) and the n (sequencer)
+  window.drumLettersOn = lettersOn;
   function refreshDrumLabel() { if (isDrums()) keyLabel.textContent = `${sig().name} · ${bpm} BPM`; }
   function metronome(t, strong) {
     const o = ac.createOscillator(), g = ac.createGain();
@@ -253,12 +255,26 @@
     g.gain.setValueAtTime(strong ? 0.13 : 0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
     o.connect(g).connect(custom); o.start(t); o.stop(t + 0.04);
   }
+  // The sequencer: one bar, one line per instrument. Played notes join the current instrument's line while Record is on.
+  const TRACK_COLORS = { Drums: 'rgb(22, 12, 118)', Piano: '#c2410c', Strings: '#15803d' };   // Winds and Theremin need longer notes: not yet
+  const canTrack = () => !!TRACK_COLORS[instrument().name];
+  const tracks = [];                                      // { name, color, steps: [[{ k, hz, sound, chk, skip }]], muted, stepEls }
+  const trackFor = name => tracks.find(t => t.name === name);
+  let recording = false, sequencerOpen = false, playheadAt = -1, lastRowAdded = null;
   function runStep(step, delay) {
-    const { pattern, skip } = loop;
     if (current().click && step % sig().beat === 0) metronome(ac.currentTime + delay, step === 0);
-    pattern[step].forEach(i => {
-      if (skip[step].has(i)) { skip[step].delete(i); return; }   // you just played this one yourself
-      hit(i, 0.85, delay); setTimeout(() => { if (loop.on) window.shankWind.showPad(i); }, delay * 1000);
+    tracks.forEach(t => {
+      if (t.muted) return;
+      t.steps[step].forEach(ev => {
+        if (ev.skip) { ev.skip = false; return; }         // you just played this one yourself
+        const note = hit(ev.k, 0.85, delay, ev);
+        if (note && ev.sound.hold) setTimeout(() => note.release(), (delay + stepSec() * 2) * 1000);
+        setTimeout(() => {
+          if (!loop.on || instrument().name !== t.name) return;
+          const w = window.shankWind;
+          if (t.name === 'Drums') w.showPad(ev.k); else if (t.name === 'Piano') w.showPress(ev.k, 100); else w.vibrate(ev.k - 1, 0.5);
+        }, delay * 1000);
+      });
     });
     setTimeout(() => { if (loop.on) setPlayhead(step); }, delay * 1000);
   }
@@ -268,64 +284,95 @@
       loop.nextTime += stepSec(); loop.nextAbs += 1;
     }
   }
-  function freshPattern() { const n = sig().steps; loop.pattern = Array.from({ length: n }, () => new Set()); loop.skip = Array.from({ length: n }, () => new Set()); buildStrip(); }
   function startLoop() {
     if (!ac || ac.state !== 'running') return false;
     Object.assign(loop, { on: true, nextAbs: 0, nextTime: ac.currentTime + 0.1 });
     loop.timer = setInterval(schedule, 25);
-    paintPlayButton();
+    renderRows();
     return true;
   }
-  function stopLoop() {                                   // pause: the beat stays
-    if (!loop.on) return;
-    clearInterval(loop.timer); loop.on = false; setPlayhead(-1); paintPlayButton();
+  function stopLoop() { if (!loop.on) return; clearInterval(loop.timer); loop.on = false; recording = false; setPlayhead(-1); renderRows(); }
+  function recordEvent(k) {
+    if (!loop.on || !recording || !canTrack()) return;
+    const t = trackFor(instrument().name), steps = sig().steps;
+    if (!t) return;
+    const n = Math.round(loop.nextAbs - (loop.nextTime - ac.currentTime) / stepSec()), step = ((n % steps) + steps) % steps;
+    const list = t.steps[step], at = list.findIndex(e => e.k === k), ev = { k, hz: keyHz(k), sound: sound(), chk: !!(chordsOn() && !chordNow()), skip: n >= loop.nextAbs };
+    if (at >= 0) list[at] = ev; else list.push(ev);       // layered on top; replaying the same note in a step just replaces it
+    paintStep(t, step);
   }
-  function recordHit(i) {
-    if (!loop.on) return;
-    const n = Math.round(loop.nextAbs - (loop.nextTime - ac.currentTime) / stepSec()), steps = sig().steps, step = ((n % steps) + steps) % steps;
-    loop.pattern[step].add(i); paintStep(step);
-    if (n >= loop.nextAbs) loop.skip[step].add(i);       // snapped forward: don't play it a second time in this pass
+  function makeTrack(name) {
+    if (trackFor(name)) { renderRows(); return; }
+    tracks.push({ name, color: TRACK_COLORS[name], steps: Array.from({ length: sig().steps }, () => []), muted: false, stepEls: [] });
+    lastRowAdded = name; renderRows();
   }
-  // The sequencer strip sits on the line under the title: play/pause, the steps, Clear. Tap a step to delete what's on it.
-  const strip = document.createElement('div');
-  strip.style.cssText = 'position:absolute; left:0; right:40px; bottom:-15px; height:30px; display:none; align-items:center; gap:6px; z-index:3;';
-  const stripButton = 'border:0; background:var(--bg, #f3f5f0); color:rgb(22, 12, 118); padding:0; cursor:pointer; font:600 12px/1 var(--font-ui, system-ui, sans-serif); display:flex; align-items:center; justify-content:center; height:30px;';
-  const playBtn = document.createElement('button'), clearBtn = document.createElement('button'), stepsBox = document.createElement('div');
-  playBtn.type = clearBtn.type = 'button';
-  playBtn.style.cssText = stripButton + 'width:30px; flex:none;';
-  clearBtn.style.cssText = stripButton + 'padding:0 6px; flex:none;';
-  clearBtn.textContent = 'Clear';
-  stepsBox.style.cssText = 'flex:1; display:flex; height:30px; min-width:0;';
-  strip.append(playBtn, stepsBox, clearBtn);
-  document.querySelector('.hero').appendChild(strip);
-  function paintPlayButton() { playBtn.setAttribute('aria-label', loop.on ? 'Pause' : 'Play'); playBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">${loop.on ? '<rect x="3" y="2" width="3.6" height="12"/><rect x="9.4" y="2" width="3.6" height="12"/>' : '<path d="M4 2l10 6-10 6z"/>'}</svg>`; }
-  let stepEls = [];
-  function buildStrip() {
-    stepEls = loop.pattern.map((_, step) => {
-      const b = document.createElement('button'), big = step % sig().beat === 0;
-      b.type = 'button'; b.setAttribute('aria-label', `Step ${step + 1}`);
-      b.style.cssText = 'flex:1; min-width:0; height:30px; border:0; background:transparent; padding:0; position:relative; cursor:pointer;';
-      b.innerHTML = `<span class="t" style="position:absolute; left:50%; top:50%; width:${big ? 2 : 1}px; height:${big ? 22 : 12}px; margin:${big ? -11 : -6}px 0 0 -1px; background:rgb(22, 12, 118); opacity:.6;"></span><span class="d" style="position:absolute; left:50%; top:50%; width:11px; height:11px; margin:-5.5px 0 0 -5.5px; border-radius:50%; background:rgb(22, 12, 118); display:none;"></span>`;
-      b.addEventListener('click', () => { loop.pattern[step].clear(); loop.skip[step].clear(); paintStep(step); });
-      stepsBox.appendChild(b);
-      return b;
+  function clearAllTracks() { tracks.forEach(t => { t.steps = Array.from({ length: sig().steps }, () => []); }); renderRows(); }
+  const seq = document.createElement('div');
+  document.querySelector('.doors').prepend(seq);          // on the line under the title; each new track pushes the page down a little
+  const ROW_H = 30, seqBtn = 'border:0; background:var(--bg, #f3f5f0); padding:0; cursor:pointer; color:#1a1f1c; font:600 12px/1 var(--font-ui, system-ui, sans-serif); display:flex; align-items:center; justify-content:center; height:30px; flex:none;';
+  const icon = {
+    play: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M4 2l10 6-10 6z"/></svg>',
+    pause: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><rect x="3" y="2" width="3.6" height="12"/><rect x="9.4" y="2" width="3.6" height="12"/></svg>',
+    rec: on => `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="${on ? '#d4121f' : 'none'}" stroke="#d4121f" stroke-width="2"/></svg>`,
+    sound: off => `<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/><path d="${off ? 'M16 9l5 6M21 9l-5 6' : 'M15.5 8.5a5 5 0 0 1 0 7'}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
+  };
+  const button = (label, html, css, click) => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', label); b.innerHTML = html; b.style.cssText = seqBtn + css; b.addEventListener('click', click); return b; };
+  function renderRows() {
+    seq.style.display = sequencerOpen && tracks.length ? 'block' : 'none';
+    seq.style.marginTop = `${-(parseFloat(getComputedStyle(seq.parentElement).paddingTop) + ROW_H / 2)}px`;
+    seq.style.marginBottom = '10px';
+    const rows = tracks.map((t, index) => {
+      const row = document.createElement('div');
+      row.style.cssText = `display:flex; align-items:center; gap:6px; height:${ROW_H}px; padding-right:40px; overflow:hidden; opacity:${t.muted ? 0.4 : 1}; transition:height .28s ease;`;
+      const left = document.createElement('div');
+      left.style.cssText = 'width:66px; flex:none; display:flex; align-items:center; gap:2px; height:30px;';
+      if (index === 0) left.append(button('Record', icon.rec(recording), 'width:30px;', () => toggleRecord()), button(loop.on ? 'Pause' : 'Play', loop.on ? icon.pause : icon.play, 'width:30px;', () => togglePlay()));   // record on the outside, so it can't be mistaken for a step's dot
+      else { left.textContent = t.name; left.style.color = t.color; left.style.font = '600 11px/1 var(--font-ui, system-ui, sans-serif)'; }
+      const cells = document.createElement('div');
+      cells.style.cssText = 'flex:1; display:flex; height:30px; min-width:0;';
+      t.stepEls = t.steps.map((_, step) => {
+        const b = document.createElement('button'), big = step % sig().beat === 0;
+        b.type = 'button'; b.setAttribute('aria-label', `${t.name} step ${step + 1}`);
+        b.style.cssText = 'flex:1; min-width:0; height:30px; border:0; background:transparent; padding:0; position:relative; cursor:pointer;';
+        b.innerHTML = `<span class="t" style="position:absolute; left:50%; top:50%; width:${big ? 2 : 1}px; height:${big ? 22 : 12}px; margin:${big ? -11 : -6}px 0 0 -1px; background:${t.color}; opacity:.55;"></span><span class="d" style="position:absolute; left:50%; top:50%; width:11px; height:11px; margin:-5.5px 0 0 -5.5px; border-radius:50%; background:${t.color}; display:${t.steps[step].length ? 'block' : 'none'};"></span>`;
+        b.addEventListener('click', () => { t.steps[step] = []; paintStep(t, step); });
+        return b;
+      });
+      cells.replaceChildren(...t.stepEls);
+      const right = document.createElement('div');
+      right.style.cssText = 'flex:none; display:flex; align-items:center; gap:2px;';
+      if (index === 0) right.append(button('Clear', 'Clear', 'padding:0 5px;', () => clearCurrent()));
+      right.append(button(t.muted ? `Unmute ${t.name}` : `Mute ${t.name}`, icon.sound(t.muted), `width:26px; color:${t.color};`, () => { t.muted = !t.muted; renderRows(); }));
+      row.append(left, cells, right);
+      if (t.name === lastRowAdded) { row.style.height = '0px'; requestAnimationFrame(() => requestAnimationFrame(() => { row.style.height = `${ROW_H}px`; })); }   // a new line slides open
+      return row;
     });
-    stepsBox.replaceChildren(...stepEls);
+    lastRowAdded = null;
+    seq.replaceChildren(...rows);
+    if (playheadAt >= 0) setPlayhead(playheadAt);
   }
-  const paintStep = step => { stepEls[step].querySelector('.d').style.display = loop.pattern[step].size ? 'block' : 'none'; };
-  let playheadAt = -1;
+  const paintStep = (t, step) => { if (t.stepEls[step]) t.stepEls[step].querySelector('.d').style.display = t.steps[step].length ? 'block' : 'none'; };
   function setPlayhead(step) {
-    if (playheadAt >= 0 && stepEls[playheadAt]) { const t = stepEls[playheadAt].querySelector('.t'); t.style.opacity = '.6'; t.style.background = 'rgb(22, 12, 118)'; t.style.transform = ''; }
+    tracks.forEach(t => {
+      if (playheadAt >= 0 && t.stepEls[playheadAt]) { const m = t.stepEls[playheadAt].querySelector('.t'); m.style.opacity = '.55'; m.style.background = t.color; m.style.transform = ''; }
+      if (step >= 0 && t.stepEls[step]) { const m = t.stepEls[step].querySelector('.t'); m.style.opacity = '1'; m.style.background = '#1a1f1c'; m.style.transform = 'scaleX(2) scaleY(1.3)'; }
+    });
     playheadAt = step;
-    if (step >= 0 && stepEls[step]) { const t = stepEls[step].querySelector('.t'); t.style.opacity = '1'; t.style.background = '#1a1f1c'; t.style.transform = 'scaleX(2) scaleY(1.3)'; }
   }
-  playBtn.addEventListener('click', () => togglePlay());
-  clearBtn.addEventListener('click', () => { loop.pattern.forEach((set, i) => { set.clear(); loop.skip[i].clear(); paintStep(i); }); say('Cleared'); });
-  const playPad = (i, strength) => { hit(i, strength); recordHit(i); };
-  let sequencerOpen = false;
-  function paintStripVisible() { strip.style.display = isDrums() && sequencerOpen ? 'flex' : 'none'; }
-  window.toggleLoop = () => { if (!isDrums()) return; unlock(); sequencerOpen = !sequencerOpen; if (!sequencerOpen) stopLoop(); paintStripVisible(); };   // n opens and closes the sequencer; closing it pauses the beat
-  const togglePlay = () => { unlock(); if (loop.on) stopLoop(); else startLoop(); };
+  function togglePlay() { unlock(); if (loop.on) stopLoop(); else startLoop(); }
+  function toggleRecord() { unlock(); recording = !recording; if (recording && !loop.on) startLoop(); else renderRows(); }
+  function clearCurrent() {                               // Clear empties the current instrument's line
+    const t = trackFor(instrument().name) || tracks[0];
+    if (t) { t.steps = Array.from({ length: sig().steps }, () => []); renderRows(); say(`Cleared ${t.name}`); }
+  }
+  function syncSequencer() { if (sequencerOpen && canTrack()) makeTrack(instrument().name); else renderRows(); }
+  window.toggleLoop = () => {                             // n opens and closes the sequencer; closing it pauses, and the lines are kept
+    unlock(); sequencerOpen = !sequencerOpen;
+    if (!sequencerOpen) stopLoop();
+    syncSequencer();
+  };
+  const playPad = (i, strength) => { hit(i, strength); recordEvent(i); };
+  window.shankDrum = (i, strength) => playPad(i, strength);
   // Tempo: hold the e before the n, and a slider appears above it; drag up for faster, down for slower.
   const BPM_MIN = 50, BPM_MAX = 220, TRACK = 150;
   const tempoBox = document.createElement('div');
@@ -357,8 +404,13 @@
     const key = ev.key.toLowerCase(), i = 'qwerasdf'.indexOf(key) + 1;
     if (i) { window.shankWind.showPad(i); playPad(i, 0.9); }
     if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); nudgeTempo(ev.key === 'ArrowUp' ? 2 : -2); }
-    if (key === 'n') window.toggleLoop();
+  });
+  addEventListener('keydown', ev => {                     // the sequencer works from any instrument: n opens it, space plays or pauses, r records
+    if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    const key = ev.key.toLowerCase();
+    if (key === 'n' && lettersOn()) window.toggleLoop();
     if (key === ' ' && sequencerOpen) { ev.preventDefault(); togglePlay(); }
+    if (key === 'r' && sequencerOpen && !isDrums() && chordsOn() === false) toggleRecord();
   });
   window.shankPad = (phase, x, y) => { if (phase === 'down') startTheremin(x, y); else if (phase === 'move') moveTheremin(x, y); else stopTheremin(); };
 
@@ -409,13 +461,13 @@
   }
   window.unlockEggAudio = unlock;                         // the title's clickable letters (site/js/titlecode.js) work here too, and the last s steps through the instruments
   window.nextSound = () => { const list = soundList(); pick(list[(list.indexOf(sound()) + 1) % list.length].name); draw(); say(sound().name); setTimeout(() => demo(true), 30); };
-  window.nextMusicalKey = () => { if (isDrums()) { sigName = SIGS[(SIGS.indexOf(sig()) + 1) % SIGS.length].name; store.set('sig', sigName); const was = loop.on; stopLoop(); freshPattern(); if (was) startLoop(); draw(); say(sigName); return; } if (chordsOn()) { setName = SETS[(SETS.indexOf(chordSet()) + 1) % SETS.length].name; store.set('chordSet', setName); homeChord(); draw(); say(setName); setTimeout(() => demo(true), 30); return; } if (isPad()) { const names = [null, ...KEYS.map(x => x.name)]; padKeyName = names[(names.indexOf(padKey()?.name ?? null) + 1) % names.length]; store.set('padKey', padKeyName); draw(); say(padKeyName || 'Free slide'); setTimeout(() => demo(true), 30); return; } if (isStrings()) { const list = sound().tunings; tuningPicks[sound().name] = list[(list.indexOf(tuning()) + 1) % list.length].name; store.set('tunings', tuningPicks); draw(); say(tuning().name); setTimeout(() => demo(true), 30); return; } if (instrument().keys) { setMusicalKey(KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name); draw(); say(musicalKey().name); setTimeout(() => demo(true), 30); } };
+  window.nextMusicalKey = () => { if (isDrums()) { sigName = SIGS[(SIGS.indexOf(sig()) + 1) % SIGS.length].name; store.set('sig', sigName); const was = loop.on; stopLoop(); clearAllTracks(); if (was) startLoop(); draw(); say(sigName); return; } if (chordsOn()) { setName = SETS[(SETS.indexOf(chordSet()) + 1) % SETS.length].name; store.set('chordSet', setName); homeChord(); draw(); say(setName); setTimeout(() => demo(true), 30); return; } if (isPad()) { const names = [null, ...KEYS.map(x => x.name)]; padKeyName = names[(names.indexOf(padKey()?.name ?? null) + 1) % names.length]; store.set('padKey', padKeyName); draw(); say(padKeyName || 'Free slide'); setTimeout(() => demo(true), 30); return; } if (isStrings()) { const list = sound().tunings; tuningPicks[sound().name] = list[(list.indexOf(tuning()) + 1) % list.length].name; store.set('tunings', tuningPicks); draw(); say(tuning().name); setTimeout(() => demo(true), 30); return; } if (instrument().keys) { setMusicalKey(KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name); draw(); say(musicalKey().name); setTimeout(() => demo(true), 30); } };
   window.keyLetterOn = () => !!instrument().keys || isDrums();
   window.letterMenu = kind => {                           // the lists behind the s, e and c letters
     const after = (text, quick = true) => { draw(); say(text); setTimeout(() => demo(quick), 30); };
     if (kind === 'instrument') { const ready = instruments.filter(x => !x.soon); return { items: ready.map(x => x.name), current: ready.indexOf(instrument()), pick: i => { instrumentName = ready[i].name; store.set('instrument', instrumentName); after(instrumentName, false); } }; }
     if (kind === 'sound') { const list = soundList(); return { items: list.map(x => x.name), current: list.indexOf(sound()), pick: i => { pick(list[i].name); after(list[i].name); } }; }
-    if (isDrums()) return { items: SIGS.map(x => x.name), current: SIGS.indexOf(sig()), pick: i => { sigName = SIGS[i].name; store.set('sig', sigName); const was = loop.on; stopLoop(); freshPattern(); if (was) startLoop(); draw(); say(sigName); } };
+    if (isDrums()) return { items: SIGS.map(x => x.name), current: SIGS.indexOf(sig()), pick: i => { sigName = SIGS[i].name; store.set('sig', sigName); const was = loop.on; stopLoop(); clearAllTracks(); if (was) startLoop(); draw(); say(sigName); } };
     if (chordsOn()) return { items: SETS.map(x => x.name), current: SETS.indexOf(chordSet()), pick: i => { setName = SETS[i].name; store.set('chordSet', setName); homeChord(); after(setName); } };
     if (isStrings()) { const list = sound().tunings; return { items: list.map(x => x.name), current: list.indexOf(tuning()), pick: i => { tuningPicks[sound().name] = list[i].name; store.set('tunings', tuningPicks); after(list[i].name); } }; }
     if (isPad()) { const names = ['Free slide', ...KEYS.map(x => x.name)]; return { items: names, current: names.indexOf(padKeyName || 'Free slide'), pick: i => { padKeyName = i ? KEYS[i - 1].name : null; store.set('padKey', padKeyName); after(names[i]); } }; }
@@ -468,7 +520,6 @@
   document.getElementById('home-photo').parentElement.appendChild(keyLabel);
   function draw() {
     stopTheremin(); stopBlow(); keysDown.length = 0;
-    if (!isDrums()) stopLoop();
     const inst = instrument();
     const set = current();
     window.shankWind.setMode(inst.mode, modeOptions(inst, set));
@@ -484,12 +535,10 @@
     });
     $('sounds').replaceChildren(...list);
     $('boxKey').style.display = inst.keys || isDrums() ? '' : 'none';
-    if (!isDrums()) sequencerOpen = false;
-    paintStripVisible();
-    if (isDrums() && !stepEls.length) freshPattern();
+    syncSequencer();
     $('keyHead').textContent = isDrums() ? 'Time signature' : chordsOn() ? 'Key' : isStrings() ? 'Tuning' : 'Musical key';
     $('keys').replaceChildren(...(isDrums()
-      ? SIGS.map(x => row(x, x === sig(), () => { sigName = x.name; store.set('sig', x.name); const was = loop.on; stopLoop(); freshPattern(); unlock(); if (was) startLoop(); draw(); }))
+      ? SIGS.map(x => row(x, x === sig(), () => { sigName = x.name; store.set('sig', x.name); const was = loop.on; stopLoop(); clearAllTracks(); unlock(); if (was) startLoop(); draw(); }))
       : chordsOn()
       ? SETS.map(x => row(x, x === chordSet(), () => { setName = x.name; store.set('chordSet', x.name); homeChord(); unlock(); draw(); setTimeout(() => demo(true), 30); }))
       : isStrings()
@@ -500,7 +549,7 @@
     keyLabel.textContent = isDrums() ? `${sig().name} · ${bpm} BPM` : chordsOn() ? chordSet().name : isStrings() ? tuning().name : isPad() ? (padKeyName || 'Free slide') : musicalKey().name;
     keyLabel.style.display = inst.keys || isDrums() ? '' : 'none';
     document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst.keys || isDrums());
-    document.querySelectorAll('.tc-gated').forEach(el => el.classList.toggle('tc-live', isDrums()));
+    document.querySelectorAll('.tc-gated').forEach(el => el.classList.toggle('tc-live', lettersOn()));
     const lv = levels[sound().name] ?? 1;
     $('levelName').textContent = `${sound().name} level`;
     $('levelValue').textContent = lv.toFixed(2);
@@ -576,6 +625,5 @@
     addEventListener('message', onMessage);
     return true;
   };
-  paintPlayButton();
   draw();
 })();
