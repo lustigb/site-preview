@@ -11,13 +11,14 @@
 // order; all three in the wrong order (or the idle time running out) fades the keycaps and starts over. Viewing the source to read this is allowed and appreciated.
 // The end of "Sciences" has three more keys, not part of the code, held the same way: the last "s" steps to the next instrument, the last "e" to the next sound
 // for that instrument, and the second "c" to the next musical key (only pressable on keyboard instruments; otherwise it is just the code's fourth keycap).
+// On Drums, the second "c" is the time signature, the "n" before it opens and closes the loop sequencer (hold), and holding the "e" before that brings up a tempo slider (drag up or down).
 (function () {
   const h1 = document.querySelector(".home-page .hero h1");
   if (!h1 || h1.textContent.trim() !== "Brian Sciences") return;
   const CODE = ["a", "b", "c1"], HOLD_MS = 450, WINDOW_MS = 5000;   // idle time allowed between letters (paused while a letter is being held)
   const AUTO = "c2";                                  // the second c: not part of the code; fills in by itself on success
-  const KEYS = { 0: "b", 3: "a", 7: "c1", 11: "c2", 12: "fx", 13: "snd" }; // B(0) r i a(3) n _ S c(7) i e n c(11) e(12) s(13)
-  const ACTIONS = { snd: "nextInstrument", fx: "nextSound", c2: "nextMusicalKey" };   // the keys that do something on the spot
+  const KEYS = { 0: "b", 3: "a", 7: "c1", 9: "tap", 10: "loop", 11: "c2", 12: "fx", 13: "snd" }; // B(0) r i a(3) n _ S c(7) i e(9) n(10) c(11) e(12) s(13)
+  const ACTIONS = { snd: "nextInstrument", fx: "nextSound", c2: "nextMusicalKey", loop: "toggleLoop" };   // the keys that do something on the spot
   const text = h1.textContent;
   h1.setAttribute("aria-label", text);
   h1.textContent = "";
@@ -25,7 +26,7 @@
     const s = document.createElement("span");
     s.textContent = ch; s.setAttribute("aria-hidden", "true");
     if (KEYS[i]) {
-      s.dataset.k = KEYS[i]; s.className = KEYS[i] === AUTO ? "tc-key tc-auto" : KEYS[i] === "snd" ? "tc-key tc-snd" : KEYS[i] === "fx" ? "tc-key tc-fx" : "tc-key";
+      s.dataset.k = KEYS[i]; s.className = KEYS[i] === AUTO ? "tc-key tc-auto" : KEYS[i] === "snd" ? "tc-key tc-snd" : KEYS[i] === "fx" ? "tc-key tc-fx" : KEYS[i] === "tap" || KEYS[i] === "loop" ? "tc-key tc-gated" : "tc-key";
       // keycap outline: one rounded square, drawn side by side (top, right, bottom, left) as the hold progresses
       s.insertAdjacentHTML("beforeend", '<svg class="tc-box" aria-hidden="true"><path/></svg>');   // sized in layoutBoxes()
     }
@@ -34,7 +35,7 @@
   const st = document.createElement("style");
   st.textContent = `.home-page .hero h1{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
     .tc-key{display:inline-block;position:relative;transform-origin:50% 90%;transition:color .6s ease, transform .15s ease}
-    .tc-key:not(.tc-auto)::before,.tc-auto.tc-live::before{content:"";position:absolute;inset:-14px -9px -18px}   /* bigger target for a finger */
+    .tc-key:not(.tc-auto):not(.tc-gated)::before,.tc-auto.tc-live::before,.tc-gated.tc-live::before{content:"";position:absolute;inset:-14px -9px -18px}   /* bigger target for a finger */
     .tc-key.tc-holding{transform:scale(1.3);z-index:2}                                    /* magnified while held */
     .tc-box{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
     .tc-box path{fill:transparent;stroke:var(--ink,#1a1f1c);stroke-width:2.5px;stroke-linecap:round;stroke-linejoin:round;
@@ -52,8 +53,8 @@
   document.head.appendChild(st);
 
   const keyLetterOn = () => !!window.keyLetterOn?.();  // is the second c pressable right now?
-  const keys = [...h1.querySelectorAll(".tc-key:not(.tc-snd):not(.tc-fx)")];   // the code's four keycaps (traces, clearing)
-  const extras = [h1.querySelector(".tc-snd"), h1.querySelector(".tc-fx")];   // same look and hold, their own jobs
+  const keys = [...h1.querySelectorAll(".tc-key:not(.tc-snd):not(.tc-fx):not(.tc-gated)")];   // the code's four keycaps (traces, clearing)
+  const extras = [...h1.querySelectorAll(".tc-snd, .tc-fx, .tc-gated")];   // same look and hold, their own jobs
   const auto = keys.find(k => k.dataset.k === AUTO);
   // Size each keycap outline in real pixels around its letter (dash lengths are measured in screen units),
   // starting at the top-left so the sides appear in order: top, right, bottom, left.
@@ -87,7 +88,7 @@
   function reset() { got = []; clearTimeout(windowTimer); windowTimer = null; clearTints(); }
 
   // hover hint: one small nudge on mouse-enter (not while holding)
-  [...keys, ...extras].forEach(k => k.addEventListener("pointerenter", e => { if (e.pointerType === "mouse" && !hold && (k !== auto || keyLetterOn())) anim(k, "tc-nudge"); }));
+  [...keys, ...extras].forEach(k => k.addEventListener("pointerenter", e => { if (e.pointerType === "mouse" && !hold && (k !== auto || keyLetterOn()) && (!k.classList.contains("tc-gated") || window.drumLettersOn?.())) anim(k, "tc-nudge"); }));
 
   // Any of the four letters can be locked in, in any order; each stays a keycap until the 30 s window
   // (from the first one) runs out. Only once all four are in is the order judged: right order -> the
@@ -209,8 +210,20 @@
     hold = null;
   }
   h1.addEventListener("contextmenu", e => e.preventDefault());
+  let tempoDrag = null;
+  h1.addEventListener("pointermove", e => { if (e.pointerId === tempoDrag) window.tempoSliderMove?.(e.clientY); });
+  ["pointerup", "pointercancel"].forEach(ev => h1.addEventListener(ev, e => { if (e.pointerId === tempoDrag) { tempoDrag = null; window.tempoSliderEnd?.(); } }));
   h1.addEventListener("pointerdown", e => {
     const el = e.target.closest(".tc-key"); if (!el || (el === auto && !keyLetterOn()) || playing || el.classList.contains("tc-in")) return;
+    if (el.classList.contains("tc-gated") && !window.drumLettersOn?.()) return;   // these two only work on Drums
+    if (el.dataset.k === "tap") {                       // press and hold: a tempo slider appears; drag up or down
+      window.unlockEggAudio?.();
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* it will just stop if the finger leaves the letter */ }
+      el.style.touchAction = "none";
+      tempoDrag = e.pointerId;
+      window.tempoSliderStart?.(e.clientY, el);
+      return;
+    }
     window.unlockEggAudio?.();                        // a real tap: let an egg with music play sound later
     endHold();
     clearTimeout(windowTimer); windowTimer = null;   // the window only counts idle time: paused while holding

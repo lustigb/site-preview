@@ -10,7 +10,9 @@
 // 'pad' mode: the shanks leave their places and form a grid (odd shanks upright, even shanks across), a tracking target follows the pointer, and window.shankPad(phase, x, y) reports it (x, y = 0..1).
 // setMode('keys', { layout: 'piano' }): the shanks become a keyboard: seven key dividers and a rail, the white gaps are the 8 white keys (k = 1..8), and stretched shank pieces are 5 black keys (k = 9..13).
 // setMode('strings', { count, ring, hoverStrum }): that many shanks become strings; two more become the nut and bridge and any others lift away. Grab a string and pull it, or sweep across several. window.shankString(i, strength) reports a pluck (i = 1..count, strength = 0..1).
-// shankWind.setMode('wind' | 'keys' | 'pad' | 'strings') picks how the shanks are played. 'keys': each shank is a key; press one (or drag across them) and it dips
+// setMode('blow', { style: 'pipes' | 'tube', thick, valves }): the shanks form pipes or a tube with eight finger holes; press and hold to blow, slide to change note, height is breath. window.shankBlow(phase, k, breath) reports it.
+// setMode('pads', { padNames, padKeys }): the shanks frame eight drum pads; tapping one calls window.shankDrum(i, strength).
+// shankWind.setMode('wind' | 'keys' | 'pad' | 'strings' | 'blow' | 'pads') picks how the shanks are played. 'keys': each shank is a key; press one (or drag across them) and it dips
 // down and springs back. homeeggs.js picks the sound (window.shankSwing).
 (function () {
   const photo = document.getElementById('home-photo');
@@ -62,7 +64,7 @@
   const osc = SHANKS.map(() => ({ a: 0, v: 0, d: 0, dv: 0, down: false }));   // a, v: sideways swing; d, dv: how far it is pressed down, as a key
   let on = false, last = 0, still = 0, prev = null, trail = [], paused = false, mode = 'wind';
   const held = new Map();                                   // pointer id -> the shank it is pressing (several fingers at once are fine)
-  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null, count: 6, ring: 1.1, hoverStrum: true, guides: null, chords: null, chordOn: -1, chordKeys: null };
+  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null, count: 6, ring: 1.1, hoverStrum: true, guides: null, chords: null, chordOn: -1, chordKeys: null, style: 'tube', thick: 110, valves: false, blowKeys: null, blowNotes: null, padNames: null, padKeys: null };
   let opts = { ...DEFAULTS };                               // see setMode
   const TIP_X = SHANKS.map((sh, i) => onShank(i + 1, sh.tip)), BOUNCE = 0.45;
   const touched = SHANKS.map(() => 0);
@@ -87,6 +89,21 @@
     return held + st.amp * Math.sin(Math.PI * u) * Math.sin(st.phase);
   }
   function gridPoint(k, y, lay = layout) {                  // where a point on this shank sits in that layout (photo px)
+    if (lay === 'pads') {                                   // three dividers up, one across, and the four edges of the frame: eight pads
+      const u = (y + SOLO_TOP) / (SHANKS[k - 1].tip + SOLO_TOP), j = padJolt * Math.sin(k * 2.3 + performance.now() / 22);
+      if (k <= 3) return [187.5 * k + j, -10 + u * 1020];
+      if (k === 4) return [-20 + u * 790, 500 + j];
+      if (k === 5) return [-20 + u * 790, 8];
+      if (k === 6) return [-20 + u * 790, 992];
+      return [k === 7 ? 8 : 742, -10 + u * 1020];
+    }
+    if (lay && lay.startsWith('blow-')) {                   // 'blow-pipes-0-0', or 'blow-tube-110-1' (thickness, valves)
+      const [, style, thick, valves] = lay.split('-'), u = (y + SOLO_TOP) / (SHANKS[k - 1].tip + SOLO_TOP), t = +thick;
+      if (style === 'pipes') return [750 * (k - 0.5) / 8, 30 + u * (940 - (k - 1) * 80)];   // pipes side by side, shorter to the right
+      if (k <= 2) return [-20 + u * 790, 500 + (k === 1 ? -t / 2 : t / 2)];   // the tube's two walls
+      if (+valves && k <= 5) return [300 + (k - 3) * 75, 500 - t / 2 - 170 + u * 170];   // three valves on top of the tube
+      return [onShank(k, y), y - 1300];                     // not needed: lifted off the top
+    }
     if (lay && lay.startsWith('strings')) {
       const n = parseInt(lay.slice(7), 10), bars = n < 8, u = (y + SOLO_TOP) / (SHANKS[k - 1].tip + SOLO_TOP), top = bars ? nutY() : -10, bottom = bars ? BRIDGE_Y : 1010;
       if (k <= n) return [stringX(k - 1, n) + stringShape(k, u) * Math.min(1, gridU * 2 - 1 > 0 ? gridU * 2 - 1 : 0), top + u * (bottom - top)];
@@ -103,6 +120,8 @@
   }
   function widthIn(lay, k) {                                // the piano's lines are thinner, and strings run thick to thin
     if (lay === 'piano') return 20;
+    if (lay === 'pads') return 20;
+    if (lay && lay.startsWith('blow-pipes')) return 62;
     if (lay && lay.startsWith('strings')) { const n = parseInt(lay.slice(7), 10); if (k <= n) return 30 - (6 + 12 * (k - 1) / Math.max(1, n - 1)); }
     return 30;
   }
@@ -158,6 +177,55 @@
       ctx.fillText(name, c.x + c.w / 2, c.y + c.h / 2 + 2);
       if (opts.chordKeys) { ctx.font = '500 22px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(opts.chordKeys[i], c.x + 11, c.y + 9); ctx.font = '600 46px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; }   // which keyboard key picks it
     });
+  }
+  const padFlash = Array(9).fill(0);
+  let padJolt = 0;                                          // the frame shudders a little on each hit
+  function drawPads(dt) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    padJolt *= Math.exp(-dt * 16);
+    for (let i = 1; i <= 8; i += 1) {
+      padFlash[i] *= Math.exp(-dt * 9);
+      const col = (i - 1) % 4, row = i > 4 ? 1 : 0, x = col * 187.5, y = row * 500, f = padFlash[i];
+      if (f > 0.02) { ctx.fillStyle = `rgba(22, 12, 118, ${0.85 * f})`; ctx.fillRect(x + 12, y + 14, 163, 472); }
+      ctx.save();
+      ctx.translate(x + 93.75, y + 250); ctx.scale(1 + 0.22 * f, 1 + 0.22 * f);
+      ctx.fillStyle = f > 0.45 ? '#fff' : 'rgb(22, 12, 118)'; ctx.font = '600 40px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if (opts.padNames) ctx.fillText(opts.padNames[i - 1], 0, 0);
+      ctx.restore();
+      if (opts.padKeys) { ctx.fillStyle = f > 0.45 ? '#fff' : '#1a1f1c'; ctx.font = '500 24px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(opts.padKeys[i - 1], x + 24, y + 26); }
+    }
+  }
+  const blow = { id: null, zone: 0, level: 0, demo: false, breath: 0.7 };
+  function drawBreathMeter() {                              // height is breath: a thin scale down the right edge, with a marker while you blow
+    const x = 742, top = 56, bottom = 944, ink = '#1a1f1c';
+    ctx.strokeStyle = 'rgba(26, 31, 28, 0.3)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    ctx.fillStyle = ink; ctx.font = '500 22px system-ui, sans-serif'; ctx.textAlign = 'right';
+    ctx.textBaseline = 'top'; ctx.fillText('loud', 746, 18);
+    ctx.textBaseline = 'bottom'; ctx.fillText('soft', 746, 984);
+    if (blow.zone) { ctx.fillStyle = 'rgb(22, 12, 118)'; ctx.beginPath(); ctx.arc(x, Math.max(top, Math.min(bottom, 1000 * (1 - blow.breath))), 14, 0, 7); ctx.fill(); }
+  }
+  function drawBlow(dt) {                                   // the note you're blowing: a faint shade on a pipe, a filled hole on a tube
+    const [, style, thick] = layout.split('-');
+    blow.level += ((blow.zone ? 1 : 0) - blow.level) * Math.min(1, dt * 16);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    const blue = 'rgb(22, 12, 118)';
+    const hint = (k, y) => { if (opts.blowKeys) { ctx.fillStyle = '#1a1f1c'; ctx.font = '500 24px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(opts.blowKeys[k - 1], (k - 0.5) * 93.75, y); } };
+    if (style === 'pipes') {
+      if (blow.zone) { ctx.fillStyle = `rgba(22, 12, 118, ${0.16 * blow.level})`; ctx.fillRect((blow.zone - 1) * 93.75, 0, 93.75, 1000); }
+      for (let k = 1; k <= 8; k += 1) { hint(k, 2); if (opts.blowNotes) { ctx.fillStyle = '#fff'; ctx.font = '700 26px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(opts.blowNotes[k - 1], (k - 0.5) * 93.75, 44); } }
+      drawBreathMeter();
+      return;
+    }
+    const r = Math.min(+thick * 0.28, 34);
+    for (let k = 1; k <= 8; k += 1) {
+      ctx.beginPath(); ctx.arc((k - 0.5) * 93.75, 500, r, 0, 7);
+      ctx.lineWidth = 5; ctx.strokeStyle = blue; ctx.stroke();
+      if (k === blow.zone) { ctx.fillStyle = blue; ctx.fill(); }
+      hint(k, 500 + +thick / 2 + 26);
+      if (opts.blowNotes) { ctx.fillStyle = k === blow.zone ? '#fff' : blue; ctx.font = `700 ${r > 26 ? 28 : 22}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(opts.blowNotes[k - 1], (k - 0.5) * 93.75, 501); }   // the note this hole plays
+    }
+    drawBreathMeter();
   }
   function drawTarget() {                                   // thin axis lines across the image and a ring at the pointer
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -245,6 +313,8 @@
     if (layout === 'piano') { blacks.forEach((b, i) => { b.x += (opts.blackAt[i] - b.x) * Math.min(1, dt * 9); }); drawPianoTop(ease(Math.max(0, (gridU - 0.6) / 0.4))); drawPianoDots(); }
     else if (fromLayout === 'piano') drawPianoTop(ease(Math.max(0, 1 - gridU / 0.4)));   // leaving the piano: the black keys melt away
     if (layout && layout.startsWith('strings')) drawChords();
+    if (layout && layout.startsWith('blow-') && gridU > 0.9) drawBlow(dt);
+    if (layout === 'pads' && gridU > 0.9) drawPads(dt);
     if (layout === 'pad' && gridU > 0.9) drawGuides();
     if (layout === 'pad' && gridU > 0.9) { pad.alpha = Math.min(1, pad.alpha + dt * 6); drawTarget(); } else pad.alpha = 0;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -273,6 +343,7 @@
   function settle() {                                       // back to the plain photo
     on = false;
     gridU = 0; layout = null; fromLayout = null; pad.alpha = 0;
+    endBlow();
     blacks.forEach((b, i) => { b.x = opts.blackAt[i]; });
     blacks.forEach(b => { b.d = 0; b.dv = 0; b.down = false; });
     if (pad.down) { pad.down = false; pad.id = null; window.shankPad?.('up', pad.x / 750, pad.y / 1000); }
@@ -296,6 +367,8 @@
     showBump(k, dir) { quietUntil = performance.now() + 700; osc[k - 1].v += dir * 300; start(); },
     showTarget(x, y, on) { pad.x = x * 750; pad.y = y * 1000; pad.demo = on; start(); },
     setChord(i) { opts.chordOn = i; },
+    showPad(i) { hitPad(i); },
+    showBlow(k, breath = 0.7) { blow.zone = k; blow.breath = breath; start(); },
     vibrate(i, strength) { if (layout && layout.startsWith('strings') && strings[i]) { strings[i].amp = Math.max(strings[i].amp, 4 + 26 * strength); start(); } },
     peek() { return osc.map(o => o.a); },                   // for test tools
     // options: collide = neighbouring tips hit each other and call window.shankTouch(k, speed); gust = how hard the mouse pushes; tight = ring once per push; touchGap = how close tips count as touching (photo px); dip = how far a key goes down (photo px); stiff = stiff at the top and whippy at the tip.
@@ -303,7 +376,8 @@
       mode = m;
       opts = { ...DEFAULTS, ...options };
       releaseAllKeys();
-      desired = m === 'pad' ? 'pad' : m === 'keys' && options.layout === 'piano' ? 'piano' : m === 'strings' ? `strings${opts.count}` : null;
+      desired = m === 'pad' ? 'pad' : m === 'keys' && options.layout === 'piano' ? 'piano' : m === 'strings' ? `strings${opts.count}` : m === 'pads' ? 'pads' : m === 'blow' ? `blow-${opts.style}-${opts.style === 'pipes' ? 0 : opts.thick}-${opts.valves ? 1 : 0}` : null;
+      endBlow();
       pointers.clear(); strings.forEach(st => { st.held = false; st.pull = 0; });
       if (desired || gridU > 0) { const go = () => { if ((desired || gridU > 0) && !start()) setTimeout(go, 200); }; go(); }   // the layout assembles or comes apart even with no input
       box.style.touchAction = m === 'wind' ? 'pan-y' : 'none';   // playing keys shouldn't scroll the page
@@ -364,12 +438,31 @@
     if (state && state.grab >= 0) pluckString(state.grab, Math.min(1, 0.35 + Math.abs(strings[state.grab].pull) / SLIP));   // let go: it rings (a plain tap is a soft pluck)
     pointers.delete(id);
   }
+  const blowReady = () => layout && layout.startsWith('blow-') && gridU > 0.9;
+  const zoneAt = p => Math.max(1, Math.min(8, Math.floor(p.x / 93.75) + 1));
+  const breathAt = p => Math.max(0, Math.min(1, 1 - p.y / 1000));
+  function hitPad(i) { padFlash[i] = 1; padJolt = 5; start(); }
+  function endBlow() { if (blow.id !== null) { blow.id = null; blow.zone = 0; window.shankBlow?.('up', 0, 0); } }
   function padEvent(phase, ev) {
     const p = toPhoto(ev);
     pad.x = Math.max(0, Math.min(750, p.x)); pad.y = Math.max(0, Math.min(1000, p.y));
     if (phase) window.shankPad?.(phase, pad.x / 750, pad.y / 1000);
   }
   box.addEventListener('pointerdown', ev => {
+    if (mode === 'pads') {
+      if (paused || layout !== 'pads' || gridU < 0.9) return;
+      const p = toPhoto(ev), i = (p.y < 500 ? 0 : 4) + Math.max(0, Math.min(3, Math.floor(p.x / 187.5))) + 1;
+      hitPad(i); window.shankDrum?.(i, 0.9);
+      return;
+    }
+    if (mode === 'blow') {
+      if (paused || blow.id !== null || !blowReady()) return;   // winds play one note at a time
+      try { box.setPointerCapture(ev.pointerId); } catch (e) { /* drags just stop at the photo's edge */ }
+      const p = toPhoto(ev);
+      blow.id = ev.pointerId; blow.zone = zoneAt(p); blow.breath = breathAt(p);
+      window.shankBlow?.('down', blow.zone, breathAt(p));
+      return;
+    }
     if (mode === 'strings') {
       if (paused || !stringsReady()) return;
       try { box.setPointerCapture(ev.pointerId); } catch (e) { /* drags just stop at the photo's edge */ }
@@ -393,10 +486,20 @@
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => box.addEventListener(type, ev => {
     if (mode === 'keys') release(ev.pointerId);
     if (mode === 'strings') stringsUp(ev.pointerId);
+    if (mode === 'blow' && ev.pointerId === blow.id) endBlow();
     if (mode === 'pad' && pad.down && ev.pointerId === pad.id) { pad.down = false; pad.id = null; padEvent('up', ev); }
   }));
   box.addEventListener('pointermove', ev => {
+    if (mode === 'pads') return;                            // drums only answer to taps
     const p = toPhoto(ev), now = performance.now();
+    if (mode === 'blow') {                                  // sliding to another hole changes the note without restarting it
+      if (ev.pointerId !== blow.id) { if (blow.id === null && ev.pointerType !== 'touch') window.shankBlowHover?.(breathAt(p)); return; }   // a mouse just moving over the image can shape the breath of a key-played note
+      const zone = zoneAt(p);
+      blow.breath = breathAt(p);
+      window.shankBlow?.(zone !== blow.zone ? 'glide' : 'breath', zone, blow.breath);
+      blow.zone = zone;
+      return;
+    }
     if (mode === 'strings') {
       if (!stringsReady()) return;
       let state = pointers.get(ev.pointerId);

@@ -14,7 +14,12 @@
   const soundList = () => instrument().sounds || window.LAB_SOUNDS;
   const sound = () => soundList().find(x => x.name === picks[instrument().name]) || soundList()[0];
   const pick = name => { picks[instrument().name] = name; store.set('picks', picks); };
-  const musicalKey = () => KEYS.find(x => x.name === keyName) || KEYS[0];
+  const windKeys = store.get('windKeys', {});             // each wind remembers its own key, starting on the one that suits it
+  const isBlow = () => instrument().mode === 'blow';
+  const musicalKey = () => KEYS.find(x => x.name === (isBlow() ? windKeys[sound().name] || sound().key : keyName)) || KEYS[0];
+  const setMusicalKey = name => { if (isBlow()) { windKeys[sound().name] = name; store.set('windKeys', windKeys); } else { keyName = name; store.set('key', name); } };
+  const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  const noteName = hz => NOTE_NAMES[((Math.round(12 * Math.log2(hz / 440)) + 69) % 12 + 12) % 12];
   // A real piano window: eight white keys from the key's home note, with the black keys wherever the real ones fall.
   const WHITE = [0, 2, 4, 5, 7, 9, 11], HAS_SHARP = [0, 2, 5, 7, 9];
   function realPiano() {
@@ -55,18 +60,20 @@
       return open * 2 ** (fret / 12);
     }
     if (realOn()) { const p = realPiano(); return p.root * 2 ** ((k <= 8 ? p.white(k - 1) : p.white(p.blackAt[k - 9] - 1) + 1) / 12); }
-    if (k > 8) return keyHz([1, 2, 4, 5, 6][k - 9]) * 2 ** (1 / 12);   // a black key: a semitone above the white key to its left
+    if (k > 8 && instrument().mode === 'keys') return keyHz([1, 2, 4, 5, 6][k - 9]) * 2 ** (1 / 12);   // a black key: a semitone above the white key to its left
     const { root, steps } = musicalKey(), i = k - 1;
     return root * 2 ** ((12 * Math.floor(i / steps.length) + steps[i % steps.length]) / 12);
   }
+  let bpm = store.get('bpm', 100);
   const settings = Object.fromEntries(Object.entries(store.get('settings-v2', {})).map(([key, value]) => [key.replace(/^Sway\//, 'Fidget/'), value]));   // the old name for Fidget
   //             // the Interaction box's choices, per instrument and sound
   const settingKey = () => `${instrument().name}/${sound().name}`;
   function current() {
     const x = sound(), touch = x.trigger === 'touch';
-    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: true, guides: true, keyed: !!padKey(), range: 3, vib: 12, shape: true, real: true, dots: true, hover: true, chords: true, canChord: !!sound().chords, ...settings[settingKey()] };
+    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: true, guides: true, keyed: !!padKey(), range: 3, vib: 12, shape: true, real: true, dots: true, hover: true, click: true, chords: true, canChord: !!sound().chords, ...settings[settingKey()], bpm };
   }
   function setSetting(id, value) {
+    if (id === 'bpm') { bpm = value; store.set('bpm', bpm); refreshDrumLabel(); return; }
     const next = { ...settings[settingKey()], [id]: value };
     if (id === 'trigger' && value === 'touch' && (current().gust < 2)) next.gust = 3;   // a gentle push rarely makes tips meet
     settings[settingKey()] = next;
@@ -169,11 +176,196 @@
     const i = CHORD_KEYS.indexOf(ev.key.toLowerCase());
     if (i >= 0) window.shankChord(i);
   });
+  // Winds: one breath at a time. A held voice whose note glides when you slide, with a little air and a tone that opens up as you blow harder.
+  let blowVoice = null;
+  const blowHz = k => keyHz(k) * 2 ** (sound().octave || 0);
+  function startBlow(k, breath) {
+    stopBlow();
+    if (!ac || ac.state !== 'running') return;
+    const x = sound(), set = current(), t = ac.currentTime, lv = levels[x.name] ?? 1, g = ac.createGain(), f = ac.createBiquadFilter(), lfo = ac.createOscillator(), depth = ac.createGain(), hz = blowHz(k);
+    f.type = 'lowpass'; f.frequency.value = hz * (x.bright * (0.45 + 0.55 * breath));
+    lfo.frequency.value = 5.2; depth.gain.setValueAtTime(0, t); depth.gain.linearRampToValueAtTime(set.vib, t + 0.5); lfo.start(t);   // vibrato eases in, as a player's does
+    const oscs = (x.section || [0]).flatMap((shift, player) => x.parts.map(([type, mul, level]) => {   // each extra player is a little late and a little out of tune, like real people
+      const o = ac.createOscillator(), l = ac.createGain();
+      o.type = type; o.frequency.value = blowHz(k + shift) * mul; o.detune.value = shift ? (player % 2 ? 7 : -6) : 0; l.gain.value = level; lfo.connect(depth).connect(o.detune);
+      o.connect(l).connect(f); o.start(t + player * 0.012);
+      return { o, mul, shift };
+    }));
+    const len = ac.sampleRate, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);   // the air
+    for (let i = 0; i < len; i += 1) d[i] = Math.random() * 2 - 1;
+    const n = ac.createBufferSource(), nf = ac.createBiquadFilter(), ng = ac.createGain();
+    n.buffer = buf; n.loop = true; nf.type = 'bandpass'; nf.frequency.value = hz * 2; nf.Q.value = 1.2; ng.gain.value = x.breath * 1.6;
+    n.connect(nf).connect(ng).connect(f); n.start(t);
+    const level = b => 0.34 * lv * (0.3 + 0.7 * b);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(level(breath), t + x.attack);
+    f.connect(g).connect(set.echo ? echoBus : custom);
+    blowVoice = { g, f, oscs, lfo, n, nf, level, x, hz };
+  }
+  function moveBlow(k, breath, glide) {
+    if (!blowVoice) return;
+    const t = ac.currentTime, v = blowVoice;
+    if (glide) { const hz = blowHz(k); v.hz = hz; v.oscs.forEach(({ o, mul, shift }) => o.frequency.setTargetAtTime(blowHz(k + shift) * mul, t, 0.022)); v.nf.frequency.setTargetAtTime(hz * 2, t, 0.03); }
+    v.g.gain.setTargetAtTime(v.level(breath), t, 0.04);
+    v.f.frequency.setTargetAtTime(v.hz * (v.x.bright * (0.45 + 0.55 * breath)), t, 0.04);
+  }
+  function stopBlow() {
+    if (!blowVoice) return;
+    const { g, oscs, lfo, n } = blowVoice, t = ac.currentTime;
+    g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05);
+    oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4); n.stop(t + 0.4);
+    blowVoice = null;
+  }
+  window.shankBlow = (phase, k, breath) => { if (phase === 'down') startBlow(k, breath); else if (phase === 'up') stopBlow(); else moveBlow(k, breath, phase === 'glide'); };
+  // The note holes on the keyboard: a s d f g h j k. The newest key held plays; lifting it falls back to the one before.
+  const BLOW_KEYS = 'asdfghjk', keysDown = [];
+  let hoverBreath = 0.7;                                  // keys play the notes while the mouse, without clicking, sets the breath
+  window.shankBlowHover = b => { hoverBreath = b; if (keysDown.length && blowVoice) { const k = keysDown[keysDown.length - 1]; moveBlow(k, b, false); window.shankWind.showBlow(k, b); } };
+  function releaseBlowKeys() { if (keysDown.length) { keysDown.length = 0; stopBlow(); window.shankWind.showBlow(0); } }
+  addEventListener('keydown', ev => {
+    if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey || instrument().mode !== 'blow') return;
+    const k = BLOW_KEYS.indexOf(ev.key.toLowerCase()) + 1;
+    if (!k) return;
+    keysDown.push(k);
+    if (blowVoice) moveBlow(k, hoverBreath, true); else startBlow(k, hoverBreath);
+    window.shankWind.showBlow(k, hoverBreath);
+  });
+  addEventListener('keyup', ev => {
+    const k = BLOW_KEYS.indexOf(ev.key.toLowerCase()) + 1, i = keysDown.lastIndexOf(k);
+    if (!k || i < 0) return;
+    keysDown.splice(i, 1);
+    if (!keysDown.length) { stopBlow(); window.shankWind.showBlow(0); return; }
+    const last = keysDown[keysDown.length - 1];
+    moveBlow(last, hoverBreath, true); window.shankWind.showBlow(last, hoverBreath);
+  });
+  addEventListener('blur', releaseBlowKeys);
+  // The drum loop: a bar that repeats. Pads played while it runs snap to the nearest step and join it.
+  const SIGS = [{ name: '4/4', steps: 16, beat: 4, perBeat: 4 }, { name: '3/4', steps: 12, beat: 4, perBeat: 4 }, { name: '6/8', steps: 12, beat: 6, perBeat: 6 }, { name: '5/4', steps: 20, beat: 4, perBeat: 4 }];
+  let sigName = store.get('sig', SIGS[0].name);
+  const sig = () => SIGS.find(x => x.name === sigName) || SIGS[0];
+  const stepSec = () => 60 / bpm / sig().perBeat;
+  const loop = { on: false, pattern: [], skip: [], nextAbs: 0, nextTime: 0, timer: null };
+  const isDrums = () => instrument().mode === 'pads';
+  window.drumLettersOn = isDrums;
+  function refreshDrumLabel() { if (isDrums()) keyLabel.textContent = `${sig().name} · ${bpm} BPM`; }
+  function metronome(t, strong) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square'; o.frequency.value = strong ? 1650 : 1100;
+    g.gain.setValueAtTime(strong ? 0.13 : 0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    o.connect(g).connect(custom); o.start(t); o.stop(t + 0.04);
+  }
+  function runStep(step, delay) {
+    const { pattern, skip } = loop;
+    if (current().click && step % sig().beat === 0) metronome(ac.currentTime + delay, step === 0);
+    pattern[step].forEach(i => {
+      if (skip[step].has(i)) { skip[step].delete(i); return; }   // you just played this one yourself
+      hit(i, 0.85, delay); setTimeout(() => { if (loop.on) window.shankWind.showPad(i); }, delay * 1000);
+    });
+    setTimeout(() => { if (loop.on) setPlayhead(step); }, delay * 1000);
+  }
+  function schedule() {
+    while (loop.nextTime < ac.currentTime + 0.12) {
+      runStep(loop.nextAbs % sig().steps, Math.max(0, loop.nextTime - ac.currentTime));
+      loop.nextTime += stepSec(); loop.nextAbs += 1;
+    }
+  }
+  function freshPattern() { const n = sig().steps; loop.pattern = Array.from({ length: n }, () => new Set()); loop.skip = Array.from({ length: n }, () => new Set()); buildStrip(); }
+  function startLoop() {
+    if (!ac || ac.state !== 'running') return false;
+    Object.assign(loop, { on: true, nextAbs: 0, nextTime: ac.currentTime + 0.1 });
+    loop.timer = setInterval(schedule, 25);
+    paintPlayButton();
+    return true;
+  }
+  function stopLoop() {                                   // pause: the beat stays
+    if (!loop.on) return;
+    clearInterval(loop.timer); loop.on = false; setPlayhead(-1); paintPlayButton();
+  }
+  function recordHit(i) {
+    if (!loop.on) return;
+    const n = Math.round(loop.nextAbs - (loop.nextTime - ac.currentTime) / stepSec()), steps = sig().steps, step = ((n % steps) + steps) % steps;
+    loop.pattern[step].add(i); paintStep(step);
+    if (n >= loop.nextAbs) loop.skip[step].add(i);       // snapped forward: don't play it a second time in this pass
+  }
+  // The sequencer strip sits on the line under the title: play/pause, the steps, Clear. Tap a step to delete what's on it.
+  const strip = document.createElement('div');
+  strip.style.cssText = 'position:absolute; left:0; right:40px; bottom:-15px; height:30px; display:none; align-items:center; gap:6px; z-index:3;';
+  const stripButton = 'border:0; background:var(--bg, #f3f5f0); color:rgb(22, 12, 118); padding:0; cursor:pointer; font:600 12px/1 var(--font-ui, system-ui, sans-serif); display:flex; align-items:center; justify-content:center; height:30px;';
+  const playBtn = document.createElement('button'), clearBtn = document.createElement('button'), stepsBox = document.createElement('div');
+  playBtn.type = clearBtn.type = 'button';
+  playBtn.style.cssText = stripButton + 'width:30px; flex:none;';
+  clearBtn.style.cssText = stripButton + 'padding:0 6px; flex:none;';
+  clearBtn.textContent = 'Clear';
+  stepsBox.style.cssText = 'flex:1; display:flex; height:30px; min-width:0;';
+  strip.append(playBtn, stepsBox, clearBtn);
+  document.querySelector('.hero').appendChild(strip);
+  function paintPlayButton() { playBtn.setAttribute('aria-label', loop.on ? 'Pause' : 'Play'); playBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">${loop.on ? '<rect x="3" y="2" width="3.6" height="12"/><rect x="9.4" y="2" width="3.6" height="12"/>' : '<path d="M4 2l10 6-10 6z"/>'}</svg>`; }
+  let stepEls = [];
+  function buildStrip() {
+    stepEls = loop.pattern.map((_, step) => {
+      const b = document.createElement('button'), big = step % sig().beat === 0;
+      b.type = 'button'; b.setAttribute('aria-label', `Step ${step + 1}`);
+      b.style.cssText = 'flex:1; min-width:0; height:30px; border:0; background:transparent; padding:0; position:relative; cursor:pointer;';
+      b.innerHTML = `<span class="t" style="position:absolute; left:50%; top:50%; width:${big ? 2 : 1}px; height:${big ? 22 : 12}px; margin:${big ? -11 : -6}px 0 0 -1px; background:rgb(22, 12, 118); opacity:.6;"></span><span class="d" style="position:absolute; left:50%; top:50%; width:11px; height:11px; margin:-5.5px 0 0 -5.5px; border-radius:50%; background:rgb(22, 12, 118); display:none;"></span>`;
+      b.addEventListener('click', () => { loop.pattern[step].clear(); loop.skip[step].clear(); paintStep(step); });
+      stepsBox.appendChild(b);
+      return b;
+    });
+    stepsBox.replaceChildren(...stepEls);
+  }
+  const paintStep = step => { stepEls[step].querySelector('.d').style.display = loop.pattern[step].size ? 'block' : 'none'; };
+  let playheadAt = -1;
+  function setPlayhead(step) {
+    if (playheadAt >= 0 && stepEls[playheadAt]) { const t = stepEls[playheadAt].querySelector('.t'); t.style.opacity = '.6'; t.style.background = 'rgb(22, 12, 118)'; t.style.transform = ''; }
+    playheadAt = step;
+    if (step >= 0 && stepEls[step]) { const t = stepEls[step].querySelector('.t'); t.style.opacity = '1'; t.style.background = '#1a1f1c'; t.style.transform = 'scaleX(2) scaleY(1.3)'; }
+  }
+  playBtn.addEventListener('click', () => togglePlay());
+  clearBtn.addEventListener('click', () => { loop.pattern.forEach((set, i) => { set.clear(); loop.skip[i].clear(); paintStep(i); }); say('Cleared'); });
+  const playPad = (i, strength) => { hit(i, strength); recordHit(i); };
+  let sequencerOpen = false;
+  function paintStripVisible() { strip.style.display = isDrums() && sequencerOpen ? 'flex' : 'none'; }
+  window.toggleLoop = () => { if (!isDrums()) return; unlock(); sequencerOpen = !sequencerOpen; if (!sequencerOpen) stopLoop(); paintStripVisible(); };   // n opens and closes the sequencer; closing it pauses the beat
+  const togglePlay = () => { unlock(); if (loop.on) stopLoop(); else startLoop(); };
+  // Tempo: hold the e before the n, and a slider appears above it; drag up for faster, down for slower.
+  const BPM_MIN = 50, BPM_MAX = 220, TRACK = 150;
+  const tempoBox = document.createElement('div');
+  tempoBox.style.cssText = 'position:fixed; z-index:50; display:none; width:64px; height:204px; box-sizing:border-box; padding:8px 0; border-radius:12px; background:#fff; border:1px solid var(--line, #cfd6cb); box-shadow:0 2px 10px rgba(0,0,0,.18); text-align:center; font:600 15px/1.2 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); -webkit-user-select:none; user-select:none; pointer-events:none;';
+  tempoBox.innerHTML = `<div class="v"></div><div style="position:relative; width:6px; height:${TRACK}px; margin:8px auto 0; border-radius:3px; background:#dfe3dd;"><div class="k" style="position:absolute; left:50%; width:24px; height:24px; margin:-12px 0 0 -12px; border-radius:50%; background:rgb(22, 12, 118);"></div></div>`;
+  document.body.appendChild(tempoBox);
+  const tempoDrag = { y: 0, bpm: 0 };
+  function paintTempo() {
+    tempoBox.querySelector('.v').textContent = bpm;
+    tempoBox.querySelector('.k').style.top = `${TRACK * (1 - (bpm - BPM_MIN) / (BPM_MAX - BPM_MIN))}px`;
+  }
+  window.tempoSliderStart = (y, el) => {
+    const r = el.getBoundingClientRect();
+    tempoDrag.y = y; tempoDrag.bpm = bpm;
+    tempoBox.style.left = `${r.left + r.width / 2 - 32}px`; tempoBox.style.top = `${Math.max(8, r.top - 214)}px`; tempoBox.style.display = 'block';
+    paintTempo();
+  };
+  window.tempoSliderMove = y => {
+    bpm = Math.round(Math.max(BPM_MIN, Math.min(BPM_MAX, tempoDrag.bpm + (tempoDrag.y - y) * (BPM_MAX - BPM_MIN) / TRACK)));
+    store.set('bpm', bpm); paintTempo(); refreshDrumLabel();
+    const tempoRow = [...$('controls').querySelectorAll('.ctl')].find(c => c.textContent.startsWith('Tempo'));
+    if (tempoRow) { tempoRow.querySelector('span').textContent = bpm; tempoRow.querySelector('input').value = bpm; }
+  };
+  window.tempoSliderEnd = () => { tempoBox.style.display = 'none'; say(`${bpm} BPM`); };
+  function nudgeTempo(by) { bpm = Math.max(BPM_MIN, Math.min(BPM_MAX, bpm + by)); store.set('bpm', bpm); refreshDrumLabel(); say(`${bpm} BPM`); }
+  window.shankDrum = (i, strength) => playPad(i, strength);
+  addEventListener('keydown', ev => {                     // the pads on the keyboard: top row q w e r, bottom row a s d f; up and down arrows change the tempo; n opens the sequencer and space plays or pauses it
+    if (ev.metaKey || ev.ctrlKey || ev.altKey || !isDrums() || (ev.repeat && !ev.key.startsWith("Arrow"))) return;
+    const key = ev.key.toLowerCase(), i = 'qwerasdf'.indexOf(key) + 1;
+    if (i) { window.shankWind.showPad(i); playPad(i, 0.9); }
+    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); nudgeTempo(ev.key === 'ArrowUp' ? 2 : -2); }
+    if (key === 'n') window.toggleLoop();
+    if (key === ' ' && sequencerOpen) { ev.preventDefault(); togglePlay(); }
+  });
   window.shankPad = (phase, x, y) => { if (phase === 'down') startTheremin(x, y); else if (phase === 'move') moveTheremin(x, y); else stopTheremin(); };
 
   // The little demo after a change: once the shanks have finished moving, a few notes are played on the new layout, and you see them played.
   let demoRun = 0, demoNotes = [];
   function demo(quick = false) {                          // quick: changing sound, key or tuning, so it's shorter and cut off sooner
+    if (loop.on) return;                                  // the loop is the demo
     const run = ++demoRun, later = (ms, fn) => setTimeout(() => { if (run === demoRun) fn(); }, ms), g = quick ? 0.55 : 1;
     demoNotes.forEach(n => n?.release?.()); demoNotes = [];   // a new demo cuts off the last one
     const keep = n => { demoNotes.push(n); return n; };
@@ -181,7 +373,12 @@
       if (run !== demoRun) return;
       const inst = instrument(), wind = window.shankWind;
       if (quick) later(720, () => { demoNotes.forEach(n => n?.release?.()); demoNotes = []; });
-      if (inst.mode === 'strings') {                      // a strum, low to high
+      if (inst.mode === 'pads') {                         // a little beat: kick, hat, snare, hat
+        [1, 3, 2, 3].forEach((i, n) => later(n * 170 * g, () => { wind.showPad(i); hit(i, 0.85); }));
+      } else if (inst.mode === 'blow') {                  // a little tune, sliding from note to note
+        [1, 3, 5, 8].forEach((k, i) => later(i * 190 * g, () => { wind.showBlow(k); if (i) moveBlow(k, 0.7, true); else startBlow(k, 0.7); }));
+        later(4 * 190 * g, () => { stopBlow(); wind.showBlow(0); });
+      } else if (inst.mode === 'strings') {               // a strum, low to high
         for (let i = 0; i < sound().count; i += 1) later(i * 60 * g, () => { wind.vibrate(i, 0.6); keep(hit(i + 1, 0.7)); });
       } else if (inst.mode === 'pad') {                   // the target glides up the pitch
         wind.showTarget(0.2, 0.3, true); startTheremin(0.2, 0.3);
@@ -212,8 +409,8 @@
   }
   window.unlockEggAudio = unlock;                         // the title's clickable letters (site/js/titlecode.js) work here too, and the last s steps through the instruments
   window.nextSound = () => { const list = soundList(); pick(list[(list.indexOf(sound()) + 1) % list.length].name); draw(); say(sound().name); setTimeout(() => demo(true), 30); };
-  window.nextMusicalKey = () => { if (chordsOn()) { setName = SETS[(SETS.indexOf(chordSet()) + 1) % SETS.length].name; store.set('chordSet', setName); homeChord(); draw(); say(setName); setTimeout(() => demo(true), 30); return; } if (isPad()) { const names = [null, ...KEYS.map(x => x.name)]; padKeyName = names[(names.indexOf(padKey()?.name ?? null) + 1) % names.length]; store.set('padKey', padKeyName); draw(); say(padKeyName || 'Free slide'); setTimeout(() => demo(true), 30); return; } if (isStrings()) { const list = sound().tunings; tuningPicks[sound().name] = list[(list.indexOf(tuning()) + 1) % list.length].name; store.set('tunings', tuningPicks); draw(); say(tuning().name); setTimeout(() => demo(true), 30); return; } if (instrument().keys) { keyName = KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name; store.set('key', keyName); draw(); say(musicalKey().name); setTimeout(() => demo(true), 30); } };
-  window.keyLetterOn = () => !!instrument().keys;
+  window.nextMusicalKey = () => { if (isDrums()) { sigName = SIGS[(SIGS.indexOf(sig()) + 1) % SIGS.length].name; store.set('sig', sigName); const was = loop.on; stopLoop(); freshPattern(); if (was) startLoop(); draw(); say(sigName); return; } if (chordsOn()) { setName = SETS[(SETS.indexOf(chordSet()) + 1) % SETS.length].name; store.set('chordSet', setName); homeChord(); draw(); say(setName); setTimeout(() => demo(true), 30); return; } if (isPad()) { const names = [null, ...KEYS.map(x => x.name)]; padKeyName = names[(names.indexOf(padKey()?.name ?? null) + 1) % names.length]; store.set('padKey', padKeyName); draw(); say(padKeyName || 'Free slide'); setTimeout(() => demo(true), 30); return; } if (isStrings()) { const list = sound().tunings; tuningPicks[sound().name] = list[(list.indexOf(tuning()) + 1) % list.length].name; store.set('tunings', tuningPicks); draw(); say(tuning().name); setTimeout(() => demo(true), 30); return; } if (instrument().keys) { setMusicalKey(KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name); draw(); say(musicalKey().name); setTimeout(() => demo(true), 30); } };
+  window.keyLetterOn = () => !!instrument().keys || isDrums();
   window.nextInstrument = () => {
     const ready = instruments.filter(x => !x.soon);
     instrumentName = ready[(ready.indexOf(instrument()) + 1) % ready.length].name;
@@ -230,7 +427,7 @@
     b.addEventListener('click', click);
     return b;
   }
-  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}), ...(inst.mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: !!v.hover, chords: sound().chords && v.chords ? chordSet().chords.map(c => c.name) : null, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {}), ...(inst.mode === 'pad' && padKey() && v.guides ? { guides: noteGuides(padKey(), v.range) } : {}) }; };
+  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}), ...(inst.mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: !!v.hover, chords: sound().chords && v.chords ? chordSet().chords.map(c => c.name) : null, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {}), ...(inst.mode === 'pads' ? { padNames: ['Kick', 'Snare', 'Hat', 'Open hat', 'Clap', 'Tom', 'Low tom', 'Crash'], padKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {}), ...(inst.mode === 'blow' ? { style: sound().style, thick: sound().thick || 110, valves: !!sound().valves, blowKeys: matchMedia('(hover: hover)').matches ? 'ASDFGHJK' : null, blowNotes: Array.from({ length: 8 }, (_, i) => noteName(keyHz(i + 1))) } : {}), ...(inst.mode === 'pad' && padKey() && v.guides ? { guides: noteGuides(padKey(), v.range) } : {}) }; };
   function drawControls(inst, set) {
     const nodes = (inst.controls || []).filter(c => !c.only || c.only(set)).map(c => {
       const box = document.createElement('div'); box.className = 'ctl';
@@ -260,7 +457,8 @@
   keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   document.getElementById('home-photo').parentElement.appendChild(keyLabel);
   function draw() {
-    stopTheremin();
+    stopTheremin(); stopBlow(); keysDown.length = 0;
+    if (!isDrums()) stopLoop();
     const inst = instrument();
     const set = current();
     window.shankWind.setMode(inst.mode, modeOptions(inst, set));
@@ -275,18 +473,24 @@
       list.push(row(x, x === sound(), () => { pick(x.name); unlock(); draw(); setTimeout(() => demo(true), 30); }));
     });
     $('sounds').replaceChildren(...list);
-    $('boxKey').style.display = inst.keys ? '' : 'none';
-    $('keyHead').textContent = chordsOn() ? 'Key' : isStrings() ? 'Tuning' : 'Musical key';
-    $('keys').replaceChildren(...(chordsOn()
+    $('boxKey').style.display = inst.keys || isDrums() ? '' : 'none';
+    if (!isDrums()) sequencerOpen = false;
+    paintStripVisible();
+    if (isDrums() && !stepEls.length) freshPattern();
+    $('keyHead').textContent = isDrums() ? 'Time signature' : chordsOn() ? 'Key' : isStrings() ? 'Tuning' : 'Musical key';
+    $('keys').replaceChildren(...(isDrums()
+      ? SIGS.map(x => row(x, x === sig(), () => { sigName = x.name; store.set('sig', x.name); const was = loop.on; stopLoop(); freshPattern(); unlock(); if (was) startLoop(); draw(); }))
+      : chordsOn()
       ? SETS.map(x => row(x, x === chordSet(), () => { setName = x.name; store.set('chordSet', x.name); homeChord(); unlock(); draw(); setTimeout(() => demo(true), 30); }))
       : isStrings()
       ? sound().tunings.map(x => row(x, x === tuning(), () => { tuningPicks[sound().name] = x.name; store.set('tunings', tuningPicks); unlock(); draw(); setTimeout(() => demo(true), 30); }))
       : isPad()
         ? [{ name: 'Free slide' }, ...KEYS].map(x => row(x, x.name === (padKeyName || 'Free slide'), () => { padKeyName = x.name === 'Free slide' ? null : x.name; store.set('padKey', padKeyName); unlock(); draw(); setTimeout(() => demo(true), 30); }))
-        : KEYS.map(x => row(x, x === musicalKey(), () => { keyName = x.name; store.set('key', x.name); unlock(); draw(); setTimeout(() => demo(true), 30); }))));
-    keyLabel.textContent = chordsOn() ? chordSet().name : isStrings() ? tuning().name : isPad() ? (padKeyName || 'Free slide') : musicalKey().name;
-    keyLabel.style.display = inst.keys ? '' : 'none';
-    document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst.keys);
+        : KEYS.map(x => row(x, x === musicalKey(), () => { setMusicalKey(x.name); unlock(); draw(); setTimeout(() => demo(true), 30); }))));
+    keyLabel.textContent = isDrums() ? `${sig().name} · ${bpm} BPM` : chordsOn() ? chordSet().name : isStrings() ? tuning().name : isPad() ? (padKeyName || 'Free slide') : musicalKey().name;
+    keyLabel.style.display = inst.keys || isDrums() ? '' : 'none';
+    document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst.keys || isDrums());
+    document.querySelectorAll('.tc-gated').forEach(el => el.classList.toggle('tc-live', isDrums()));
     const lv = levels[sound().name] ?? 1;
     $('levelName').textContent = `${sound().name} level`;
     $('levelValue').textContent = lv.toFixed(2);
@@ -331,5 +535,37 @@
     if (d.id in openBoxes) d.open = openBoxes[d.id];
     d.addEventListener('toggle', () => { openBoxes[d.id] = d.open; store.set('open', openBoxes); });
   });
+  // The secret code works here too: a, b, then the first c plays a random egg over the photo, the same way the home page does.
+  let eggBusy = false;
+  window.playRandomEgg = name => {
+    if (eggBusy) return false;
+    eggBusy = true;
+    unlock(); stopLoop(); stopBlow(); stopTheremin();
+    window.shankWind.pause();
+    const box = document.getElementById('home-photo').parentElement, frame = document.createElement('iframe');
+    frame.src = 'egglab/index.html?player=1'; frame.title = 'Easter egg';
+    frame.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; border:0; opacity:0; pointer-events:none; background:transparent; z-index:4;';
+    box.appendChild(frame);
+    let safety = setTimeout(done, 15000);
+    function done() {
+      clearTimeout(safety); removeEventListener('message', onMessage); frame.remove();
+      eggBusy = false; window.shankWind.resume();
+      dispatchEvent(new Event('homeegg-done'));
+    }
+    function onMessage(ev) {
+      if (ev.source !== frame.contentWindow) return;
+      const m = ev.data || {};
+      if (m.type === 'egglab-ready') { frame.style.opacity = 1; frame.contentWindow.postMessage({ type: 'egglab-play', name }, '*'); }
+      else if (m.type === 'egglab-playing') {
+        say(`🥚 Secret egg ${m.number} of ${m.total}`);
+        if (ac && m.name === 'pixelRoll' && window.PixelRoll) window.PixelRoll.playMusic(ac, ac.currentTime + window.PixelRoll.IN, master);
+        if (ac && m.sfx) window.EggSfx.play(ac, m.sfx, master);
+        clearTimeout(safety); safety = setTimeout(done, m.ms + 5000);
+      } else if (m.type === 'egglab-done') done();
+    }
+    addEventListener('message', onMessage);
+    return true;
+  };
+  paintPlayButton();
   draw();
 })();

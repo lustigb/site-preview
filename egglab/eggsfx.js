@@ -6,7 +6,7 @@
 //                                 'slide' (dur, f0, f1 in Hz), 'aah' (dur), 'splat', 'thud', 'tada', 'tweet', 'shuffle', 'creak' (dur), 'blip', 'chime' (hz, optional ring = how long it lasts, 1 = normal), 'harp' (hz), 'swish', 'comb' (dur), 'purr' (dur, phase, cycles), 'meow' (dur), 'yay' (dur), 'snap', 'wobble' (dur, rise), 'rewind' (dur),
 //                                 'flop', 'manHum' (dur, notes in Hz), 'paper' (dur, density = crackles per second, hz), 'bubble' (hz, glide = pitch ratio over the bubble),
 //                                 'clicks' (dur, list = [[position 0..1, Hz, loudness, ms], ...], buzz = true for square-wave buzzes), 'water' (dur, hz = how muffled), 'clack', 'tissuePop', 'crickets' (dur), 'honk' (dur),
-//                                 'squeak' (rust 0..1), 'bell', 'rush' (dur), 'digital' (dur, rise), 'pwip', 'piano' (hz), 'softClick', 'bubbleWrap', 'glassTink', 'fingerSnap', 'keySwitch', 'epiano' (hz), 'musicBox' (hz), 'organ' (hz; held until release()), 'pluck' (hz, decay, soft, dur, lp, sub), 'chk'.
+//                                 'squeak' (rust 0..1), 'bell', 'rush' (dur), 'digital' (dur, rise), 'pwip', 'piano' (hz), 'softClick', 'bubbleWrap', 'glassTink', 'fingerSnap', 'keySwitch', 'epiano' (hz), 'musicBox' (hz), 'organ' (hz; held until release()), 'pluck' (hz, decay, soft, dur, lp, sub), 'chk', 'drum' (drum, kit).
 //                                 v = loudness 0..1, pitch = 1 for normal, wet = reverb level (optional). Returns { stop(), release() }.
 (function () {
   const VOLUME = 0.6;
@@ -466,6 +466,45 @@
     burst(ac, out, t, 'bandpass', 1500 * pitch, 0.8, 0.035, 0.55 * v);
     tone(ac, out, 'triangle', t, 190 * pitch, 95 * pitch, 0.04, 0.3 * v);
   }
+  // Drums. name: kick, snare, hat, open, clap, tom, low, crash. Each kit is a recipe: kick [start Hz, end Hz, seconds, click], snare [tone Hz, noise Hz, seconds, noise level], hat [noise Hz, closed s, open s], tom [wave, seconds], crash [noise Hz, seconds]; metal: machine cymbals.
+  const KITS = {
+    acoustic: { kick: [150, 52, 0.24, 0.5], snare: [200, 1500, 0.2, 0.55], hat: [7500, 0.05, 0.34], tom: ['triangle', 0.24], crash: [4500, 1.2], clap: 0.18 },
+    rock: { kick: [180, 58, 0.2, 0.8], snare: [230, 1200, 0.24, 0.75], hat: [6500, 0.06, 0.42], tom: ['triangle', 0.32], crash: [3800, 1.6], clap: 0.2 },
+    jazz: { kick: [110, 55, 0.18, 0.15], snare: [160, 2600, 0.34, 0.3], hat: [9000, 0.04, 0.26], tom: ['sine', 0.3], crash: [6500, 1.8], clap: 0.12, soft: 0.65 },
+    808: { kick: [95, 42, 0.6, 0.3], snare: [250, 1800, 0.16, 0.6], hat: [7000, 0.05, 0.32], tom: ['sine', 0.4], crash: [5000, 1.1], clap: 0.2, metal: true },
+    trap: { kick: [80, 36, 0.85, 0.5], snare: [300, 2400, 0.12, 0.85], hat: [9500, 0.03, 0.2], tom: ['sine', 0.5], crash: [6000, 0.9], clap: 0.14, metal: true },
+    disco: { kick: [170, 50, 0.18, 1], snare: [220, 2000, 0.13, 0.7], hat: [8000, 0.04, 0.22], tom: ['triangle', 0.2], crash: [5500, 0.8], clap: 0.16, metal: true },
+    lofi: { kick: [120, 52, 0.16, 0.2], snare: [200, 900, 0.1, 0.5], hat: [4500, 0.03, 0.14], tom: ['triangle', 0.13], crash: [3500, 0.4], clap: 0.08 },
+  };
+  function metal(ac, out, t, dur, level, lowest) {        // six detuned square waves: the classic machine-cymbal sound
+    const g = ac.createGain(), hp = ac.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = lowest;
+    g.gain.setValueAtTime(level, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    [205, 304, 369, 522, 540, 800].forEach(hz => { const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = hz * 1.7; o.connect(hp); o.start(t); o.stop(t + dur + 0.01); });
+    hp.connect(g).connect(out);
+  }
+  function drum(ac, out, t, v0, name, kit) {
+    if (kit === 'beatbox') {                              // little mouth sounds
+      const say2 = (dur, level, p, f) => voice(ac, out, t, dur, level * v0, p, f);
+      if (name === 'kick') say2(0.09, 0.9, [130, 95, 60], [[[300, 240, 180], 3, 1], [[800, 600, 400], 4, 0.3]]);
+      if (name === 'snare') burst(ac, out, t, 'bandpass', 2300, 1, 0.13, 0.8 * v0);
+      if (name === 'hat') burst(ac, out, t, 'highpass', 8000, 0.7, 0.04, 0.35 * v0);
+      if (name === 'open') burst(ac, out, t, 'highpass', 6500, 0.7, 0.26, 0.3 * v0);
+      if (name === 'clap') { burst(ac, out, t, 'bandpass', 1500, 1.2, 0.06, 0.8 * v0); burst(ac, out, t + 0.07, 'bandpass', 1300, 1.2, 0.06, 0.5 * v0); }
+      if (name === 'tom') say2(0.16, 0.8, [220, 260, 170], [[[700, 900, 600], 5, 1], [[1400, 1300, 1100], 6, 0.4]]);
+      if (name === 'low') say2(0.2, 0.8, [130, 160, 100], [[[500, 650, 420], 5, 1], [[1000, 1000, 800], 6, 0.4]]);
+      if (name === 'crash') burst(ac, out, t, 'highpass', 3000, 0.7, 0.6, 0.4 * v0);
+      return;
+    }
+    const K = KITS[kit] || KITS.acoustic, v = v0 * (K.soft || 1), n = (type, hz, q, dur, level, at = t) => burst(ac, out, at, type, hz, q, dur, level);
+    if (name === 'kick') { const [f0, f1, dur, click] = K.kick; tone(ac, out, 'sine', t, f0, f1, dur, 1.0 * v); n('lowpass', 2200, 0.7, 0.012, 0.5 * click * v); }
+    if (name === 'snare') { const [hz, noiseHz, dur, level] = K.snare; tone(ac, out, 'triangle', t, hz, hz * 0.65, 0.1, 0.36 * v); n('highpass', noiseHz, 0.7, dur, level * v); }
+    if (name === 'hat') { if (K.metal) metal(ac, out, t, K.hat[1] + 0.02, 0.1 * v, K.hat[0]); else n('highpass', K.hat[0], 0.7, K.hat[1], 0.5 * v); }
+    if (name === 'open') { if (K.metal) metal(ac, out, t, K.hat[2], 0.09 * v, K.hat[0] - 500); else n('highpass', K.hat[0] - 500, 0.7, K.hat[2], 0.42 * v); }
+    if (name === 'clap') { [0, 0.012, 0.024].forEach(d => n('bandpass', 1400, 1.2, 0.012, 1.1 * v, t + d)); n('bandpass', 1500, 1.1, K.clap, 1.15 * v, t + 0.036); }
+    if (name === 'tom' || name === 'low') { const f = name === 'tom' ? 220 : 130, [wave, dur] = K.tom; tone(ac, out, wave, t, f * 1.5, f, dur, 0.65 * v); n('lowpass', 2000, 0.7, 0.01, 0.25 * v); }
+    if (name === 'crash') { if (K.metal) metal(ac, out, t, K.crash[1], 0.11 * v, K.crash[0]); else n('highpass', K.crash[0], 0.7, K.crash[1], 0.5 * v); }
+  }
   function tweet(ac, out, t, v, pitch) {                  // one up-down chirp
     tone(ac, out, 'sine', t, 2500 * pitch, 3600 * pitch, 0.07, 0.16 * v);
     tone(ac, out, 'sine', t + 0.085, 3400 * pitch, 2300 * pitch, 0.09, 0.16 * v);
@@ -561,6 +600,7 @@
       if (h.kind === 'organ') { organ(ac, dest, t, h.v, h.hz); return; }
       if (h.kind === 'pluck') { pluck(ac, dest, t, h.v, h.hz, h.decay, h.soft, h.dur, h.lp, h.sub); return; }
       if (h.kind === 'chk') { chk(ac, dest, t, h.v, h.pitch); return; }
+      if (h.kind === 'drum') { drum(ac, dest, t, h.v, h.drum, h.kit); return; }
       if (h.kind === 'tweet') { tweet(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'shuffle') { shuffle(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'land') thump(ac, dest, t, h.v, h.pitch);

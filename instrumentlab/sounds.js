@@ -81,6 +81,17 @@ window.LAB_INSTRUMENTS = [
       ] },
       { name: 'Harp', count: 8, ring: 1.6, decay: 0.998, soft: 3, dur: 2.4, tunings: window.LAB_KEYS.map(key => ({ name: key.name, notes: Array.from({ length: 8 }, (_, i) => key.root * 2 ** ((12 * Math.floor(i / key.steps.length) + key.steps[i % key.steps.length]) / 12)) })) },
   ].map(x => ({ ...x, play: s => s.egg({ kind: 'pluck', v: s.v, hz: s.hz, decay: x.decay, soft: x.soft, dur: x.dur, lp: x.lp, sub: x.sub }) })) },
+  { name: 'Winds', note: 'press, hold and slide', mode: 'blow', keys: true, controls: [
+      { id: 'vib', type: 'range', label: 'Vibrato', min: 0, max: 40, step: 1 }, ECHO,
+  ], sounds: [                                            // parts: [wave, harmonic, level]; breath: how airy; bright: filter cutoff as a multiple of the note, opened by blowing harder; attack: seconds; octave: above or below the key
+      { name: 'Pan pipes', key: 'A minor pentatonic', style: 'pipes', octave: 1, attack: 0.09, breath: 0.34, bright: 5, parts: [['sine', 1, 1], ['sine', 2, 0.12]] },
+      { name: 'Flute', key: 'C pentatonic', style: 'tube', thick: 80, octave: 1, attack: 0.07, breath: 0.16, bright: 8, parts: [['sine', 1, 1], ['sine', 2, 0.22], ['sine', 3, 0.06]] },
+      { name: 'Trumpet', key: 'C major', style: 'tube', thick: 100, valves: true, octave: 0, attack: 0.05, breath: 0.02, bright: 9, parts: [['sawtooth', 1, 0.6]] },
+      { name: 'French horn', key: 'C major', style: 'tube', thick: 150, valves: true, octave: -1, attack: 0.1, breath: 0.01, bright: 3.5, parts: [['sawtooth', 1, 0.75], ['sine', 1, 0.4]] },
+      { name: 'Horn section', key: 'C major', style: 'tube', thick: 130, valves: true, octave: 0, attack: 0.05, breath: 0.02, bright: 7, section: [0, 2, 4], parts: [['sawtooth', 1, 0.36]] },   // section: extra players, in scale steps above the melody
+      { name: 'Saxophone', key: 'A blues', style: 'tube', thick: 170, octave: 0, attack: 0.05, breath: 0.05, bright: 6, parts: [['sawtooth', 1, 0.45], ['square', 1, 0.15]] },
+      { name: 'Clarinet', key: 'A minor', style: 'tube', thick: 110, octave: 0, attack: 0.05, breath: 0.03, bright: 6, parts: [['square', 1, 0.55]] },
+  ] },
   { name: 'Theremin', note: 'press and move on the grid', mode: 'pad', keys: true, controls: [
       { id: 'snap', type: 'check', label: 'Snap to the notes of the key', only: v => v.keyed },
       { id: 'guides', type: 'check', label: 'Show the note guide', only: v => v.keyed }, ECHO,
@@ -91,5 +102,8 @@ window.LAB_INSTRUMENTS = [
       { name: 'Warm', filter: 1100, voice: [['triangle', 1, 1], ['sine', 0.5, 0.25]] },
       { name: 'Reed', filter: 1900, voice: [['sawtooth', 1, 0.45], ['square', 2, 0.08]] },
   ] },
-  { name: 'Drums', note: 'not built yet', soon: true },
+  { name: 'Drums', note: 'tap the pads', mode: 'pads', controls: [{ id: 'click', type: 'check', label: 'Metronome while looping' }, { id: 'bpm', type: 'range', label: 'Tempo (BPM)', min: 50, max: 220, step: 1 }, ECHO], sounds: ['Acoustic:acoustic', 'Rock:rock', 'Jazz brushes:jazz', '808:808', 'Trap:trap', 'Disco:disco', 'Lo-fi:lofi', 'Beatbox:beatbox'].map(text => {
+      const [name, kit] = text.split(':');
+      return { name, kit, play: s => s.egg({ kind: 'drum', v: s.v, kit, drum: ['kick', 'snare', 'hat', 'open', 'clap', 'tom', 'low', 'crash'][s.k - 1] }) };
+  }) },
 ];

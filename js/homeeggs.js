@@ -148,20 +148,40 @@
       ] },
       { name: 'Harp', count: 8, ring: 1.6, decay: 0.998, soft: 3, dur: 2.4, tunings: MUSICAL_KEYS.map(key => ({ name: key.name, notes: Array.from({ length: 8 }, (_, i) => key.root * 2 ** ((12 * Math.floor(i / key.steps.length) + key.steps[i % key.steps.length]) / 12)) })) },
     ].map(x => ({ ...x, hit: (k, v, hz) => ({ kind: 'pluck', v, hz, decay: x.decay, soft: x.soft, dur: x.dur, lp: x.lp, sub: x.sub }) })) },
+    { name: 'Winds', mode: 'blow', sounds: [               // press, hold and slide; settings from the Instrument Lab. key: the scale it starts on
+      { name: 'Pan pipes', key: 'A minor pentatonic', style: 'pipes', octave: 1, attack: 0.09, breath: 0.34, bright: 5, parts: [['sine', 1, 1], ['sine', 2, 0.12]] },
+      { name: 'Flute', key: 'C pentatonic', style: 'tube', thick: 80, octave: 1, attack: 0.07, breath: 0.16, bright: 8, parts: [['sine', 1, 1], ['sine', 2, 0.22], ['sine', 3, 0.06]] },
+      { name: 'Trumpet', key: 'C major', style: 'tube', thick: 100, valves: true, octave: 0, attack: 0.05, breath: 0.02, bright: 9, parts: [['sawtooth', 1, 0.6]] },
+      { name: 'French horn', key: 'C major', style: 'tube', thick: 150, valves: true, octave: -1, attack: 0.1, breath: 0.01, bright: 3.5, parts: [['sawtooth', 1, 0.75], ['sine', 1, 0.4]] },
+      { name: 'Horn section', key: 'C major', style: 'tube', thick: 130, valves: true, octave: 0, attack: 0.05, breath: 0.02, bright: 7, section: [0, 2, 4], parts: [['sawtooth', 1, 0.36]] },
+      { name: 'Saxophone', key: 'A blues', style: 'tube', thick: 170, octave: 0, attack: 0.05, breath: 0.05, bright: 6, parts: [['sawtooth', 1, 0.45], ['square', 1, 0.15]] },
+      { name: 'Clarinet', key: 'A minor', style: 'tube', thick: 110, octave: 0, attack: 0.05, breath: 0.03, bright: 6, parts: [['square', 1, 0.55]] },
+    ] },
     { name: 'Theremin', mode: 'pad', sounds: [             // the shanks form a grid; left to right is pitch, top is loud and bottom quiet (settings from the Instrument Lab)
       { name: 'Classic', voice: [['sine', 1, 1], ['sine', 2, 0.15]] },
       { name: 'Warm', filter: 1100, voice: [['triangle', 1, 1], ['sine', 0.5, 0.25]] },
       { name: 'Reed', filter: 1900, voice: [['sawtooth', 1, 0.45], ['square', 2, 0.08]] },
     ] },
+    { name: 'Drums', mode: 'pads', sounds: ['Acoustic:acoustic', 'Rock:rock', 'Jazz brushes:jazz', '808:808', 'Trap:trap', 'Disco:disco', 'Lo-fi:lofi', 'Beatbox:beatbox'].map(text => {
+      const [name, kit] = text.split(':');
+      return { name, kit, hit: (k, v) => ({ kind: 'drum', v, kit, drum: ['kick', 'snare', 'hat', 'open', 'clap', 'tom', 'low', 'crash'][k - 1] }) };
+    }) },
   ];
   const STATE_KEY = 'bs-instruments';
-  let state = { instrument: 0, sound: {}, key: 0, padKey: -1, tuning: {}, chordSet: 0, chord: {} };   // chord: per sound, the selected chord; null = released (a muted strum)   // padKey: the Theremin's key, -1 = Free slide
+  let state = { instrument: 0, sound: {}, key: 0, padKey: -1, tuning: {}, chordSet: 0, chord: {}, windKey: {}, bpm: 100, sig: 0 };   // chord: per sound, the selected chord; null = released (a muted strum)   // padKey: the Theremin's key, -1 = Free slide
   try { state = { ...state, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (e) { /* starts on the defaults */ }
   state.instrument = INSTRUMENTS[state.instrument] ? state.instrument : 0;
   const saveState = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { /* just this visit, then */ } };
   const inst = () => INSTRUMENTS[state.instrument];
   const sound = () => inst().sounds[(state.sound[inst().name] || 0) % inst().sounds.length];
   const musicalKey = () => MUSICAL_KEYS[state.key % MUSICAL_KEYS.length];
+  const windKey = () => MUSICAL_KEYS.find(x => x.name === (state.windKey[sound().name] || sound().key)) || MUSICAL_KEYS[0];
+  const SIGS = [{ name: '4/4', steps: 16, beat: 4, perBeat: 4 }, { name: '3/4', steps: 12, beat: 4, perBeat: 4 }, { name: '6/8', steps: 12, beat: 6, perBeat: 6 }, { name: '5/4', steps: 20, beat: 4, perBeat: 4 }];
+  const sig = () => SIGS[state.sig % SIGS.length];
+  const isDrums = () => inst().mode === 'pads', isBlow = () => inst().mode === 'blow';
+  const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  const noteName = hz => NOTE_NAMES[((Math.round(12 * Math.log2(hz / 440)) + 69) % 12 + 12) % 12];
+  const hoverDevice = matchMedia('(hover: hover)').matches;
   // The piano is a real window onto a piano: eight white keys from the key's home note, with the black keys wherever the real ones fall.
   const WHITE = [0, 2, 4, 5, 7, 9, 11], HAS_SHARP = [0, 2, 5, 7, 9];
   function realPiano() {
@@ -184,6 +204,7 @@
   const chordNow = () => (chordsOn() && chordPick() != null ? chordSet().chords[chordPick()] : null);
   const tuning = () => sound().tunings[(state.tuning[sound().name] || 0) % sound().tunings.length];
   function keyHz(k) {                                      // the note for key k: 1..8 white, 9..13 black (or string k)
+    if (isBlow()) { const { root, steps } = windKey(), i = k - 1; return root * 2 ** ((12 * Math.floor(i / steps.length) + steps[i % steps.length]) / 12); }
     if (inst().mode === 'strings') {
       const open = tuning().notes[k - 1], c = chordNow();
       if (!c || (sound().drone && k === 1)) return open;   // a banjo's short first string stays open, as on the real thing
@@ -194,7 +215,8 @@
     const p = realPiano();
     return p.root * 2 ** ((k <= 8 ? p.white(k - 1) : p.white(p.blackAt[k - 9] - 1) + 1) / 12);
   }
-  const hasKeyLetter = () => !!inst().keys || inst().mode === 'pad' || inst().mode === 'strings';
+  const hasKeyLetter = () => !!inst().keys || inst().mode === 'pad' || inst().mode === 'strings' || isBlow() || isDrums();
+  window.drumLettersOn = isDrums;
   const padKey = () => MUSICAL_KEYS[state.padKey] || null;
   function noteGuides(key, octaves) {                      // where the key's notes fall on the pad: { x 0..1, label, root }
     const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'], rootSemi = Math.round(12 * Math.log2(key.root / 130.81)), out = [];
@@ -204,15 +226,18 @@
   function applyMode() {                                   // tell the shanks how to be played; a keyboard also needs its black keys and dots for the current key
     const p = inst().keys ? realPiano() : null, guides = inst().mode === 'pad' && padKey() ? noteGuides(padKey(), 3) : null;
     const strings = inst().mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: true, chords: chordsOn() ? chordSet().chords.map(c => c.name) : null, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {};
-    window.shankWind?.setMode(inst().mode, p ? { ...inst().options, blackAt: p.blackAt, dots: p.dots } : { ...inst().options, guides, ...strings });
+    window.shankWind?.setMode(inst().mode, p ? { ...inst().options, blackAt: p.blackAt, dots: p.dots } : { ...inst().options, guides, ...strings,
+      ...(isBlow() ? { style: sound().style, thick: sound().thick || 110, valves: !!sound().valves, blowKeys: hoverDevice ? 'ASDFGHJK' : null, blowNotes: Array.from({ length: 8 }, (_, i) => noteName(keyHz(i + 1))) } : {}),
+      ...(isDrums() ? { padNames: ['Kick', 'Snare', 'Hat', 'Open hat', 'Clap', 'Tom', 'Low tom', 'Crash'], padKeys: hoverDevice ? 'QWERASDF' : null } : {}) });
   }
   const keyLabel = document.createElement('div');          // which key the keyboard is in: the image's bottom left corner
   keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   box.appendChild(keyLabel);
   function refreshInstrument() {
-    keyLabel.textContent = inst().mode === 'pad' ? (padKey()?.name || 'Free slide') : chordsOn() ? chordSet().name : inst().mode === 'strings' ? tuning().name : musicalKey().name;
+    keyLabel.textContent = isDrums() ? `${sig().name} · ${state.bpm} BPM` : isBlow() ? windKey().name : inst().mode === 'pad' ? (padKey()?.name || 'Free slide') : chordsOn() ? chordSet().name : inst().mode === 'strings' ? tuning().name : musicalKey().name;
     keyLabel.style.display = hasKeyLetter() && !busy ? '' : 'none';
     document.querySelector('.tc-auto')?.classList.toggle('tc-live', hasKeyLetter());
+    document.querySelectorAll('.tc-gated').forEach(el => el.classList.toggle('tc-live', isDrums()));
   }
   window.keyLetterOn = hasKeyLetter;
   applyMode();
@@ -306,14 +331,19 @@
   // The little demo after a change: once the shanks have finished moving, a few notes are played on the new layout, and you see them played.
   let demoRun = 0, demoNotes = [];
   function demo(quick = false) {                           // quick: changing sound or key, so it's shorter and cut off sooner
-    if (!audioReady()) return;
+    if (!audioReady() || loop.on) return;
     const run = ++demoRun, later = (ms, fn) => setTimeout(() => { if (run === demoRun) fn(); }, ms), wind = window.shankWind, g = quick ? 0.55 : 1;
     demoNotes.forEach(n => n?.release?.()); demoNotes = [];   // a new demo cuts off the last one
     const play = k => { const n = window.EggSfx.play(eggAudio, [shankHit(k, 0.7)], eggMaster); demoNotes.push(n); return n; };
     wind?.whenFormed(() => {
       if (run !== demoRun || !audioReady()) return;
       if (quick) later(720, () => { demoNotes.forEach(n => n?.release?.()); demoNotes = []; });
-      if (inst().mode === 'strings') {                     // a strum, low to high
+      if (isDrums()) {                                     // a little beat: kick, hat, snare, hat
+        [1, 3, 2, 3].forEach((i, n) => later(n * 170 * g, () => { wind.showPad(i); window.EggSfx.play(eggAudio, [shankHit(i, 0.85)], eggMaster); }));
+      } else if (isBlow()) {                               // a little tune, sliding from note to note
+        [1, 3, 5, 8].forEach((k, i) => later(i * 190 * g, () => { wind.showBlow(k); if (i) moveBlow(k, 0.7, true); else startBlow(k, 0.7); }));
+        later(4 * 190 * g, () => { stopBlow(); wind.showBlow(0); });
+      } else if (inst().mode === 'strings') {              // a strum, low to high
         for (let i = 0; i < sound().count; i += 1) later(i * 60 * g, () => { wind.vibrate(i, 0.6); play(i + 1); });
       } else if (inst().mode === 'pad') {                  // the target glides up the pitch
         wind.showTarget(0.2, 0.3, true); startTheremin(0.2, 0.3);
@@ -330,10 +360,180 @@
       }
     });
   }
-  function changed(text, quick) { stopTheremin(); saveState(); applyMode(); refreshInstrument(); say(text); demo(quick); }
+  function changed(text, quick) { stopTheremin(); stopBlow(); keysDown.length = 0; if (!isDrums()) { stopLoop(); sequencerOpen = false; } paintStrip(); saveState(); applyMode(); refreshInstrument(); say(text); demo(quick); }
   window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
   window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name, true); };
-  window.nextMusicalKey = () => { if (chordsOn()) { state.chordSet = (state.chordSet + 1) % CHORD_SETS.length; state.chord[sound().name] = 0; changed(chordSet().name, true); return; } if (inst().mode === 'strings') { state.tuning[sound().name] = ((state.tuning[sound().name] || 0) + 1) % sound().tunings.length; changed(tuning().name, true); return; } if (inst().mode === 'pad') { state.padKey = state.padKey + 1 >= MUSICAL_KEYS.length ? -1 : state.padKey + 1; changed(padKey()?.name || 'Free slide', true); return; } if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name, true); } };
+  window.nextMusicalKey = () => {
+    if (isDrums()) { const was = loop.on; stopLoop(); state.sig = (state.sig + 1) % SIGS.length; freshPattern(); if (was) startLoop(); changed(sig().name, true); return; }
+    if (isBlow()) { const i = MUSICAL_KEYS.indexOf(windKey()); state.windKey[sound().name] = MUSICAL_KEYS[(i + 1) % MUSICAL_KEYS.length].name; changed(windKey().name, true); return; }
+    if (chordsOn()) { state.chordSet = (state.chordSet + 1) % CHORD_SETS.length; state.chord[sound().name] = 0; changed(chordSet().name, true); return; } if (inst().mode === 'strings') { state.tuning[sound().name] = ((state.tuning[sound().name] || 0) + 1) % sound().tunings.length; changed(tuning().name, true); return; } if (inst().mode === 'pad') { state.padKey = state.padKey + 1 >= MUSICAL_KEYS.length ? -1 : state.padKey + 1; changed(padKey()?.name || 'Free slide', true); return; } if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name, true); } };
+  // Winds: one breath at a time. A held voice whose note glides when you slide, with a little air and a tone that opens up as you blow harder.
+  let blowVoice = null;
+  const blowHz = k => keyHz(k) * 2 ** (sound().octave || 0);
+  function stopBlow() {
+    if (!blowVoice) return;
+    const { g, oscs, lfo, n } = blowVoice, t = eggAudio.currentTime;
+    g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05);
+    oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4); n.stop(t + 0.4);
+    blowVoice = null;
+  }
+  function startBlow(k, breath) {
+    stopBlow();
+    if (!eggAudio || eggAudio.state !== 'running') return;
+    const ac = eggAudio, x = sound(), t = ac.currentTime, g = ac.createGain(), f = ac.createBiquadFilter(), lfo = ac.createOscillator(), depth = ac.createGain(), hz = blowHz(k);
+    f.type = 'lowpass'; f.frequency.value = hz * (x.bright * (0.45 + 0.55 * breath));
+    lfo.frequency.value = 5.2; depth.gain.setValueAtTime(0, t); depth.gain.linearRampToValueAtTime(12, t + 0.5); lfo.start(t);   // vibrato eases in, as a player's does
+    const oscs = (x.section || [0]).flatMap((shift, player) => x.parts.map(([type, mul, level]) => {   // extra players are a little late and a little out of tune, like real people
+      const o = ac.createOscillator(), l = ac.createGain();
+      o.type = type; o.frequency.value = blowHz(k + shift) * mul; o.detune.value = shift ? (player % 2 ? 7 : -6) : 0; l.gain.value = level; lfo.connect(depth).connect(o.detune);
+      o.connect(l).connect(f); o.start(t + player * 0.012);
+      return { o, mul, shift };
+    }));
+    const len = ac.sampleRate, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);   // the air
+    for (let i = 0; i < len; i += 1) d[i] = Math.random() * 2 - 1;
+    const n = ac.createBufferSource(), nf = ac.createBiquadFilter(), ng = ac.createGain();
+    n.buffer = buf; n.loop = true; nf.type = 'bandpass'; nf.frequency.value = hz * 2; nf.Q.value = 1.2; ng.gain.value = x.breath * 1.6;
+    n.connect(nf).connect(ng).connect(f); n.start(t);
+    const level = b => 0.2 * (0.3 + 0.7 * b);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(level(breath), t + x.attack);
+    f.connect(g).connect(eggMaster);
+    blowVoice = { g, f, oscs, lfo, n, nf, level, x, hz };
+  }
+  function moveBlow(k, breath, glide) {
+    if (!blowVoice) return;
+    const t = eggAudio.currentTime, v = blowVoice;
+    if (glide) { const hz = blowHz(k); v.hz = hz; v.oscs.forEach(({ o, mul, shift }) => o.frequency.setTargetAtTime(blowHz(k + shift) * mul, t, 0.022)); v.nf.frequency.setTargetAtTime(hz * 2, t, 0.03); }
+    v.g.gain.setTargetAtTime(v.level(breath), t, 0.04);
+    v.f.frequency.setTargetAtTime(v.hz * (v.x.bright * (0.45 + 0.55 * breath)), t, 0.04);
+  }
+  window.shankBlow = (phase, k, breath) => { if (phase === 'down') startBlow(k, breath); else if (phase === 'up') stopBlow(); else moveBlow(k, breath, phase === 'glide'); };
+  const BLOW_KEYS = 'asdfghjk', keysDown = [];
+  let hoverBreath = 0.7;                                   // keys play the notes while the mouse, without clicking, sets the breath
+  window.shankBlowHover = b => { hoverBreath = b; if (keysDown.length && blowVoice) { const k = keysDown[keysDown.length - 1]; moveBlow(k, b, false); window.shankWind.showBlow(k, b); } };
+  addEventListener('keydown', ev => {
+    if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey || !isBlow() || busy) return;
+    const k = BLOW_KEYS.indexOf(ev.key.toLowerCase()) + 1;
+    if (!k) return;
+    keysDown.push(k);
+    if (blowVoice) moveBlow(k, hoverBreath, true); else startBlow(k, hoverBreath);
+    window.shankWind.showBlow(k, hoverBreath);
+  });
+  addEventListener('keyup', ev => {
+    const k = BLOW_KEYS.indexOf(ev.key.toLowerCase()) + 1, i = keysDown.lastIndexOf(k);
+    if (!k || i < 0) return;
+    keysDown.splice(i, 1);
+    if (!keysDown.length) { stopBlow(); window.shankWind.showBlow(0); return; }
+    const last = keysDown[keysDown.length - 1];
+    moveBlow(last, hoverBreath, true); window.shankWind.showBlow(last, hoverBreath);
+  });
+  addEventListener('blur', () => { if (keysDown.length) { keysDown.length = 0; stopBlow(); window.shankWind.showBlow(0); } });
+
+  // The drum loop: a bar that repeats. Pads played while it runs snap to the nearest step and join it.
+  const stepSec = () => 60 / state.bpm / sig().perBeat;
+  const loop = { on: false, pattern: [], skip: [], nextAbs: 0, nextTime: 0, timer: null };
+  let sequencerOpen = false;
+  function metronome(t, strong) {
+    const o = eggAudio.createOscillator(), g = eggAudio.createGain();
+    o.type = 'square'; o.frequency.value = strong ? 1650 : 1100;
+    g.gain.setValueAtTime(strong ? 0.08 : 0.05, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    o.connect(g).connect(eggMaster); o.start(t); o.stop(t + 0.04);
+  }
+  function runStep(step, delay) {
+    const { pattern, skip } = loop;
+    if (step % sig().beat === 0) metronome(eggAudio.currentTime + delay, step === 0);
+    pattern[step].forEach(i => {
+      if (skip[step].has(i)) { skip[step].delete(i); return; }   // you just played this one yourself
+      window.EggSfx.play(eggAudio, [shankHit(i, 0.85, delay * 1000)], eggMaster);
+      setTimeout(() => { if (loop.on) window.shankWind.showPad(i); }, delay * 1000);
+    });
+    setTimeout(() => { if (loop.on) setPlayhead(step); }, delay * 1000);
+  }
+  function schedule() {
+    while (loop.nextTime < eggAudio.currentTime + 0.12) {
+      runStep(loop.nextAbs % sig().steps, Math.max(0, loop.nextTime - eggAudio.currentTime));
+      loop.nextTime += stepSec(); loop.nextAbs += 1;
+    }
+  }
+  function startLoop() {
+    if (!audioReady()) return;
+    Object.assign(loop, { on: true, nextAbs: 0, nextTime: eggAudio.currentTime + 0.1 });
+    loop.timer = setInterval(schedule, 25);
+    paintPlayButton();
+  }
+  function stopLoop() { if (loop.on) { clearInterval(loop.timer); loop.on = false; setPlayhead(-1); paintPlayButton(); } }
+  function recordHit(i) {
+    if (!loop.on) return;
+    const n = Math.round(loop.nextAbs - (loop.nextTime - eggAudio.currentTime) / stepSec()), steps = sig().steps, step = ((n % steps) + steps) % steps;
+    loop.pattern[step].add(i); paintStep(step);
+    if (n >= loop.nextAbs) loop.skip[step].add(i);        // snapped forward: don't play it a second time in this pass
+  }
+  // The sequencer strip sits on the line under the title: play/pause, the steps, Clear. Tap a step to delete what's on it.
+  const strip = document.createElement('div');
+  strip.style.cssText = 'position:absolute; left:0; right:40px; bottom:-15px; height:30px; display:none; align-items:center; gap:6px; z-index:3;';
+  const stripButton = 'border:0; background:var(--bg, #f3f5f0); color:rgb(22, 12, 118); padding:0; cursor:pointer; font:600 12px/1 var(--font-ui, system-ui, sans-serif); display:flex; align-items:center; justify-content:center; height:30px;';
+  const playBtn = document.createElement('button'), clearBtn = document.createElement('button'), stepsBox = document.createElement('div');
+  playBtn.type = clearBtn.type = 'button';
+  playBtn.style.cssText = stripButton + 'width:30px; flex:none;';
+  clearBtn.style.cssText = stripButton + 'padding:0 6px; flex:none;';
+  clearBtn.textContent = 'Clear';
+  stepsBox.style.cssText = 'flex:1; display:flex; height:30px; min-width:0;';
+  strip.append(playBtn, stepsBox, clearBtn);
+  (box.closest('.hero') || box).appendChild(strip);
+  function paintPlayButton() { playBtn.setAttribute('aria-label', loop.on ? 'Pause' : 'Play'); playBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">${loop.on ? '<rect x="3" y="2" width="3.6" height="12"/><rect x="9.4" y="2" width="3.6" height="12"/>' : '<path d="M4 2l10 6-10 6z"/>'}</svg>`; }
+  let stepEls = [], playheadAt = -1;
+  function freshPattern() {
+    const n = sig().steps;
+    loop.pattern = Array.from({ length: n }, () => new Set()); loop.skip = Array.from({ length: n }, () => new Set());
+    stepEls = loop.pattern.map((_, step) => {
+      const b = document.createElement('button'), big = step % sig().beat === 0;
+      b.type = 'button'; b.setAttribute('aria-label', `Step ${step + 1}`);
+      b.style.cssText = 'flex:1; min-width:0; height:30px; border:0; background:transparent; padding:0; position:relative; cursor:pointer;';
+      b.innerHTML = `<span class="t" style="position:absolute; left:50%; top:50%; width:${big ? 2 : 1}px; height:${big ? 22 : 12}px; margin:${big ? -11 : -6}px 0 0 -1px; background:rgb(22, 12, 118); opacity:.6;"></span><span class="d" style="position:absolute; left:50%; top:50%; width:11px; height:11px; margin:-5.5px 0 0 -5.5px; border-radius:50%; background:rgb(22, 12, 118); display:none;"></span>`;
+      b.addEventListener('click', () => { loop.pattern[step].clear(); loop.skip[step].clear(); paintStep(step); });
+      return b;
+    });
+    stepsBox.replaceChildren(...stepEls);
+  }
+  const paintStep = step => { stepEls[step].querySelector('.d').style.display = loop.pattern[step].size ? 'block' : 'none'; };
+  function setPlayhead(step) {
+    if (playheadAt >= 0 && stepEls[playheadAt]) { const t = stepEls[playheadAt].querySelector('.t'); t.style.opacity = '.6'; t.style.background = 'rgb(22, 12, 118)'; t.style.transform = ''; }
+    playheadAt = step;
+    if (step >= 0 && stepEls[step]) { const t = stepEls[step].querySelector('.t'); t.style.opacity = '1'; t.style.background = '#1a1f1c'; t.style.transform = 'scaleX(2) scaleY(1.3)'; }
+  }
+  function paintStrip() { strip.style.display = isDrums() && sequencerOpen ? 'flex' : 'none'; if (isDrums() && !stepEls.length) freshPattern(); }
+  const togglePlay = () => { window.unlockEggAudio(); if (loop.on) stopLoop(); else startLoop(); };
+  playBtn.addEventListener('click', togglePlay);
+  clearBtn.addEventListener('click', () => { loop.pattern.forEach((set, i) => { set.clear(); loop.skip[i].clear(); paintStep(i); }); say('Cleared'); });
+  window.toggleLoop = () => { if (!isDrums()) return; window.unlockEggAudio(); sequencerOpen = !sequencerOpen; if (!sequencerOpen) stopLoop(); paintStrip(); };   // n opens and closes the sequencer; closing it pauses the beat
+  paintPlayButton();
+  const playPad = (i, strength) => { if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(i, strength)], eggMaster); recordHit(i); };
+  window.shankDrum = (i, strength) => playPad(i, strength);
+  function refreshDrumLabel() { if (isDrums()) keyLabel.textContent = `${sig().name} · ${state.bpm} BPM`; }
+  // Tempo: hold the e before the n, and a slider appears above it; drag up for faster, down for slower.
+  const BPM_MIN = 50, BPM_MAX = 220, TRACK = 150;
+  const tempoBox = document.createElement('div');
+  tempoBox.style.cssText = 'position:fixed; z-index:50; display:none; width:64px; height:204px; box-sizing:border-box; padding:8px 0; border-radius:12px; background:#fff; border:1px solid var(--line, #cfd6cb); box-shadow:0 2px 10px rgba(0,0,0,.18); text-align:center; font:600 15px/1.2 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); -webkit-user-select:none; user-select:none; pointer-events:none;';
+  tempoBox.innerHTML = `<div class="v"></div><div style="position:relative; width:6px; height:${TRACK}px; margin:8px auto 0; border-radius:3px; background:#dfe3dd;"><div class="k" style="position:absolute; left:50%; width:24px; height:24px; margin:-12px 0 0 -12px; border-radius:50%; background:rgb(22, 12, 118);"></div></div>`;
+  document.body.appendChild(tempoBox);
+  const tempoDrag = { y: 0, bpm: 0 };
+  function paintTempo() { tempoBox.querySelector('.v').textContent = state.bpm; tempoBox.querySelector('.k').style.top = `${TRACK * (1 - (state.bpm - BPM_MIN) / (BPM_MAX - BPM_MIN))}px`; }
+  window.tempoSliderStart = (y, el) => {
+    const r = el.getBoundingClientRect();
+    tempoDrag.y = y; tempoDrag.bpm = state.bpm;
+    tempoBox.style.left = `${r.left + r.width / 2 - 32}px`; tempoBox.style.top = `${Math.max(8, r.top - 214)}px`; tempoBox.style.display = 'block';
+    paintTempo();
+  };
+  window.tempoSliderMove = y => { state.bpm = Math.round(Math.max(BPM_MIN, Math.min(BPM_MAX, tempoDrag.bpm + (tempoDrag.y - y) * (BPM_MAX - BPM_MIN) / TRACK))); saveState(); paintTempo(); refreshDrumLabel(); };
+  window.tempoSliderEnd = () => { tempoBox.style.display = 'none'; say(`${state.bpm} BPM`); };
+  addEventListener('keydown', ev => {                      // drums on the keyboard: pads on q w e r / a s d f; arrows change the tempo; n opens the sequencer; space plays or pauses it
+    if (ev.metaKey || ev.ctrlKey || ev.altKey || !isDrums() || busy || (ev.repeat && !ev.key.startsWith('Arrow'))) return;
+    const key = ev.key.toLowerCase(), i = 'qwerasdf'.indexOf(key) + 1;
+    if (i) { window.shankWind.showPad(i); playPad(i, 0.9); }
+    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); state.bpm = Math.max(BPM_MIN, Math.min(BPM_MAX, state.bpm + (ev.key === 'ArrowUp' ? 2 : -2))); saveState(); refreshDrumLabel(); say(`${state.bpm} BPM`); }
+    if (key === 'n') window.toggleLoop();
+    if (key === ' ' && sequencerOpen) { ev.preventDefault(); togglePlay(); }
+  });
+  paintStrip();
   ['pointerdown', 'pointerup', 'keydown'].forEach(ev => addEventListener(ev, () => window.unlockEggAudio(), { once: true }));   // browsers allow sound after the visitor's first click, tap or key
 
   function eggMusic(m) {
@@ -369,6 +569,7 @@
   window.playRandomEgg = function (name) {                 // name: optional, to play one egg by name
     if (busy) return false;
     busy = true;
+    stopLoop(); stopBlow();
     refreshInstrument();
     window.shankWind?.pause();
 
