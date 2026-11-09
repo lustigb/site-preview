@@ -24,8 +24,22 @@
     const inKey = semi => steps.includes(((semi % 12) + 12) % 12);
     return { root, white, blackAt, dots: { white: Array.from({ length: 8 }, (_, n) => inKey(white(n))), black: blackAt.map(d => inKey(white(d - 1) + 1)) } };
   }
+  // Strings: each instrument has its own tunings, and each remembers which one you were on.
+  const tuningPicks = store.get('tunings', {});
+  const isStrings = () => instrument().mode === 'strings';
+  const tuning = () => { const list = sound().tunings; return list.find(x => x.name === tuningPicks[sound().name]) || list[0]; };
+  // Theremin: Free slide (no key), or one of the keys, which brings the snap and the note guide into play.
+  let padKeyName = store.get('padKey', null);
+  const isPad = () => instrument().mode === 'pad';
+  const padKey = () => KEYS.find(x => x.name === padKeyName) || null;
+  function noteGuides(key, octaves) {                     // where the key's notes fall on the pad: { x 0..1, label, root }
+    const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'], rootSemi = Math.round(12 * Math.log2(key.root / 130.81)), out = [];
+    for (let s = 0; s <= 12 * octaves; s += 1) { const rel = (((s - rootSemi) % 12) + 12) % 12; if (key.steps.includes(rel)) out.push({ x: s / (12 * octaves), label: NAMES[s % 12], root: rel === 0 }); }
+    return out;
+  }
   const realOn = () => instrument().mode === 'keys' && current().shape && current().real;
   function keyHz(k) {                                     // the note for shank k in the current key, climbing through octaves as needed
+    if (isStrings()) return tuning().notes[k - 1];
     if (realOn()) { const p = realPiano(); return p.root * 2 ** ((k <= 8 ? p.white(k - 1) : p.white(p.blackAt[k - 9] - 1) + 1) / 12); }
     if (k > 8) return keyHz([1, 2, 4, 5, 6][k - 9]) * 2 ** (1 / 12);   // a black key: a semitone above the white key to its left
     const { root, steps } = musicalKey(), i = k - 1;
@@ -35,7 +49,7 @@
   const settingKey = () => `${instrument().name}/${sound().name}`;
   function current() {
     const x = sound(), touch = x.trigger === 'touch';
-    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: false, range: 3, vib: 12, shape: true, real: true, dots: true, ...settings[settingKey()] };
+    return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, snap: true, guides: true, keyed: !!padKey(), range: 3, vib: 12, shape: true, real: true, dots: true, hover: true, ...settings[settingKey()] };
   }
   function setSetting(id, value) {
     const next = { ...settings[settingKey()], [id]: value };
@@ -92,8 +106,8 @@
   let thereminVoice = null;
   function thereminHz(x) {
     const set = current(), low = 130.81, free = low * 2 ** (set.range * x);
-    if (!set.snap) return free;
-    const { root, steps } = musicalKey(), semis = 12 * Math.log2(free / root), oct = Math.floor(semis / 12), near = [...steps.map(n => n + 12 * oct), 12 * (oct + 1)].reduce((a, b) => (Math.abs(b - semis) < Math.abs(a - semis) ? b : a));
+    if (!padKey() || !set.snap) return free;
+    const { root, steps } = padKey(), semis = 12 * Math.log2(free / root), oct = Math.floor(semis / 12), near = [...steps.map(n => n + 12 * oct), 12 * (oct + 1)].reduce((a, b) => (Math.abs(b - semis) < Math.abs(a - semis) ? b : a));
     return root * 2 ** (near / 12);
   }
   const thereminLevel = y => 0.45 * Math.max(0.02, 1 - y) ** 1.3;
@@ -115,7 +129,7 @@
   }
   function moveTheremin(x, y) {
     if (!thereminVoice) return;
-    const t = ac.currentTime, snap = current().snap, hz = thereminHz(x);
+    const t = ac.currentTime, snap = current().snap && padKey(), hz = thereminHz(x);
     thereminVoice.oscs.forEach(({ o, mul }) => o.frequency.setTargetAtTime(hz * mul, t, snap ? 0.012 : 0.03));
     thereminVoice.g.gain.setTargetAtTime(thereminLevel(y) * thereminVoice.lv, t, 0.03);
   }
@@ -126,26 +140,56 @@
     oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4);
     thereminVoice = null;
   }
+  window.shankString = (k, strength) => hit(k, 0.35 + 0.65 * strength);
   window.shankPad = (phase, x, y) => { if (phase === 'down') startTheremin(x, y); else if (phase === 'move') moveTheremin(x, y); else stopTheremin(); };
 
-  function demo() {
-    if (instrument().mode === 'pad') {                    // a little glide up
-      startTheremin(0.2, 0.3);
-      [0.3, 0.45, 0.6, 0.75].forEach((x, i) => setTimeout(() => moveTheremin(x, 0.3), 90 * (i + 1)));
-      setTimeout(stopTheremin, 500);
-      return;
-    }
-    if (!sound().hold) { [1, 3, 5, 8].forEach((k, i) => hit(k, 0.7, i * 0.09)); return; }
-    [1, 3, 5, 8].forEach((k, i) => setTimeout(() => { const note = hit(k, 0.7); if (note) setTimeout(() => note.release(), 170); }, i * 190));
+  // The little demo after a change: once the shanks have finished moving, a few notes are played on the new layout, and you see them played.
+  let demoRun = 0, demoNotes = [];
+  function demo(quick = false) {                          // quick: changing sound, key or tuning, so it's shorter and cut off sooner
+    const run = ++demoRun, later = (ms, fn) => setTimeout(() => { if (run === demoRun) fn(); }, ms), g = quick ? 0.55 : 1;
+    demoNotes.forEach(n => n?.release?.()); demoNotes = [];   // a new demo cuts off the last one
+    const keep = n => { demoNotes.push(n); return n; };
+    window.shankWind.whenFormed(() => {
+      if (run !== demoRun) return;
+      const inst = instrument(), wind = window.shankWind;
+      if (quick) later(720, () => { demoNotes.forEach(n => n?.release?.()); demoNotes = []; });
+      if (inst.mode === 'strings') {                      // a strum, low to high
+        for (let i = 0; i < sound().count; i += 1) later(i * 60 * g, () => { wind.vibrate(i, 0.6); keep(hit(i + 1, 0.7)); });
+      } else if (inst.mode === 'pad') {                   // the target glides up the pitch
+        wind.showTarget(0.2, 0.3, true); startTheremin(0.2, 0.3);
+        [0.3, 0.45, 0.6, 0.75].forEach((x, i) => later(90 * g * (i + 1), () => { wind.showTarget(x, 0.3, true); moveTheremin(x, 0.3); }));
+        later(520 * g, () => { stopTheremin(); wind.showTarget(0.75, 0.3, false); });
+      } else if (inst.mode === 'keys') {                  // keys go down as they play
+        [1, 3, 5, 8].forEach((k, i) => later(i * 150 * g, () => {
+          wind.showPress(k, 130 * g);
+          const note = keep(hit(k, 0.7));
+          if (note && sound().hold) later(170 * g, () => note.release());
+        }));
+      } else {                                            // the shanks give a little nudge
+        [1, 3, 5, 8].forEach((k, i) => later(i * 90 * g, () => { wind.showBump(k, i % 2 ? -1 : 1); hit(k, 0.7); }));
+      }
+    });
+  }
+  // The pill under the title that names what you just changed to, as on the home page.
+  const pill = document.createElement('div');
+  pill.style.cssText = 'position:absolute; left:50%; transform:translateX(-50%); z-index:3; pointer-events:none; white-space:nowrap; font:500 12px/1.2 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); background:color-mix(in srgb, var(--ink, #1a1f1c) 9%, var(--bg, #f3f5f0)); border:1px solid var(--line, #cfd6cb); border-radius:999px; padding:3px 10px; opacity:0; transition:opacity .4s ease;';
+  const pillTitle = document.querySelector('.home-page .hero h1');
+  if (getComputedStyle(pillTitle.parentElement).position === 'static') pillTitle.parentElement.style.position = 'relative';
+  pillTitle.parentElement.appendChild(pill);
+  let pillTimer = null;
+  function say(text) {
+    pill.style.top = `${pillTitle.offsetTop + pillTitle.offsetHeight + 8}px`;
+    pill.textContent = text; pill.style.opacity = 1;
+    clearTimeout(pillTimer); pillTimer = setTimeout(() => { pill.style.opacity = 0; }, 1400);
   }
   window.unlockEggAudio = unlock;                         // the title's clickable letters (site/js/titlecode.js) work here too, and the last s steps through the instruments
-  window.nextSound = () => { const list = soundList(); pick(list[(list.indexOf(sound()) + 1) % list.length].name); draw(); setTimeout(demo, 30); };
-  window.nextMusicalKey = () => { if (instrument().keys) { keyName = KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name; store.set('key', keyName); draw(); setTimeout(demo, 30); } };
+  window.nextSound = () => { const list = soundList(); pick(list[(list.indexOf(sound()) + 1) % list.length].name); draw(); say(sound().name); setTimeout(() => demo(true), 30); };
+  window.nextMusicalKey = () => { if (isPad()) { const names = [null, ...KEYS.map(x => x.name)]; padKeyName = names[(names.indexOf(padKey()?.name ?? null) + 1) % names.length]; store.set('padKey', padKeyName); draw(); say(padKeyName || 'Free slide'); setTimeout(() => demo(true), 30); return; } if (isStrings()) { const list = sound().tunings; tuningPicks[sound().name] = list[(list.indexOf(tuning()) + 1) % list.length].name; store.set('tunings', tuningPicks); draw(); say(tuning().name); setTimeout(() => demo(true), 30); return; } if (instrument().keys) { keyName = KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name; store.set('key', keyName); draw(); say(musicalKey().name); setTimeout(() => demo(true), 30); } };
   window.keyLetterOn = () => !!instrument().keys;
   window.nextInstrument = () => {
     const ready = instruments.filter(x => !x.soon);
     instrumentName = ready[(ready.indexOf(instrument()) + 1) % ready.length].name;
-    store.set('instrument', instrumentName); draw(); setTimeout(demo, 30);
+    store.set('instrument', instrumentName); draw(); say(instrumentName); setTimeout(() => demo(), 30);
   };
 
   // ---- the panel ---------------------------------------------------------------------------------------------
@@ -158,7 +202,7 @@
     b.addEventListener('click', click);
     return b;
   }
-  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}) }; };
+  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}), ...(inst.mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: !!v.hover } : {}), ...(inst.mode === 'pad' && padKey() && v.guides ? { guides: noteGuides(padKey(), v.range) } : {}) }; };
   function drawControls(inst, set) {
     const nodes = (inst.controls || []).filter(c => !c.only || c.only(set)).map(c => {
       const box = document.createElement('div'); box.className = 'ctl';
@@ -194,18 +238,23 @@
     window.shankWind.setMode(inst.mode, modeOptions(inst, set));
     drawControls(inst, set);
     $('instruments').replaceChildren(...instruments.map(x => row(x, x === inst, () => {
-      instrumentName = x.name; store.set('instrument', x.name); unlock(); draw(); setTimeout(demo, 30);
+      instrumentName = x.name; store.set('instrument', x.name); unlock(); draw(); say(x.name); setTimeout(() => demo(), 30);
     })));
     const list = [];
     let group = null;
     soundList().forEach(x => {
       if (x.group && x.group !== group) { group = x.group; const g = document.createElement('div'); g.className = 'group'; g.textContent = group; list.push(g); }
-      list.push(row(x, x === sound(), () => { pick(x.name); unlock(); draw(); setTimeout(demo, 30); }));
+      list.push(row(x, x === sound(), () => { pick(x.name); unlock(); draw(); setTimeout(() => demo(true), 30); }));
     });
     $('sounds').replaceChildren(...list);
     $('boxKey').style.display = inst.keys ? '' : 'none';
-    $('keys').replaceChildren(...KEYS.map(x => row(x, x === musicalKey(), () => { keyName = x.name; store.set('key', x.name); unlock(); draw(); setTimeout(demo, 30); })));
-    keyLabel.textContent = musicalKey().name;
+    $('keyHead').textContent = isStrings() ? 'Tuning' : 'Musical key';
+    $('keys').replaceChildren(...(isStrings()
+      ? sound().tunings.map(x => row(x, x === tuning(), () => { tuningPicks[sound().name] = x.name; store.set('tunings', tuningPicks); unlock(); draw(); setTimeout(() => demo(true), 30); }))
+      : isPad()
+        ? [{ name: 'Free slide' }, ...KEYS].map(x => row(x, x.name === (padKeyName || 'Free slide'), () => { padKeyName = x.name === 'Free slide' ? null : x.name; store.set('padKey', padKeyName); unlock(); draw(); setTimeout(() => demo(true), 30); }))
+        : KEYS.map(x => row(x, x === musicalKey(), () => { keyName = x.name; store.set('key', x.name); unlock(); draw(); setTimeout(() => demo(true), 30); }))));
+    keyLabel.textContent = isStrings() ? tuning().name : isPad() ? (padKeyName || 'Free slide') : musicalKey().name;
     keyLabel.style.display = inst.keys ? '' : 'none';
     document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst.keys);
     const lv = levels[sound().name] ?? 1;
@@ -217,7 +266,7 @@
     levels[sound().name] = +e.target.value; store.set('levels', levels);
     $('levelValue').textContent = levels[sound().name].toFixed(2);
   });
-  $('level').addEventListener('change', demo);            // hear it when you let go
+  $('level').addEventListener('change', () => demo(true));            // hear it when you let go
   // The same sound button as the home page, in the same spot.
   const soundBtn = document.createElement('button'), hero = document.querySelector('.hero');
   soundBtn.type = 'button';

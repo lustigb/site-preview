@@ -136,6 +136,18 @@
       { name: 'Piano', hit: voice('piano') }, { name: 'Electric piano', hit: voice('epiano') }, { name: 'Music box', hit: voice('musicBox') },
       { name: 'Warm organ', hit: voice('organ'), hold: true },
     ] },
+    { name: 'Strings', mode: 'strings', sounds: [          // count: strings, low to high from the left; tunings: stepped through with the second c
+      { name: 'Guitar', count: 6, ring: 1.1, decay: 0.996, soft: 1, dur: 2.2, tunings: [
+        { name: 'Standard', notes: [82.41, 110, 146.83, 196, 246.94, 329.63] }, { name: 'Drop D', notes: [73.42, 110, 146.83, 196, 246.94, 329.63] },
+        { name: 'Open G', notes: [73.42, 98, 146.83, 196, 246.94, 293.66] }, { name: 'DADGAD', notes: [73.42, 110, 146.83, 196, 220, 293.66] },
+      ] },
+      { name: 'Bass', count: 4, ring: 1.4, decay: 0.998, soft: 2, dur: 2.4, tunings: [{ name: 'Standard', notes: [41.2, 55, 73.42, 98] }, { name: 'Drop D', notes: [36.71, 55, 73.42, 98] }] },
+      { name: 'Banjo', count: 5, ring: 0.5, decay: 0.985, soft: 0, dur: 1, tunings: [{ name: 'Open G', notes: [392, 146.83, 196, 246.94, 293.66] }, { name: 'Double C', notes: [392, 130.81, 196, 261.63, 293.66] }] },
+      { name: 'Ukulele', count: 4, ring: 0.7, decay: 0.992, soft: 1, dur: 1.2, tunings: [
+        { name: 'Standard', notes: [392, 261.63, 329.63, 440] }, { name: 'Low G', notes: [196, 261.63, 329.63, 440] }, { name: 'D tuning', notes: [440, 293.66, 369.99, 493.88] },
+      ] },
+      { name: 'Harp', count: 8, ring: 1.6, decay: 0.998, soft: 3, dur: 2.4, tunings: MUSICAL_KEYS.map(key => ({ name: key.name, notes: Array.from({ length: 8 }, (_, i) => key.root * 2 ** ((12 * Math.floor(i / key.steps.length) + key.steps[i % key.steps.length]) / 12)) })) },
+    ].map(x => ({ ...x, hit: (k, v, hz) => ({ kind: 'pluck', v, hz, decay: x.decay, soft: x.soft, dur: x.dur }) })) },
     { name: 'Theremin', mode: 'pad', sounds: [             // the shanks form a grid; left to right is pitch, top is loud and bottom quiet (settings from the Instrument Lab)
       { name: 'Classic', voice: [['sine', 1, 1], ['sine', 2, 0.15]] },
       { name: 'Warm', filter: 1100, voice: [['triangle', 1, 1], ['sine', 0.5, 0.25]] },
@@ -143,7 +155,7 @@
     ] },
   ];
   const STATE_KEY = 'bs-instruments';
-  let state = { instrument: 0, sound: {}, key: 0 };
+  let state = { instrument: 0, sound: {}, key: 0, padKey: -1, tuning: {} };   // padKey: the Theremin's key, -1 = Free slide
   try { state = { ...state, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (e) { /* starts on the defaults */ }
   state.instrument = INSTRUMENTS[state.instrument] ? state.instrument : 0;
   const saveState = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { /* just this visit, then */ } };
@@ -159,23 +171,33 @@
     const inKey = semi => steps.includes(((semi % 12) + 12) % 12);
     return { root, white, blackAt, dots: { white: Array.from({ length: 8 }, (_, n) => inKey(white(n))), black: blackAt.map(d => inKey(white(d - 1) + 1)) } };
   }
-  function keyHz(k) {                                      // the note for key k: 1..8 white, 9..13 black
+  const tuning = () => sound().tunings[(state.tuning[sound().name] || 0) % sound().tunings.length];
+  function keyHz(k) {                                      // the note for key k: 1..8 white, 9..13 black (or string k)
+    if (inst().mode === 'strings') return tuning().notes[k - 1];
     const p = realPiano();
     return p.root * 2 ** ((k <= 8 ? p.white(k - 1) : p.white(p.blackAt[k - 9] - 1) + 1) / 12);
   }
+  const hasKeyLetter = () => !!inst().keys || inst().mode === 'pad' || inst().mode === 'strings';
+  const padKey = () => MUSICAL_KEYS[state.padKey] || null;
+  function noteGuides(key, octaves) {                      // where the key's notes fall on the pad: { x 0..1, label, root }
+    const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'], rootSemi = Math.round(12 * Math.log2(key.root / 130.81)), out = [];
+    for (let s = 0; s <= 12 * octaves; s += 1) { const rel = (((s - rootSemi) % 12) + 12) % 12; if (key.steps.includes(rel)) out.push({ x: s / (12 * octaves), label: NAMES[s % 12], root: rel === 0 }); }
+    return out;
+  }
   function applyMode() {                                   // tell the shanks how to be played; a keyboard also needs its black keys and dots for the current key
-    const p = inst().keys ? realPiano() : null;
-    window.shankWind?.setMode(inst().mode, p ? { ...inst().options, blackAt: p.blackAt, dots: p.dots } : inst().options);
+    const p = inst().keys ? realPiano() : null, guides = inst().mode === 'pad' && padKey() ? noteGuides(padKey(), 3) : null;
+    const strings = inst().mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: true } : {};
+    window.shankWind?.setMode(inst().mode, p ? { ...inst().options, blackAt: p.blackAt, dots: p.dots } : { ...inst().options, guides, ...strings });
   }
   const keyLabel = document.createElement('div');          // which key the keyboard is in: the image's bottom left corner
   keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   box.appendChild(keyLabel);
   function refreshInstrument() {
-    keyLabel.textContent = musicalKey().name;
-    keyLabel.style.display = inst().keys && !busy ? '' : 'none';
-    document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst().keys);
+    keyLabel.textContent = inst().mode === 'pad' ? (padKey()?.name || 'Free slide') : inst().mode === 'strings' ? tuning().name : musicalKey().name;
+    keyLabel.style.display = hasKeyLetter() && !busy ? '' : 'none';
+    document.querySelector('.tc-auto')?.classList.toggle('tc-live', hasKeyLetter());
   }
-  window.keyLetterOn = () => !!inst().keys;
+  window.keyLetterOn = hasKeyLetter;
   applyMode();
   refreshInstrument();
   const audioReady = () => eggAudio && eggAudio.state === 'running' && window.EggSfx;
@@ -187,7 +209,14 @@
     if (sound().hold) { heldNotes.get(k)?.release(); heldNotes.set(k, note); }
   };
   window.shankRelease = function (k) { heldNotes.get(k)?.release(); heldNotes.delete(k); };
-  const thereminHz = x => 130.81 * 2 ** (3 * x), thereminLevel = y => 0.27 * Math.max(0.02, 1 - y) ** 1.3;
+  window.shankString = function (k, strength) { if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, 0.35 + 0.65 * strength)], eggMaster); };
+  function thereminHz(x) {                                 // Free slide, or snapped to the nearest note of the key
+    const free = 130.81 * 2 ** (3 * x);
+    if (!padKey()) return free;
+    const { root, steps } = padKey(), semis = 12 * Math.log2(free / root), oct = Math.floor(semis / 12), near = [...steps.map(n => n + 12 * oct), 12 * (oct + 1)].reduce((a, b) => (Math.abs(b - semis) < Math.abs(a - semis) ? b : a));
+    return root * 2 ** (near / 12);
+  }
+  const thereminLevel = y => 0.27 * Math.max(0.02, 1 - y) ** 1.3;
   let thereminVoice = null, padDown = false;
   function stopTheremin() {
     if (!thereminVoice) return;
@@ -215,7 +244,7 @@
   function moveTheremin(x, y) {
     if (!thereminVoice) return;
     const t = eggAudio.currentTime;
-    thereminVoice.oscs.forEach(({ o, mul }) => o.frequency.setTargetAtTime(thereminHz(x) * mul, t, 0.03));
+    thereminVoice.oscs.forEach(({ o, mul }) => o.frequency.setTargetAtTime(thereminHz(x) * mul, t, padKey() ? 0.012 : 0.03));
     thereminVoice.g.gain.setTargetAtTime(thereminLevel(y), t, 0.03);
   }
   let padX = 0, padY = 0;
@@ -245,24 +274,37 @@
     clearTimeout(nameTimer);
     nameTimer = setTimeout(() => { if (!busy) hideTag(); }, 1400);
   }
-  function demo() {                                        // a little run of notes
+  // The little demo after a change: once the shanks have finished moving, a few notes are played on the new layout, and you see them played.
+  let demoRun = 0, demoNotes = [];
+  function demo(quick = false) {                           // quick: changing sound or key, so it's shorter and cut off sooner
     if (!audioReady()) return;
-    if (inst().mode === 'pad') {                           // a little glide up
-      startTheremin(0.2, 0.3);
-      [0.3, 0.45, 0.6, 0.75].forEach((x, i) => setTimeout(() => moveTheremin(x, 0.3), 90 * (i + 1)));
-      setTimeout(stopTheremin, 500);
-      return;
-    }
-    if (!sound().hold) { window.EggSfx.play(eggAudio, [1, 3, 5, 8].map((k, i) => shankHit(k, 0.7, i * 90)), eggMaster); return; }
-    [1, 3, 5, 8].forEach((k, i) => setTimeout(() => {
-      const note = window.EggSfx.play(eggAudio, [shankHit(k, 0.7)], eggMaster);
-      setTimeout(() => note.release(), 170);
-    }, i * 190));
+    const run = ++demoRun, later = (ms, fn) => setTimeout(() => { if (run === demoRun) fn(); }, ms), wind = window.shankWind, g = quick ? 0.55 : 1;
+    demoNotes.forEach(n => n?.release?.()); demoNotes = [];   // a new demo cuts off the last one
+    const play = k => { const n = window.EggSfx.play(eggAudio, [shankHit(k, 0.7)], eggMaster); demoNotes.push(n); return n; };
+    wind?.whenFormed(() => {
+      if (run !== demoRun || !audioReady()) return;
+      if (quick) later(720, () => { demoNotes.forEach(n => n?.release?.()); demoNotes = []; });
+      if (inst().mode === 'strings') {                     // a strum, low to high
+        for (let i = 0; i < sound().count; i += 1) later(i * 60 * g, () => { wind.vibrate(i, 0.6); play(i + 1); });
+      } else if (inst().mode === 'pad') {                  // the target glides up the pitch
+        wind.showTarget(0.2, 0.3, true); startTheremin(0.2, 0.3);
+        [0.3, 0.45, 0.6, 0.75].forEach((x, i) => later(90 * g * (i + 1), () => { wind.showTarget(x, 0.3, true); moveTheremin(x, 0.3); }));
+        later(520 * g, () => { stopTheremin(); wind.showTarget(0.75, 0.3, false); });
+      } else if (inst().mode === 'keys') {                 // keys go down as they play
+        [1, 3, 5, 8].forEach((k, i) => later(i * 150 * g, () => {
+          wind.showPress(k, 130 * g);
+          const note = play(k);
+          if (sound().hold) later(170 * g, () => note.release());
+        }));
+      } else {                                             // the shanks give a little nudge
+        [1, 3, 5, 8].forEach((k, i) => later(i * 90 * g, () => { wind.showBump(k, i % 2 ? -1 : 1); play(k); }));
+      }
+    });
   }
-  function changed(text) { stopTheremin(); saveState(); applyMode(); refreshInstrument(); say(text); demo(); }
+  function changed(text, quick) { stopTheremin(); saveState(); applyMode(); refreshInstrument(); say(text); demo(quick); }
   window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
-  window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name); };
-  window.nextMusicalKey = () => { if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name); } };
+  window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name, true); };
+  window.nextMusicalKey = () => { if (inst().mode === 'strings') { state.tuning[sound().name] = ((state.tuning[sound().name] || 0) + 1) % sound().tunings.length; changed(tuning().name, true); return; } if (inst().mode === 'pad') { state.padKey = state.padKey + 1 >= MUSICAL_KEYS.length ? -1 : state.padKey + 1; changed(padKey()?.name || 'Free slide', true); return; } if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name, true); } };
   ['pointerdown', 'pointerup', 'keydown'].forEach(ev => addEventListener(ev, () => window.unlockEggAudio(), { once: true }));   // browsers allow sound after the visitor's first click, tap or key
 
   function eggMusic(m) {

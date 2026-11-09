@@ -55,8 +55,27 @@ window.LAB_INSTRUMENTS = [
       { name: 'Music box', play: s => s.egg({ kind: 'musicBox', v: s.v, hz: s.hz }) },
       { name: 'Warm organ', hold: true, play: s => s.egg({ kind: 'organ', v: s.v, hz: s.hz }) },   // hold: sounds until the key is let go
   ] },
+  { name: 'Strings', note: 'pluck or strum', mode: 'strings', keys: true, controls: [
+      { id: 'hover', type: 'check', label: 'Strum by moving the mouse' }, ECHO,
+  ], sounds: [                                            // count: strings, in order low to high from the left; ring: how long they visibly shake; tunings: pressed through with C
+      { name: 'Guitar', count: 6, ring: 1.1, decay: 0.996, soft: 1, dur: 2.2, tunings: [
+        { name: 'Standard', notes: [82.41, 110, 146.83, 196, 246.94, 329.63] }, { name: 'Drop D', notes: [73.42, 110, 146.83, 196, 246.94, 329.63] },
+        { name: 'Open G', notes: [73.42, 98, 146.83, 196, 246.94, 293.66] }, { name: 'DADGAD', notes: [73.42, 110, 146.83, 196, 220, 293.66] },
+      ] },
+      { name: 'Bass', count: 4, ring: 1.4, decay: 0.998, soft: 2, dur: 2.4, tunings: [
+        { name: 'Standard', notes: [41.2, 55, 73.42, 98] }, { name: 'Drop D', notes: [36.71, 55, 73.42, 98] },
+      ] },
+      { name: 'Banjo', count: 5, ring: 0.5, decay: 0.985, soft: 0, dur: 1, tunings: [
+        { name: 'Open G', notes: [392, 146.83, 196, 246.94, 293.66] }, { name: 'Double C', notes: [392, 130.81, 196, 261.63, 293.66] },
+      ] },
+      { name: 'Ukulele', count: 4, ring: 0.7, decay: 0.992, soft: 1, dur: 1.2, tunings: [
+        { name: 'Standard', notes: [392, 261.63, 329.63, 440] }, { name: 'Low G', notes: [196, 261.63, 329.63, 440] }, { name: 'D tuning', notes: [440, 293.66, 369.99, 493.88] },
+      ] },
+      { name: 'Harp', count: 8, ring: 1.6, decay: 0.998, soft: 3, dur: 2.4, tunings: window.LAB_KEYS.map(key => ({ name: key.name, notes: Array.from({ length: 8 }, (_, i) => key.root * 2 ** ((12 * Math.floor(i / key.steps.length) + key.steps[i % key.steps.length]) / 12)) })) },
+  ].map(x => ({ ...x, play: s => s.egg({ kind: 'pluck', v: s.v, hz: s.hz, decay: x.decay, soft: x.soft, dur: x.dur }) })) },
   { name: 'Theremin', note: 'press and move on the grid', mode: 'pad', keys: true, controls: [
-      { id: 'snap', type: 'check', label: 'Snap to the notes of the key' }, ECHO,
+      { id: 'snap', type: 'check', label: 'Snap to the notes of the key', only: v => v.keyed },
+      { id: 'guides', type: 'check', label: 'Show the note guide', only: v => v.keyed }, ECHO,
       { id: 'range', type: 'range', label: 'Range (octaves)', min: 1, max: 4, step: 0.5 },
       { id: 'vib', type: 'range', label: 'Vibrato', min: 0, max: 40, step: 1 },
   ], sounds: [
