@@ -6,8 +6,8 @@
 //                                 'slide' (dur, f0, f1 in Hz), 'aah' (dur), 'splat', 'thud', 'tada', 'tweet', 'shuffle', 'creak' (dur), 'blip', 'chime' (hz, optional ring = how long it lasts, 1 = normal), 'harp' (hz), 'swish', 'comb' (dur), 'purr' (dur, phase, cycles), 'meow' (dur), 'yay' (dur), 'snap', 'wobble' (dur, rise), 'rewind' (dur),
 //                                 'flop', 'manHum' (dur, notes in Hz), 'paper' (dur, density = crackles per second, hz), 'bubble' (hz, glide = pitch ratio over the bubble),
 //                                 'clicks' (dur, list = [[position 0..1, Hz, loudness, ms], ...], buzz = true for square-wave buzzes), 'water' (dur, hz = how muffled), 'clack', 'tissuePop', 'crickets' (dur), 'honk' (dur),
-//                                 'squeak' (rust 0..1), 'bell', 'rush' (dur), 'digital' (dur, rise), 'pwip', 'piano' (hz), 'softClick'.
-//                                 v = loudness 0..1, pitch = 1 for normal, wet = reverb level (optional). Returns { stop() }.
+//                                 'squeak' (rust 0..1), 'bell', 'rush' (dur), 'digital' (dur, rise), 'pwip', 'piano' (hz), 'softClick', 'bubbleWrap', 'glassTink', 'fingerSnap', 'keySwitch', 'epiano' (hz), 'musicBox' (hz), 'organ' (hz; held until release()).
+//                                 v = loudness 0..1, pitch = 1 for normal, wet = reverb level (optional). Returns { stop(), release() }.
 (function () {
   const VOLUME = 0.6;
   const noiseOf = new WeakMap();                          // one second of white noise per AudioContext
@@ -408,6 +408,44 @@
     n.connect(f).connect(g).connect(out); n.start(t, Math.random() * 0.8, 0.02);
     tone(ac, out, 'sine', t, 900 * pitch, 500 * pitch, 0.012, 0.14 * v);
   }
+  function burst(ac, out, t, type, hz, q, dur, level) {   // a very short filtered noise
+    const n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    n.buffer = noise(ac); f.type = type; f.frequency.value = hz; f.Q.value = q;
+    g.gain.setValueAtTime(level, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(f).connect(g).connect(out); n.start(t, Math.random() * 0.8, dur + 0.02);
+  }
+  function bubbleWrap(ac, out, t, v, p) { burst(ac, out, t, 'bandpass', 1400 * p, 1, 0.012, 0.8 * v); tone(ac, out, 'sine', t, 380 * p, 180 * p, 0.03, 0.3 * v); }
+  function glassTink(ac, out, t, v, p) { tone(ac, out, 'sine', t, 3200 * p, 3190 * p, 0.09, 0.14 * v); tone(ac, out, 'sine', t, 8100 * p, 8080 * p, 0.04, 0.04 * v); }
+  function fingerSnap(ac, out, t, v, p) { burst(ac, out, t, 'bandpass', 2200 * p, 2, 0.03, 0.9 * v); burst(ac, out, t, 'highpass', 5000, 0.7, 0.012, 0.35 * v); }
+  function keySwitch(ac, out, t, v, p) {
+    burst(ac, out, t, 'highpass', 3000, 0.7, 0.006, 0.5 * v);
+    tone(ac, out, 'triangle', t, 250 * p, 120 * p, 0.025, 0.28 * v);
+    burst(ac, out, t + 0.04, 'highpass', 3600, 0.7, 0.005, 0.2 * v);      // and the little release
+  }
+  function epiano(ac, out, t, v, hz) {                    // an electric piano: a soft tone with a metallic ping that fades fast (one oscillator bending another)
+    const c = ac.createOscillator(), m = ac.createOscillator(), mg = ac.createGain(), g = ac.createGain();
+    c.type = 'sine'; c.frequency.value = hz; m.type = 'sine'; m.frequency.value = hz * 14;
+    mg.gain.setValueAtTime(hz * 1.4, t); mg.gain.exponentialRampToValueAtTime(0.1, t + 0.16);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4 * v, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.7);
+    m.connect(mg).connect(c.frequency); c.connect(g).connect(out);
+    c.start(t); m.start(t); c.stop(t + 1.75); m.stop(t + 1.75);
+  }
+  function musicBox(ac, out, t, v, hz) {                  // a music box: a high plucked comb tooth
+    tone(ac, out, 'sine', t, hz * 2, hz * 2, 1.2, 0.2 * v);
+    tone(ac, out, 'sine', t, hz * 4, hz * 4, 0.5, 0.07 * v);
+    tone(ac, out, 'sine', t, hz * 6.3, hz * 6.3, 0.15, 0.04 * v);
+  }
+  function organ(ac, out, t, v, hz) {                     // a warm organ: stacked harmonics, a little shimmer; it holds until released (cut off after 30 s at the latest)
+    const g = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain(), end = t + 30;
+    lfo.frequency.value = 5.5; lg.gain.value = 7; lfo.start(t); lfo.stop(end);
+    [[1, 1], [2, 0.6], [3, 0.35], [4, 0.2]].forEach(([mul, level]) => {
+      const o = ac.createOscillator(), l = ac.createGain();
+      o.type = 'sine'; o.frequency.value = hz * mul; l.gain.value = level; lfo.connect(lg).connect(o.detune);
+      o.connect(l).connect(g); o.start(t); o.stop(end);
+    });
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.2 * v, t + 0.015);
+    g.connect(out);
+  }
   function tweet(ac, out, t, v, pitch) {                  // one up-down chirp
     tone(ac, out, 'sine', t, 2500 * pitch, 3600 * pitch, 0.07, 0.16 * v);
     tone(ac, out, 'sine', t + 0.085, 3400 * pitch, 2300 * pitch, 0.09, 0.16 * v);
@@ -494,12 +532,20 @@
       if (h.kind === 'pwip') { pwip(ac, dest, t, h.v); return; }
       if (h.kind === 'piano') { piano(ac, dest, t, h.v, h.hz); return; }
       if (h.kind === 'softClick') { softClick(ac, dest, t, h.v, h.pitch); return; }
+      if (h.kind === 'bubbleWrap') { bubbleWrap(ac, dest, t, h.v, h.pitch); return; }
+      if (h.kind === 'glassTink') { glassTink(ac, dest, t, h.v, h.pitch); return; }
+      if (h.kind === 'fingerSnap') { fingerSnap(ac, dest, t, h.v, h.pitch); return; }
+      if (h.kind === 'keySwitch') { keySwitch(ac, dest, t, h.v, h.pitch); return; }
+      if (h.kind === 'epiano') { epiano(ac, dest, t, h.v, h.hz); return; }
+      if (h.kind === 'musicBox') { musicBox(ac, dest, t, h.v, h.hz); return; }
+      if (h.kind === 'organ') { organ(ac, dest, t, h.v, h.hz); return; }
       if (h.kind === 'tweet') { tweet(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'shuffle') { shuffle(ac, dest, t, h.v, h.pitch); return; }
       if (h.kind === 'land') thump(ac, dest, t, h.v, h.pitch);
       squish(ac, dest, t, h.v, h.pitch);
     });
-    return { stop() { try { out.disconnect(); } catch (e) { /* already gone */ } } };
+    const stop = () => { try { out.disconnect(); } catch (e) { /* already gone */ } };
+    return { stop, release() { out.gain.setTargetAtTime(0.0001, ac.currentTime, 0.06); setTimeout(stop, 500); } };   // release: a held note fades instead of clicking off
   }
 
   window.EggSfx = { play };

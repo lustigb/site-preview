@@ -33,7 +33,13 @@ window.LAB_SOUNDS = [
 ];
 
 // The ways to play. mode: how shankwind.js takes input ('wind' = sway with the mouse, 'keys' = press and drag across).
-// fixed: the instrument's own sound, if it ignores the Sound list. controls: what the Interaction box shows (settings are kept per sound).
+// sounds: its own list for the Sound box (otherwise LAB_SOUNDS). keys: a keyboard, so it uses the musical key (s.hz is the note for that shank). controls: what the Interaction box shows (settings are kept per sound).
+const MAJOR = [0, 2, 4, 5, 7, 9, 11], MINOR = [0, 2, 3, 5, 7, 8, 10];
+window.LAB_KEYS = [                                       // the same list as the home page (site/js/homeeggs.js)
+  { name: 'C major', root: 261.63, steps: MAJOR }, { name: 'G major', root: 196.0, steps: MAJOR }, { name: 'F major', root: 174.61, steps: MAJOR }, { name: 'D major', root: 293.66, steps: MAJOR },
+  { name: 'A minor', root: 220.0, steps: MINOR }, { name: 'E minor', root: 164.81, steps: MINOR },
+  { name: 'C pentatonic', root: 261.63, steps: [0, 2, 4, 7, 9] }, { name: 'A minor pentatonic', root: 220.0, steps: [0, 3, 5, 7, 10] }, { name: 'A blues', root: 220.0, steps: [0, 3, 5, 6, 7, 10] },
+];
 const ECHO = { id: 'echo', type: 'check', label: 'Room echo' };
 window.LAB_INSTRUMENTS = [
   { name: 'Sway', note: 'move across the shanks', mode: 'wind', controls: [
@@ -43,8 +49,12 @@ window.LAB_INSTRUMENTS = [
       { id: 'gust', type: 'range', label: 'Push strength', min: 0.5, max: 4, step: 0.1 },
       { id: 'gap', type: 'range', label: 'Touch distance', min: 8, max: 50, step: 1, only: v => v.trigger === 'touch' },
   ] },
-  { name: 'Piano', note: 'press and drag', mode: 'keys', controls: [ECHO, { id: 'dip', type: 'range', label: 'Key travel', min: 4, max: 40, step: 1 }],
-    fixed: s => s.egg({ kind: 'piano', v: s.v, hz: 261.63 * 2 ** ([0, 2, 4, 5, 7, 9, 11, 12][s.k - 1] / 12) }) },
+  { name: 'Piano', note: 'press and drag', mode: 'keys', keys: true, controls: [ECHO, { id: 'dip', type: 'range', label: 'Key travel', min: 4, max: 40, step: 1 }], sounds: [
+      { name: 'Piano', play: s => s.egg({ kind: 'piano', v: s.v, hz: s.hz }) },
+      { name: 'Electric piano', play: s => s.egg({ kind: 'epiano', v: s.v, hz: s.hz }) },
+      { name: 'Music box', play: s => s.egg({ kind: 'musicBox', v: s.v, hz: s.hz }) },
+      { name: 'Warm organ', hold: true, play: s => s.egg({ kind: 'organ', v: s.v, hz: s.hz }) },   // hold: sounds until the key is let go
+  ] },
   { name: 'Theremin', note: 'not built yet', soon: true },
   { name: 'Organ', note: 'not built yet', soon: true },
   { name: 'Drums', note: 'not built yet', soon: true },

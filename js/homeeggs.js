@@ -111,22 +111,64 @@
       document.head.appendChild(sc);
     });
   };
-  // The shanks are an instrument. Each has a way of being played (shankWind.setMode) and a sound (k = which shank 1..8, v = 0..1); the last "s" in the title steps through them.
-  const PIANO = [0, 2, 4, 5, 7, 9, 11, 12].map(n => 261.63 * 2 ** (n / 12)), TUBES = [1047, 1175, 1319, 1568, 1760, 2093, 2349, 2637];
-  const INSTRUMENTS = [
-    { name: 'Soft click', mode: 'wind', options: { collide: true, gust: 3, touchGap: 45, stiff: true },   // the default: a click only when two shank tips touch (settings from the Instrument Lab)
-      hit: (k, v) => ({ kind: 'softClick', v, pitch: (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12) }) },
-    { name: 'Piano',  mode: 'keys', hit: (k, v) => ({ kind: 'piano', v, hz: PIANO[k - 1] }) },
+  // The shanks are an instrument. In the title: the last "s" changes instrument, the last "e" changes its sound, and the second "c" (keyboards only) changes the musical key.
+  const pitchOf = k => (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12);
+  const fidget = kind => (k, v) => ({ kind, v, pitch: pitchOf(k) });
+  const voice = (kind, level = 1, extra = {}) => (k, v, hz) => ({ kind, v: level * v, hz, ...extra });
+  const MAJOR = [0, 2, 4, 5, 7, 9, 11], MINOR = [0, 2, 3, 5, 7, 8, 10];
+  const MUSICAL_KEYS = [                                   // chosen so the eight shanks suit common styles: root in Hz, then the scale in semitones
+    { name: 'C major', root: 261.63, steps: MAJOR },
+    { name: 'G major', root: 196.0, steps: MAJOR },
+    { name: 'F major', root: 174.61, steps: MAJOR },
+    { name: 'D major', root: 293.66, steps: MAJOR },
+    { name: 'A minor', root: 220.0, steps: MINOR },
+    { name: 'E minor', root: 164.81, steps: MINOR },
+    { name: 'C pentatonic', root: 261.63, steps: [0, 2, 4, 7, 9] },
+    { name: 'A minor pentatonic', root: 220.0, steps: [0, 3, 5, 7, 10] },
+    { name: 'A blues', root: 220.0, steps: [0, 3, 5, 6, 7, 10] },
   ];
-  const INSTRUMENT_KEY = 'bs-instrument2';
-  let instrument = 0;
-  try { instrument = Math.max(0, INSTRUMENTS.findIndex(w => w.name === localStorage.getItem(INSTRUMENT_KEY))); } catch (e) { /* starts on the first one */ }
-  window.shankWind?.setMode(INSTRUMENTS[instrument].mode, INSTRUMENTS[instrument].options);
-  const shankHit = (k, v, ms = 0) => ({ ms, ...INSTRUMENTS[instrument].hit(k, v) });
+  const INSTRUMENTS = [
+    { name: 'Fidget', mode: 'wind', options: { collide: true, gust: 3, touchGap: 45, stiff: true }, sounds: [   // settings from the Instrument Lab
+      { name: 'Soft click', hit: fidget('softClick') }, { name: 'Bubble wrap', hit: fidget('bubbleWrap') }, { name: 'Glass tink', hit: fidget('glassTink') },
+      { name: 'Finger snap', hit: fidget('fingerSnap') }, { name: 'Key switch', hit: fidget('keySwitch') },
+    ] },
+    { name: 'Piano', mode: 'keys', keys: true, sounds: [
+      { name: 'Piano', hit: voice('piano') }, { name: 'Electric piano', hit: voice('epiano') }, { name: 'Music box', hit: voice('musicBox') },
+      { name: 'Warm organ', hit: voice('organ'), hold: true },
+    ] },
+  ];
+  const STATE_KEY = 'bs-instruments';
+  let state = { instrument: 0, sound: {}, key: 0 };
+  try { state = { ...state, ...JSON.parse(localStorage.getItem(STATE_KEY) || '{}') }; } catch (e) { /* starts on the defaults */ }
+  state.instrument = INSTRUMENTS[state.instrument] ? state.instrument : 0;
+  const saveState = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { /* just this visit, then */ } };
+  const inst = () => INSTRUMENTS[state.instrument];
+  const sound = () => inst().sounds[(state.sound[inst().name] || 0) % inst().sounds.length];
+  const musicalKey = () => MUSICAL_KEYS[state.key % MUSICAL_KEYS.length];
+  function keyHz(k) {                                      // the note for shank k in the current key, climbing through octaves as needed
+    const { root, steps } = musicalKey(), i = k - 1;
+    return root * 2 ** ((12 * Math.floor(i / steps.length) + steps[i % steps.length]) / 12);
+  }
+  const keyLabel = document.createElement('div');          // which key the keyboard is in: the image's bottom left corner
+  keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); opacity:.65;';
+  box.appendChild(keyLabel);
+  function refreshInstrument() {
+    keyLabel.textContent = musicalKey().name;
+    keyLabel.style.display = inst().keys && !busy ? '' : 'none';
+    document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst().keys);
+  }
+  window.keyLetterOn = () => !!inst().keys;
+  window.shankWind?.setMode(inst().mode, inst().options);
+  refreshInstrument();
   const audioReady = () => eggAudio && eggAudio.state === 'running' && window.EggSfx;
+  const shankHit = (k, v, ms = 0) => ({ ms, ...sound().hit(k, v, keyHz(k)) });
+  const heldNotes = new Map();                             // shank -> its sounding note, for sounds that hold while pressed
   window.shankSwing = function (k, swing) {                // called by shankwind.js: a shank was played, swing = how hard in photo px
-    if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, Math.min(1, swing / 45) ** 0.7)], eggMaster);
+    if (!audioReady()) return;
+    const note = window.EggSfx.play(eggAudio, [shankHit(k, Math.min(1, swing / 45) ** 0.7)], eggMaster);
+    if (sound().hold) { heldNotes.get(k)?.release(); heldNotes.set(k, note); }
   };
+  window.shankRelease = function (k) { heldNotes.get(k)?.release(); heldNotes.delete(k); };
   window.shankTouch = function (k, speed) {                // called by shankwind.js when two shank tips hit each other
     if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, Math.min(1, speed / 1200) ** 0.6)], eggMaster);
   };
@@ -137,17 +179,25 @@
     soundBtn.animate([0, -9, 7, -5, 3, 0].map(deg => ({ transform: `rotate(${deg}deg)` })), { duration: 450, easing: 'ease-in-out' });
   };
   let nameTimer = null;
-  window.nextInstrument = function () {                    // the last "s": move to the next one, say its name, and play a little run of it
-    instrument = (instrument + 1) % INSTRUMENTS.length;
-    try { localStorage.setItem(INSTRUMENT_KEY, INSTRUMENTS[instrument].name); } catch (e) { /* just this visit, then */ }
-    window.shankWind?.setMode(INSTRUMENTS[instrument].mode, INSTRUMENTS[instrument].options);
-    if (audioReady()) window.EggSfx.play(eggAudio, [1, 3, 5, 8].map((k, i) => shankHit(k, 0.7, i * 90)), eggMaster);
+  function say(text) {                                     // the pill under the title, briefly
     tag.style.top = title ? (title.offsetTop + title.offsetHeight + 8) + 'px' : 'calc(100% + 6px)';
-    tag.textContent = INSTRUMENTS[instrument].name;
+    tag.textContent = text;
     tag.style.opacity = 1;
     clearTimeout(nameTimer);
     nameTimer = setTimeout(() => { if (!busy) hideTag(); }, 1400);
-  };
+  }
+  function demo() {                                        // a little run of notes
+    if (!audioReady()) return;
+    if (!sound().hold) { window.EggSfx.play(eggAudio, [1, 3, 5, 8].map((k, i) => shankHit(k, 0.7, i * 90)), eggMaster); return; }
+    [1, 3, 5, 8].forEach((k, i) => setTimeout(() => {
+      const note = window.EggSfx.play(eggAudio, [shankHit(k, 0.7)], eggMaster);
+      setTimeout(() => note.release(), 170);
+    }, i * 190));
+  }
+  function changed(text) { saveState(); window.shankWind?.setMode(inst().mode, inst().options); refreshInstrument(); say(text); demo(); }
+  window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
+  window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name); };
+  window.nextMusicalKey = () => { if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name); } };
   ['pointerdown', 'pointerup', 'keydown'].forEach(ev => addEventListener(ev, () => window.unlockEggAudio(), { once: true }));   // browsers allow sound after the visitor's first click, tap or key
 
   function eggMusic(m) {
@@ -183,6 +233,7 @@
   window.playRandomEgg = function (name) {                 // name: optional, to play one egg by name
     if (busy) return false;
     busy = true;
+    refreshInstrument();
     window.shankWind?.pause();
 
     let frame, alreadyReady = false, eggNames = null;
@@ -225,6 +276,7 @@
       frame.remove();
       hideTag();
       busy = false;
+      refreshInstrument();
       window.shankWind?.resume();
       dispatchEvent(new Event('homeegg-done'));            // titlecode.js clears its locked keycaps on this
     }

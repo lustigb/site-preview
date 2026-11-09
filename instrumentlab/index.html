@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Instrument Lab</title>
 <meta name="robots" content="noindex">
-<base href="../">
+<script>document.write('<base href="' + (location.protocol === 'file:' && !location.pathname.includes('/site/instrumentlab/') ? '../site/' : '../') + '">');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap">
 <link rel="stylesheet" href="styles/base.css">
@@ -64,6 +64,7 @@
   <p id="status">Click anywhere once to turn sound on.</p>
   <details class="box" id="boxInstrument" open><summary><h2>Instrument</h2></summary><div id="instruments"></div></details>
   <details class="box" id="boxInteraction" open><summary><h2>Interaction</h2></summary><div id="controls"></div></details>
+  <details class="box" id="boxKey" open><summary><h2>Musical key</h2></summary><div id="keys"></div></details>
   <details class="box" id="soundsBox" open><summary><h2>Sound</h2></summary><div id="sounds"></div>
     <div id="levelBox"><label for="level"><span id="levelName"></span><span id="levelValue"></span></label><input id="level" type="range" min="0" max="2" step="0.05"></div>
   </details>
@@ -72,7 +73,7 @@
 <script src="egglab/eggsfx.js"></script>
 <script src="js/shankwind.js"></script>
 <script src="instrumentlab/sounds.js"></script>
-<script src="instrumentlab/lab.js"></script>
 <script src="js/titlecode.js"></script>
+<script src="instrumentlab/lab.js"></script>
 </body>
 </html>

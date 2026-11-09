@@ -151,10 +151,11 @@
     if (still > 0.3 || paused) { settle(); return; }
     requestAnimationFrame(tick);
   }
+  function releaseAllKeys() { [...new Set(held.values())].forEach(k => window.shankRelease?.(k)); held.clear(); osc.forEach(o => { o.down = false; }); }
   function settle() {                                       // back to the plain photo
     on = false;
     osc.forEach(o => { o.a = 0; o.v = 0; o.d = 0; o.dv = 0; o.down = false; o.peak = 0; });
-    held.clear();
+    releaseAllKeys();
     trail = [];
     canvas.style.display = 'none';
   }
@@ -168,7 +169,7 @@
     setMode(m, options = {}) {
       mode = m;
       opts = { ...DEFAULTS, ...options };
-      held.clear(); osc.forEach(o => { o.down = false; });
+      releaseAllKeys();
       box.style.touchAction = m === 'wind' ? 'pan-y' : 'none';   // playing keys shouldn't scroll the page
     },
   };
@@ -181,7 +182,7 @@
   function press(id, k) { held.set(id, k); osc[k - 1].down = true; start(); window.shankSwing?.(k, 34); }
   function release(id) {
     const k = held.get(id); held.delete(id);
-    if (k && ![...held.values()].includes(k)) osc[k - 1].down = false;   // another finger may still be on it
+    if (k && ![...held.values()].includes(k)) { osc[k - 1].down = false; window.shankRelease?.(k); }   // another finger may still be on it
   }
   box.addEventListener('pointerdown', ev => {
     if (mode === 'keys') {

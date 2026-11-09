@@ -9,13 +9,15 @@
 // from homeeggs.js; the wind interaction stays the baseline whenever no animation is playing). The first
 // letter also calls window.prepareEgg() so the animation is ready by the end. Letters can be locked in any
 // order; all three in the wrong order (or the idle time running out) fades the keycaps and starts over. Viewing the source to read this is allowed and appreciated.
-// The last "s" is a separate key, not part of the code: hold it the same way and it steps to the next instrument for the shanks.
+// The end of "Sciences" has three more keys, not part of the code, held the same way: the last "s" steps to the next instrument, the last "e" to the next sound
+// for that instrument, and the second "c" to the next musical key (only pressable on keyboard instruments; otherwise it is just the code's fourth keycap).
 (function () {
   const h1 = document.querySelector(".home-page .hero h1");
   if (!h1 || h1.textContent.trim() !== "Brian Sciences") return;
   const CODE = ["a", "b", "c1"], HOLD_MS = 450, WINDOW_MS = 5000;   // idle time allowed between letters (paused while a letter is being held)
   const AUTO = "c2";                                  // the second c: not part of the code; fills in by itself on success
-  const KEYS = { 0: "b", 3: "a", 7: "c1", 11: "c2", 13: "snd" }; // B(0) r i a(3) n _ S c(7) i e n c(11) e s(13)
+  const KEYS = { 0: "b", 3: "a", 7: "c1", 11: "c2", 12: "fx", 13: "snd" }; // B(0) r i a(3) n _ S c(7) i e n c(11) e(12) s(13)
+  const ACTIONS = { snd: "nextInstrument", fx: "nextSound", c2: "nextMusicalKey" };   // the keys that do something on the spot
   const text = h1.textContent;
   h1.setAttribute("aria-label", text);
   h1.textContent = "";
@@ -23,7 +25,7 @@
     const s = document.createElement("span");
     s.textContent = ch; s.setAttribute("aria-hidden", "true");
     if (KEYS[i]) {
-      s.dataset.k = KEYS[i]; s.className = KEYS[i] === AUTO ? "tc-key tc-auto" : KEYS[i] === "snd" ? "tc-key tc-snd" : "tc-key";
+      s.dataset.k = KEYS[i]; s.className = KEYS[i] === AUTO ? "tc-key tc-auto" : KEYS[i] === "snd" ? "tc-key tc-snd" : KEYS[i] === "fx" ? "tc-key tc-fx" : "tc-key";
       // keycap outline: one rounded square, drawn side by side (top, right, bottom, left) as the hold progresses
       s.insertAdjacentHTML("beforeend", '<svg class="tc-box" aria-hidden="true"><path/></svg>');   // sized in layoutBoxes()
     }
@@ -32,7 +34,7 @@
   const st = document.createElement("style");
   st.textContent = `.home-page .hero h1{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
     .tc-key{display:inline-block;position:relative;transform-origin:50% 90%;transition:color .6s ease, transform .15s ease}
-    .tc-key:not(.tc-auto)::before{content:"";position:absolute;inset:-14px -9px -18px}   /* bigger target for a finger */
+    .tc-key:not(.tc-auto)::before,.tc-auto.tc-live::before{content:"";position:absolute;inset:-14px -9px -18px}   /* bigger target for a finger */
     .tc-key.tc-holding{transform:scale(1.3);z-index:2}                                    /* magnified while held */
     .tc-box{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
     .tc-box path{fill:transparent;stroke:var(--ink,#1a1f1c);stroke-width:2.5px;stroke-linecap:round;stroke-linejoin:round;
@@ -49,13 +51,14 @@
     @keyframes tc-n{0%,100%{transform:rotate(0)}35%{transform:rotate(-4deg)}70%{transform:rotate(3deg)}}`;
   document.head.appendChild(st);
 
-  const keys = [...h1.querySelectorAll(".tc-key:not(.tc-snd)")];   // the code's four keycaps (traces, clearing)
-  const sndKey = h1.querySelector(".tc-snd");         // the last s: same look and hold, its own job
+  const keyLetterOn = () => !!window.keyLetterOn?.();  // is the second c pressable right now?
+  const keys = [...h1.querySelectorAll(".tc-key:not(.tc-snd):not(.tc-fx)")];   // the code's four keycaps (traces, clearing)
+  const extras = [h1.querySelector(".tc-snd"), h1.querySelector(".tc-fx")];   // same look and hold, their own jobs
   const auto = keys.find(k => k.dataset.k === AUTO);
   // Size each keycap outline in real pixels around its letter (dash lengths are measured in screen units),
   // starting at the top-left so the sides appear in order: top, right, bottom, left.
   function layoutBoxes() {
-    [...keys, sndKey].forEach(k => {
+    [...keys, ...extras].forEach(k => {
       const svg = k.querySelector(".tc-box"), path = svg.querySelector("path");
       const padX = k.offsetWidth * 0.05 + 2, padTop = k.offsetHeight * 0.02, padBot = k.offsetHeight * 0.06;
       const w = k.offsetWidth + 2 * padX, h = k.offsetHeight - padTop + padBot, r = Math.min(w, h) * 0.18, x0 = 1.5, y0 = 1.5;
@@ -84,7 +87,7 @@
   function reset() { got = []; clearTimeout(windowTimer); windowTimer = null; clearTints(); }
 
   // hover hint: one small nudge on mouse-enter (not while holding)
-  [...keys, sndKey].filter(k => k !== auto).forEach(k => k.addEventListener("pointerenter", e => { if (e.pointerType === "mouse" && !hold) anim(k, "tc-nudge"); }));
+  [...keys, ...extras].forEach(k => k.addEventListener("pointerenter", e => { if (e.pointerType === "mouse" && !hold && (k !== auto || keyLetterOn())) anim(k, "tc-nudge"); }));
 
   // Any of the four letters can be locked in, in any order; each stays a keycap until the 30 s window
   // (from the first one) runs out. Only once all four are in is the order judged: right order -> the
@@ -93,10 +96,10 @@
   let playing = false;
   function enter(k, el) {
     if (playing) return;
-    if (k === "snd") {                                       // the last s: pop like a key, change instrument, un-draw itself
+    if (ACTIONS[k]) {                                        // pop like a key, do its job, un-draw itself
       if (got.length) windowTimer = setTimeout(reset, WINDOW_MS);   // a hold pauses the code's idle timer: start it again
       el.classList.add("tc-in"); anim(el, "tc-wiggle");
-      window.nextInstrument?.();
+      window[ACTIONS[k]]?.();
       setTimeout(() => { el.classList.add("tc-undo"); setTimeout(() => el.classList.remove("tc-in", "tc-undo"), 320); }, 500);
       return;
     }
@@ -207,7 +210,7 @@
   }
   h1.addEventListener("contextmenu", e => e.preventDefault());
   h1.addEventListener("pointerdown", e => {
-    const el = e.target.closest(".tc-key"); if (!el || el === auto || playing || el.classList.contains("tc-in")) return;
+    const el = e.target.closest(".tc-key"); if (!el || (el === auto && !keyLetterOn()) || playing || el.classList.contains("tc-in")) return;
     window.unlockEggAudio?.();                        // a real tap: let an egg with music play sound later
     endHold();
     clearTimeout(windowTimer); windowTimer = null;   // the window only counts idle time: paused while holding
@@ -218,5 +221,5 @@
   });
   ["pointerup", "pointercancel"].forEach(ev => h1.addEventListener(ev, () => endHold(true)));
   h1.addEventListener("pointerup", e => { if (e.target.closest(".tc-key")) window.unlockEggAudio?.(); });   // phones count the lift-off as the tap
-  [...keys, sndKey].forEach(k => k.addEventListener("pointerleave", () => { if (hold && hold.el === k) endHold(true); }));
+  [...keys, ...extras].forEach(k => k.addEventListener("pointerleave", () => { if (hold && hold.el === k) endHold(true); }));
 })();

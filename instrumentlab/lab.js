@@ -6,13 +6,21 @@
     get(key, fallback) { try { return JSON.parse(localStorage.getItem(`ilab-${key}`)) ?? fallback; } catch (e) { return fallback; } },
     set(key, value) { try { localStorage.setItem(`ilab-${key}`, JSON.stringify(value)); } catch (e) { /* just this visit */ } },
   };
-  const sounds = window.LAB_SOUNDS, instruments = window.LAB_INSTRUMENTS;
-  let soundName = store.get('sound-v2', sounds[0].name), instrumentName = store.get('instrument', instruments[0].name);
-  const levels = store.get('levels', {});
-  const sound = () => sounds.find(x => x.name === soundName) || sounds[0];
+  const instruments = window.LAB_INSTRUMENTS, KEYS = window.LAB_KEYS;
+  let instrumentName = store.get('instrument', instruments[0].name), keyName = store.get('key', KEYS[0].name);
+  const levels = store.get('levels', {}), picks = store.get('picks', {});   // picks: the chosen sound, per instrument
+  if (!picks.Sway) picks.Sway = store.get('sound-v2', null);
   const instrument = () => instruments.find(x => x.name === instrumentName && !x.soon) || instruments[0];
+  const soundList = () => instrument().sounds || window.LAB_SOUNDS;
+  const sound = () => soundList().find(x => x.name === picks[instrument().name]) || soundList()[0];
+  const pick = name => { picks[instrument().name] = name; store.set('picks', picks); };
+  const musicalKey = () => KEYS.find(x => x.name === keyName) || KEYS[0];
+  function keyHz(k) {                                     // the note for shank k in the current key, climbing through octaves as needed
+    const { root, steps } = musicalKey(), i = k - 1;
+    return root * 2 ** ((12 * Math.floor(i / steps.length) + steps[i % steps.length]) / 12);
+  }
   const settings = store.get('settings-v2', {});             // the Interaction box's choices, per instrument and sound
-  const settingKey = () => (instrument().fixed ? instrument().name : `${instrument().name}/${sound().name}`);
+  const settingKey = () => `${instrument().name}/${sound().name}`;
   function current() {
     const x = sound(), touch = x.trigger === 'touch';
     return { trigger: touch ? 'touch' : x.trail ? 'swing' : 'push', echo: false, gust: touch ? 3 : 1, gap: 45, dip: 18, stiff: touch, ...settings[settingKey()] };
@@ -41,8 +49,8 @@
   ['pointerdown', 'pointerup', 'keydown'].forEach(ev => addEventListener(ev, unlock));
 
   function hit(k, v, delay = 0) {                         // play the current instrument's sound for shank k
-    if (!ac || ac.state !== 'running') return;
-    const inst = instrument(), t = ac.currentTime + 0.005 + delay, lv = levels[soundName] ?? 1, set = current(), dest = set.echo ? echoBus : custom;
+    if (!ac || ac.state !== 'running') return null;
+    const t = ac.currentTime + 0.005 + delay, lv = levels[sound().name] ?? 1, set = current(), dest = set.echo ? echoBus : custom;
     const tone = (type, f0, f1, dur, level) => {
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
@@ -57,14 +65,25 @@
       g.gain.setValueAtTime(level, at); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
       n.connect(f).connect(g).connect(dest); n.start(at);
     };
-    const s = { ac, out: custom, t, k, v: v * (inst.fixed ? 1 : lv), p: (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12), tone, burst,
+    const s = { ac, out: custom, t, k, v: v * lv, hz: keyHz(k), p: (1 + (k - 4.5) * 0.035) * (0.94 + Math.random() * 0.12), tone, burst,
                 egg: h => window.EggSfx.play(ac, [{ ms: delay * 1000, ...h, ...(set.echo ? { wet: 3 } : {}) }], master) };
-    (inst.fixed || sound().play)(s);
+    return sound().play(s);
   }
-  window.shankSwing = (k, swing) => hit(k, Math.min(1, swing / 45) ** 0.7);
+  const heldNotes = new Map();                            // shank -> its sounding note, for sounds that hold while pressed
+  window.shankSwing = (k, swing) => {
+    const note = hit(k, Math.min(1, swing / 45) ** 0.7);
+    if (note && sound().hold) { heldNotes.get(k)?.release(); heldNotes.set(k, note); }
+  };
+  window.shankRelease = k => { heldNotes.get(k)?.release(); heldNotes.delete(k); };
   window.shankTouch = (k, speed) => hit(k, Math.min(1, speed / 1200) ** 0.6);
-  const demo = () => [1, 3, 5, 8].forEach((k, i) => hit(k, 0.7, i * 0.09));
+  function demo() {
+    if (!sound().hold) { [1, 3, 5, 8].forEach((k, i) => hit(k, 0.7, i * 0.09)); return; }
+    [1, 3, 5, 8].forEach((k, i) => setTimeout(() => { const note = hit(k, 0.7); if (note) setTimeout(() => note.release(), 170); }, i * 190));
+  }
   window.unlockEggAudio = unlock;                         // the title's clickable letters (site/js/titlecode.js) work here too, and the last s steps through the instruments
+  window.nextSound = () => { const list = soundList(); pick(list[(list.indexOf(sound()) + 1) % list.length].name); draw(); setTimeout(demo, 30); };
+  window.nextMusicalKey = () => { if (instrument().keys) { keyName = KEYS[(KEYS.indexOf(musicalKey()) + 1) % KEYS.length].name; store.set('key', keyName); draw(); setTimeout(demo, 30); } };
+  window.keyLetterOn = () => !!instrument().keys;
   window.nextInstrument = () => {
     const ready = instruments.filter(x => !x.soon);
     instrumentName = ready[(ready.indexOf(instrument()) + 1) % ready.length].name;
@@ -81,7 +100,7 @@
     b.addEventListener('click', click);
     return b;
   }
-  const modeOptions = (inst, v) => ({ collide: !inst.fixed && v.trigger === 'touch', gust: v.gust, tight: !inst.fixed && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: !inst.fixed && !!v.stiff });
+  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff }; };
   function drawControls(inst, set) {
     const nodes = (inst.controls || []).filter(c => !c.only || c.only(set)).map(c => {
       const box = document.createElement('div'); box.className = 'ctl';
@@ -107,6 +126,9 @@
     });
     $('controls').replaceChildren(...nodes);
   }
+  const keyLabel = document.createElement('div');         // which key the keyboard is in: the image's bottom left corner, as on the home page
+  keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); opacity:.65;';
+  document.getElementById('home-photo').parentElement.appendChild(keyLabel);
   function draw() {
     const inst = instrument();
     const set = current();
@@ -117,20 +139,24 @@
     })));
     const list = [];
     let group = null;
-    sounds.forEach(x => {
-      if (x.group !== group) { group = x.group; const g = document.createElement('div'); g.className = 'group'; g.textContent = group; list.push(g); }
-      list.push(row(x, x.name === soundName, () => { soundName = x.name; store.set('sound-v2', x.name); unlock(); draw(); setTimeout(demo, 30); }));
+    soundList().forEach(x => {
+      if (x.group && x.group !== group) { group = x.group; const g = document.createElement('div'); g.className = 'group'; g.textContent = group; list.push(g); }
+      list.push(row(x, x === sound(), () => { pick(x.name); unlock(); draw(); setTimeout(demo, 30); }));
     });
     $('sounds').replaceChildren(...list);
-    $('soundsBox').classList.toggle('dim', !!inst.fixed);
-    const lv = levels[soundName] ?? 1;
-    $('levelName').textContent = `${soundName} level`;
+    $('boxKey').style.display = inst.keys ? '' : 'none';
+    $('keys').replaceChildren(...KEYS.map(x => row(x, x === musicalKey(), () => { keyName = x.name; store.set('key', x.name); unlock(); draw(); setTimeout(demo, 30); })));
+    keyLabel.textContent = musicalKey().name;
+    keyLabel.style.display = inst.keys ? '' : 'none';
+    document.querySelector('.tc-auto')?.classList.toggle('tc-live', !!inst.keys);
+    const lv = levels[sound().name] ?? 1;
+    $('levelName').textContent = `${sound().name} level`;
     $('levelValue').textContent = lv.toFixed(2);
     $('level').value = lv;
   }
   $('level').addEventListener('input', e => {
-    levels[soundName] = +e.target.value; store.set('levels', levels);
-    $('levelValue').textContent = levels[soundName].toFixed(2);
+    levels[sound().name] = +e.target.value; store.set('levels', levels);
+    $('levelValue').textContent = levels[sound().name].toFixed(2);
   });
   $('level').addEventListener('change', demo);            // hear it when you let go
   // The same sound button as the home page, in the same spot.
