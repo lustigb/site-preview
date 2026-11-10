@@ -225,19 +225,71 @@
   }
   function applyMode() {                                   // tell the shanks how to be played; a keyboard also needs its black keys and dots for the current key
     const p = inst().keys ? realPiano() : null, guides = inst().mode === 'pad' && padKey() ? noteGuides(padKey(), 3) : null;
-    const strings = inst().mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: true, chords: chordsOn() ? chordSet().chords.map(c => c.name) : null, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {};
+    const strings = inst().mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: true, chords: chordsOn() ? chordSet().chords.map(c => c.name) : null, chordsOutside: true, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {};
     window.shankWind?.setMode(inst().mode, p ? { ...inst().options, blackAt: p.blackAt, dots: p.dots } : { ...inst().options, guides, ...strings,
-      ...(isBlow() ? { style: sound().style, thick: sound().thick || 110, valves: !!sound().valves, blowKeys: hoverDevice ? 'ASDFGHJK' : null, blowNotes: Array.from({ length: 8 }, (_, i) => noteName(keyHz(i + 1))) } : {}),
+      ...(isBlow() ? { meterOutside: true, style: sound().style, thick: sound().thick || 110, valves: !!sound().valves, blowKeys: hoverDevice ? 'ASDFGHJK' : null, blowNotes: Array.from({ length: 8 }, (_, i) => noteName(keyHz(i + 1))) } : {}),
       ...(isDrums() ? { padNames: ['Kick', 'Snare', 'Hat', 'Open hat', 'Clap', 'Tom', 'Low tom', 'Crash'], padKeys: hoverDevice ? 'QWERASDF' : null } : {}) });
   }
   const keyLabel = document.createElement('div');          // which key the keyboard is in: the image's bottom left corner
   keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:#1a1f1c; background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   box.appendChild(keyLabel);
+  // Winds: a loudness slider off the image's right edge sets the base level; moving your finger up or down bends away from it, starting from wherever you pressed.
+  let baseBreath = 0.7, breathAnchor = null, liveBreath = null, blowNote = 0;
+  const DEAD = 0.05, clamp01 = x => Math.max(0, Math.min(1, x));
+  function breathFrom(raw) {
+    if (breathAnchor === null) breathAnchor = raw;
+    const d = raw - breathAnchor;
+    return clamp01(baseBreath + (Math.abs(d) < DEAD ? 0 : (d - Math.sign(d) * DEAD) * 1.25));
+  }
+  const breathBox = document.createElement('div');
+  breathBox.style.cssText = 'position:absolute; left:100%; margin-left:8px; top:0; bottom:0; width:44px; display:none; touch-action:none; cursor:pointer; -webkit-user-select:none; user-select:none; font:500 10px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); z-index:3;';
+  breathBox.innerHTML = '<div style="position:absolute; top:0; left:0; right:0; text-align:center;">loud</div><div style="position:absolute; bottom:0; left:0; right:0; text-align:center;">soft</div><div class="b" style="position:absolute; left:50%; top:16px; bottom:16px; width:4px; margin-left:-2px; border-radius:2px; background:var(--line, #cfd6cb);"><div class="n" style="position:absolute; left:50%; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%; background:rgb(82, 72, 200); box-shadow:0 1px 4px rgba(0,0,0,.3);"></div><div class="l" style="position:absolute; left:50%; width:10px; height:10px; margin:-5px 0 0 -5px; border-radius:50%; background:#fff; border:2px solid rgb(22, 12, 118); box-sizing:border-box; display:none;"></div></div>';
+  box.appendChild(breathBox);
+  function paintBreathSlider() {
+    breathBox.style.display = isBlow() && !busy ? 'block' : 'none';
+    breathBox.querySelector('.n').style.top = `${(1 - baseBreath) * 100}%`;
+    const live = breathBox.querySelector('.l');
+    live.style.display = liveBreath === null ? 'none' : 'block';
+    if (liveBreath !== null) live.style.top = `${(1 - liveBreath) * 100}%`;
+  }
+  function setBase(ev) {
+    const r = breathBox.querySelector('.b').getBoundingClientRect();
+    baseBreath = clamp01(1 - (ev.clientY - r.top) / r.height);
+    if (blowVoice && blowNote) { liveBreath = baseBreath; moveBlow(blowNote, baseBreath, false); }
+    paintBreathSlider();
+  }
+  let baseDrag = null;
+  breathBox.addEventListener('pointerdown', ev => { window.unlockEggAudio(); baseDrag = ev.pointerId; try { breathBox.setPointerCapture(ev.pointerId); } catch (e) { /* fine */ } setBase(ev); });
+  breathBox.addEventListener('pointermove', ev => { if (ev.pointerId === baseDrag) setBase(ev); });
+  ['pointerup', 'pointercancel'].forEach(type => breathBox.addEventListener(type, ev => { if (ev.pointerId === baseDrag) baseDrag = null; }));
+  // Strings: the chord buttons sit in a column off the image's left edge, so the strings get the whole picture.
+  const chordCol = document.createElement('div');
+  chordCol.style.cssText = 'position:absolute; right:100%; margin-right:6px; top:0; bottom:0; width:58px; display:none; flex-direction:column; gap:3px; z-index:3;';
+  box.appendChild(chordCol);
+  const inkColor = 'var(--ink, #1a1f1c)';
+  function paintChordColumn() {
+    const on = chordsOn() && !busy;
+    chordCol.style.display = on ? 'flex' : 'none';
+    if (!on) return;
+    const keys = hoverDevice ? 'QWERASDF' : '';
+    if (chordCol.dataset.set !== chordSet().name || !chordCol.children.length) {
+      chordCol.dataset.set = chordSet().name;
+      chordCol.replaceChildren(...chordSet().chords.map((c, i) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.style.cssText = `position:relative; flex:1; min-height:0; width:100%; padding:0; border:2px solid ${inkColor}; border-radius:7px; background:transparent; color:${inkColor}; font:600 14px/1 var(--font-ui, system-ui, sans-serif); cursor:pointer; touch-action:none; -webkit-tap-highlight-color:transparent;`;
+        b.innerHTML = `${c.name}${keys ? `<span style="position:absolute; left:3px; top:2px; font:500 8px/1 var(--font-ui, system-ui, sans-serif); opacity:.7;">${keys[i]}</span>` : ''}`;
+        b.addEventListener('pointerdown', () => { window.unlockEggAudio(); window.shankChord(i); });
+        return b;
+      }));
+    }
+    [...chordCol.children].forEach((b, i) => { const sel = i === chordPick(); b.style.background = sel ? inkColor : 'transparent'; b.style.color = sel ? 'var(--bg, #fff)' : inkColor; });
+  }
   function refreshInstrument() {
     keyLabel.textContent = isDrums() ? `${sig().name} · ${state.bpm} BPM` : isBlow() ? windKey().name : inst().mode === 'pad' ? (padKey()?.name || 'Free slide') : chordsOn() ? chordSet().name : inst().mode === 'strings' ? tuning().name : musicalKey().name;
     keyLabel.style.display = hasKeyLetter() && !busy ? '' : 'none';
     document.querySelector('.tc-auto')?.classList.toggle('tc-live', hasKeyLetter());
     document.querySelectorAll('.tc-gated').forEach(el => el.classList.toggle('tc-live', lettersOn()));
+    paintChordColumn(); paintBreathSlider();
   }
   window.keyLetterOn = hasKeyLetter;
   applyMode();
@@ -258,6 +310,7 @@
     state.chord[sound().name] = next;
    
     window.shankWind?.setChord(next ?? -1);
+    paintChordColumn();
     say(next == null ? 'Muted' : chordSet().chords[next].name);
   };
   addEventListener('keydown', ev => {                      // the chord strip on the keyboard: top row q w e r, bottom row a s d f
@@ -425,25 +478,35 @@
     v.f.frequency.setTargetAtTime(v.hz * (v.x.bright * (0.45 + 0.55 * breath)), t, 0.04);
     clipPoint(blowPoint(k, breath));
   }
-  window.shankBlow = (phase, k, breath) => { if (phase === 'down') startBlow(k, breath); else if (phase === 'up') stopBlow(); else moveBlow(k, breath, phase === 'glide'); };
+  window.shankBlow = (phase, k, raw) => {
+    if (phase === 'down') { breathAnchor = raw; blowNote = k; liveBreath = baseBreath; startBlow(k, baseBreath); window.shankWind.showBlow(k, baseBreath); }
+    else if (phase === 'up') { blowNote = 0; liveBreath = null; stopBlow(); }
+    else { blowNote = k; liveBreath = breathFrom(raw); moveBlow(k, liveBreath, phase === 'glide'); }
+    paintBreathSlider();
+  };
   const BLOW_KEYS = 'asdfghjk', keysDown = [];
-  let hoverBreath = 0.7;                                   // keys play the notes while the mouse, without clicking, sets the breath
-  window.shankBlowHover = b => { hoverBreath = b; if (keysDown.length && blowVoice) { const k = keysDown[keysDown.length - 1]; moveBlow(k, b, false); window.shankWind.showBlow(k, b); } };
+  window.shankBlowHover = raw => {                         // keys play the notes while the mouse, without clicking, bends the loudness
+    if (!keysDown.length || !blowVoice) return;
+    const k = keysDown[keysDown.length - 1];
+    liveBreath = breathFrom(raw); moveBlow(k, liveBreath, false); window.shankWind.showBlow(k, liveBreath); paintBreathSlider();
+  };
   addEventListener('keydown', ev => {
     if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey || !isBlow() || busy) return;
     const k = BLOW_KEYS.indexOf(ev.key.toLowerCase()) + 1;
     if (!k) return;
     keysDown.push(k);
-    if (blowVoice) moveBlow(k, hoverBreath, true); else startBlow(k, hoverBreath);
-    window.shankWind.showBlow(k, hoverBreath);
+    const level = liveBreath ?? baseBreath; if (!blowVoice) { breathAnchor = null; liveBreath = baseBreath; }
+    blowNote = k;
+    if (blowVoice) moveBlow(k, level, true); else startBlow(k, baseBreath);
+    window.shankWind.showBlow(k, level); paintBreathSlider();
   });
   addEventListener('keyup', ev => {
     const k = BLOW_KEYS.indexOf(ev.key.toLowerCase()) + 1, i = keysDown.lastIndexOf(k);
     if (!k || i < 0) return;
     keysDown.splice(i, 1);
-    if (!keysDown.length) { stopBlow(); window.shankWind.showBlow(0); return; }
-    const last = keysDown[keysDown.length - 1];
-    moveBlow(last, hoverBreath, true); window.shankWind.showBlow(last, hoverBreath);
+    if (!keysDown.length) { blowNote = 0; liveBreath = null; stopBlow(); window.shankWind.showBlow(0); paintBreathSlider(); return; }
+    const last = keysDown[keysDown.length - 1], level = liveBreath ?? baseBreath;
+    blowNote = last; moveBlow(last, level, true); window.shankWind.showBlow(last, level);
   });
   addEventListener('blur', () => { if (keysDown.length) { keysDown.length = 0; stopBlow(); window.shankWind.showBlow(0); } });
 

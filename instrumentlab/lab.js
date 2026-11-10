@@ -173,6 +173,7 @@
     const name = sound().name, next = chordPick() === i ? null : i;
     chordPicks[name] = next; store.set('chords', chordPicks);
     window.shankWind.setChord(next ?? -1);
+    paintChordColumn();
     say(next == null ? 'Muted' : chordSet().chords[next].name);
   };
   const CHORD_KEYS = 'qwerasdf';                          // the top row of the strip on q w e r, the bottom on a s d f
@@ -224,27 +225,67 @@
     oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4); n.stop(t + 0.4);
     blowVoice = null;
   }
-  window.shankBlow = (phase, k, breath) => { if (phase === 'down') startBlow(k, breath); else if (phase === 'up') stopBlow(); else moveBlow(k, breath, phase === 'glide'); };
+  // Loudness: a slider outside the image sets the base level; moving your finger up or down bends away from it, starting from wherever you pressed.
+  let baseBreath = store.get('baseBreath', 0.7), breathAnchor = null, liveBreath = null, blowNote = 0;
+  const DEAD = 0.05, clamp01 = x => Math.max(0, Math.min(1, x));
+  function breathFrom(raw) {                              // a finger's height (0 bottom .. 1 top) becomes loudness, relative to where it started
+    if (breathAnchor === null) breathAnchor = raw;
+    const d = raw - breathAnchor;
+    return clamp01(baseBreath + (Math.abs(d) < DEAD ? 0 : (d - Math.sign(d) * DEAD) * 1.25));
+  }
+  window.shankBlow = (phase, k, raw) => {
+    if (phase === 'down') { breathAnchor = raw; blowNote = k; liveBreath = baseBreath; startBlow(k, baseBreath); window.shankWind.showBlow(k, baseBreath); }
+    else if (phase === 'up') { blowNote = 0; liveBreath = null; stopBlow(); }
+    else { blowNote = k; liveBreath = breathFrom(raw); moveBlow(k, liveBreath, phase === 'glide'); }
+    paintBreathSlider();
+  };
+  const breathBox = document.createElement('div');        // the slider, just off the image's right edge
+  breathBox.style.cssText = 'position:absolute; left:100%; margin-left:8px; top:0; bottom:0; width:44px; display:none; touch-action:none; cursor:pointer; -webkit-user-select:none; user-select:none; font:500 10px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); z-index:3;';
+  breathBox.innerHTML = '<div style="position:absolute; top:0; left:0; right:0; text-align:center;">loud</div><div style="position:absolute; bottom:0; left:0; right:0; text-align:center;">soft</div><div class="b" style="position:absolute; left:50%; top:16px; bottom:16px; width:4px; margin-left:-2px; border-radius:2px; background:var(--line, #cfd6cb);"><div class="n" style="position:absolute; left:50%; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%; background:rgb(82, 72, 200); box-shadow:0 1px 4px rgba(0,0,0,.3);"></div><div class="l" style="position:absolute; left:50%; width:10px; height:10px; margin:-5px 0 0 -5px; border-radius:50%; background:#fff; border:2px solid rgb(22, 12, 118); box-sizing:border-box; display:none;"></div></div>';
+  document.getElementById('home-photo').parentElement.appendChild(breathBox);
+  function paintBreathSlider() {
+    breathBox.style.display = isBlowMode() ? 'block' : 'none';
+    breathBox.querySelector('.n').style.top = `${(1 - baseBreath) * 100}%`;
+    const live = breathBox.querySelector('.l');
+    live.style.display = liveBreath === null ? 'none' : 'block';
+    if (liveBreath !== null) live.style.top = `${(1 - liveBreath) * 100}%`;
+  }
+  const isBlowMode = () => instrument().mode === 'blow';
+  function setBase(ev) {
+    const r = breathBox.querySelector('.b').getBoundingClientRect();
+    baseBreath = clamp01(1 - (ev.clientY - r.top) / r.height); store.set('baseBreath', baseBreath);
+    if (blowVoice && blowNote) { liveBreath = baseBreath; moveBlow(blowNote, baseBreath, false); }
+    paintBreathSlider();
+  }
+  let baseDrag = null;
+  breathBox.addEventListener('pointerdown', ev => { unlock(); baseDrag = ev.pointerId; try { breathBox.setPointerCapture(ev.pointerId); } catch (e) { /* fine */ } setBase(ev); });
+  breathBox.addEventListener('pointermove', ev => { if (ev.pointerId === baseDrag) setBase(ev); });
+  ['pointerup', 'pointercancel'].forEach(type => breathBox.addEventListener(type, ev => { if (ev.pointerId === baseDrag) baseDrag = null; }));
   // The note holes on the keyboard: a s d f g h j k. The newest key held plays; lifting it falls back to the one before.
   const BLOW_KEYS = 'asdfghjk', keysDown = [];
-  let hoverBreath = 0.7;                                  // keys play the notes while the mouse, without clicking, sets the breath
-  window.shankBlowHover = b => { hoverBreath = b; if (keysDown.length && blowVoice) { const k = keysDown[keysDown.length - 1]; moveBlow(k, b, false); window.shankWind.showBlow(k, b); } };
+  window.shankBlowHover = raw => {                        // keys play the notes while the mouse, without clicking, bends the loudness
+    if (!keysDown.length || !blowVoice) return;
+    const k = keysDown[keysDown.length - 1];
+    liveBreath = breathFrom(raw); moveBlow(k, liveBreath, false); window.shankWind.showBlow(k, liveBreath); paintBreathSlider();
+  };
   function releaseBlowKeys() { if (keysDown.length) { keysDown.length = 0; stopBlow(); window.shankWind.showBlow(0); } }
   addEventListener('keydown', ev => {
     if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey || instrument().mode !== 'blow') return;
     const k = BLOW_KEYS.indexOf(ev.key.toLowerCase()) + 1;
     if (!k) return;
     keysDown.push(k);
-    if (blowVoice) moveBlow(k, hoverBreath, true); else startBlow(k, hoverBreath);
-    window.shankWind.showBlow(k, hoverBreath);
+    const level = liveBreath ?? baseBreath; if (!blowVoice) { breathAnchor = null; liveBreath = baseBreath; }
+    blowNote = k;
+    if (blowVoice) moveBlow(k, level, true); else startBlow(k, baseBreath);
+    window.shankWind.showBlow(k, level); paintBreathSlider();
   });
   addEventListener('keyup', ev => {
     const k = BLOW_KEYS.indexOf(ev.key.toLowerCase()) + 1, i = keysDown.lastIndexOf(k);
     if (!k || i < 0) return;
     keysDown.splice(i, 1);
-    if (!keysDown.length) { stopBlow(); window.shankWind.showBlow(0); return; }
-    const last = keysDown[keysDown.length - 1];
-    moveBlow(last, hoverBreath, true); window.shankWind.showBlow(last, hoverBreath);
+    if (!keysDown.length) { blowNote = 0; liveBreath = null; stopBlow(); window.shankWind.showBlow(0); paintBreathSlider(); return; }
+    const last = keysDown[keysDown.length - 1], level = liveBreath ?? baseBreath;
+    blowNote = last; moveBlow(last, level, true); window.shankWind.showBlow(last, level);
   });
   addEventListener('blur', releaseBlowKeys);
   // The drum loop: a bar that repeats. Pads played while it runs snap to the nearest step and join it.
@@ -566,7 +607,7 @@
     b.addEventListener('click', click);
     return b;
   }
-  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}), ...(inst.mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: !!v.hover, chords: sound().chords && v.chords ? chordSet().chords.map(c => c.name) : null, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {}), ...(inst.mode === 'pads' ? { padNames: ['Kick', 'Snare', 'Hat', 'Open hat', 'Clap', 'Tom', 'Low tom', 'Crash'], padKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {}), ...(inst.mode === 'blow' ? { style: sound().style, thick: sound().thick || 110, valves: !!sound().valves, blowKeys: matchMedia('(hover: hover)').matches ? 'ASDFGHJK' : null, blowNotes: Array.from({ length: 8 }, (_, i) => noteName(keyHz(i + 1))) } : {}), ...(inst.mode === 'pad' && padKey() && v.guides ? { guides: noteGuides(padKey(), v.range) } : {}) }; };
+  const modeOptions = (inst, v) => { const wind = inst.mode === 'wind'; return { collide: wind && v.trigger === 'touch', gust: v.gust, tight: wind && v.trigger === 'push', touchGap: v.gap, dip: v.dip, stiff: wind && !!v.stiff, layout: inst.keys && inst.mode === 'keys' && v.shape ? 'piano' : undefined, ...(inst.mode === 'keys' && v.shape && v.real ? { blackAt: realPiano().blackAt, dots: v.dots ? realPiano().dots : null } : {}), ...(inst.mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: !!v.hover, chords: sound().chords && v.chords ? chordSet().chords.map(c => c.name) : null, chordsOutside: true, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {}), ...(inst.mode === 'pads' ? { padNames: ['Kick', 'Snare', 'Hat', 'Open hat', 'Clap', 'Tom', 'Low tom', 'Crash'], padKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {}), ...(inst.mode === 'blow' ? { meterOutside: true, style: sound().style, thick: sound().thick || 110, valves: !!sound().valves, blowKeys: matchMedia('(hover: hover)').matches ? 'ASDFGHJK' : null, blowNotes: Array.from({ length: 8 }, (_, i) => noteName(keyHz(i + 1))) } : {}), ...(inst.mode === 'pad' && padKey() && v.guides ? { guides: noteGuides(padKey(), v.range) } : {}) }; };
   function drawControls(inst, set) {
     const nodes = (inst.controls || []).filter(c => !c.only || c.only(set)).map(c => {
       const box = document.createElement('div'); box.className = 'ctl';
@@ -595,6 +636,28 @@
   const keyLabel = document.createElement('div');         // which key the keyboard is in: the image's bottom left corner, as on the home page
   keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:#1a1f1c; background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   document.getElementById('home-photo').parentElement.appendChild(keyLabel);
+  // The chord buttons: a column just off the image's left edge, so the strings get the whole picture.
+  const chordCol = document.createElement('div');
+  chordCol.style.cssText = 'position:absolute; right:100%; margin-right:6px; top:0; bottom:0; width:58px; display:none; flex-direction:column; gap:3px; z-index:3;';
+  document.getElementById('home-photo').parentElement.appendChild(chordCol);
+  const blueOrInk = 'var(--ink, #1a1f1c)';
+  function paintChordColumn() {
+    const on = chordsOn();
+    chordCol.style.display = on ? 'flex' : 'none';
+    if (!on) return;
+    const keys = matchMedia('(hover: hover)').matches ? 'QWERASDF' : '';
+    if (chordCol.dataset.set !== chordSet().name || !chordCol.children.length) {
+      chordCol.dataset.set = chordSet().name;
+      chordCol.replaceChildren(...chordSet().chords.map((c, i) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.style.cssText = `position:relative; flex:1; min-height:0; width:100%; padding:0; border:2px solid ${blueOrInk}; border-radius:7px; background:transparent; color:${blueOrInk}; font:600 14px/1 var(--font-ui, system-ui, sans-serif); cursor:pointer; touch-action:none; -webkit-tap-highlight-color:transparent;`;
+        b.innerHTML = `${c.name}${keys ? `<span style="position:absolute; left:3px; top:2px; font:500 8px/1 var(--font-ui, system-ui, sans-serif); opacity:.7;">${keys[i]}</span>` : ''}`;
+        b.addEventListener('pointerdown', () => { unlock(); window.shankChord(i); });
+        return b;
+      }));
+    }
+    [...chordCol.children].forEach((b, i) => { const sel = i === chordPick(); b.style.background = sel ? blueOrInk : 'transparent'; b.style.color = sel ? 'var(--bg, #fff)' : blueOrInk; });
+  }
   function draw() {
     stopTheremin(); stopBlow(); keysDown.length = 0;
     const inst = instrument();
@@ -613,6 +676,7 @@
     $('sounds').replaceChildren(...list);
     $('boxKey').style.display = inst.keys || isDrums() ? '' : 'none';
     syncSequencer();
+    paintChordColumn(); paintBreathSlider();
     $('keyHead').textContent = isDrums() ? 'Time signature' : chordsOn() ? 'Key' : isStrings() ? 'Tuning' : 'Musical key';
     $('keys').replaceChildren(...(isDrums()
       ? SIGS.map(x => row(x, x === sig(), () => { sigName = x.name; store.set('sig', x.name); const was = loop.on; stopLoop(); clearAllTracks(); unlock(); if (was) startLoop(); draw(); }))

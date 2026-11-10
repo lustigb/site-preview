@@ -65,7 +65,7 @@
   const osc = SHANKS.map(() => ({ a: 0, v: 0, d: 0, dv: 0, down: false }));   // a, v: sideways swing; d, dv: how far it is pressed down, as a key
   let on = false, last = 0, still = 0, prev = null, trail = [], paused = false, mode = 'wind';
   const held = new Map();                                   // pointer id -> the shank it is pressing (several fingers at once are fine)
-  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null, count: 6, ring: 1.1, hoverStrum: true, guides: null, chords: null, chordOn: -1, chordKeys: null, style: 'tube', thick: 110, valves: false, blowKeys: null, blowNotes: null, padNames: null, padKeys: null };
+  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null, count: 6, ring: 1.1, hoverStrum: true, guides: null, chords: null, chordOn: -1, chordKeys: null, style: 'tube', thick: 110, valves: false, blowKeys: null, blowNotes: null, padNames: null, padKeys: null, chordsOutside: false, meterOutside: false };
   let opts = { ...DEFAULTS };                               // see setMode
   const TIP_X = SHANKS.map((sh, i) => onShank(i + 1, sh.tip)), BOUNCE = 0.45;
   const touched = SHANKS.map(() => 0);
@@ -82,7 +82,7 @@
   let quietUntil = 0;                                       // a demo nudging the shanks shouldn't set off extra sounds
   const GRID_S = 0.85, ease = u => u * u * (3 - 2 * u);
   const strings = SHANKS.map(() => ({ pull: 0, grab: 0.5, held: false, amp: 0, phase: 0 }));   // pull: held out by a finger; amp: how hard it is ringing
-  const CHORD_H = 232, NUT_PLAIN = 44, nutY = () => (opts.chords ? CHORD_H + 22 : NUT_PLAIN), BRIDGE_Y = 956, stringCount = () => parseInt(layout.slice(7), 10);
+  const CHORD_H = 232, NUT_PLAIN = 44, stripOnImage = () => opts.chords && !opts.chordsOutside, nutY = () => (stripOnImage() ? CHORD_H + 22 : NUT_PLAIN), BRIDGE_Y = 956, stringCount = () => parseInt(layout.slice(7), 10);
   const stringX = (i, n) => 750 * (i + 0.5) / n;
   function stringShape(k, u) {                              // how far string k is off its line at height u (0 = nut, 1 = bridge)
     const st = strings[k - 1];
@@ -166,7 +166,7 @@
   }
   const chordCell = i => ({ x: 10 + (i % 4) * 185.5, y: 8 + Math.floor(i / 4) * 110, w: 173, h: 102 });   // two rows of four, big enough for a fingertip on a phone
   function drawChords() {                                   // the chord strip, in the shanks' own blue
-    if (!opts.chords || gridU < 0.9) return;
+    if (!stripOnImage() || gridU < 0.9) return;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 46px system-ui, sans-serif';
     opts.chords.forEach((name, i) => {
@@ -198,6 +198,7 @@
   }
   const blow = { id: null, zone: 0, level: 0, demo: false, breath: 0.7 };
   function drawBreathMeter() {                              // height is breath: a thin scale down the right edge, with a marker while you blow
+    if (opts.meterOutside) return;
     const x = 742, top = 56, bottom = 944, ink = '#1a1f1c';
     ctx.strokeStyle = 'rgba(26, 31, 28, 0.3)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
@@ -413,16 +414,16 @@
   function chordAt(p) { return opts.chords && p.y < CHORD_H ? opts.chords.findIndex((_, i) => { const c = chordCell(i); return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h; }) : -1; }
   function stringsDown(ev) {
     const hit = toPhoto(ev);
-    if (opts.chords && hit.y < CHORD_H) { const c = chordAt(hit); if (c >= 0) window.shankChord?.(c); return; }   // the strip only picks a chord
+    if (stripOnImage() && hit.y < CHORD_H) { const c = chordAt(hit); if (c >= 0) window.shankChord?.(c); return; }   // the strip only picks a chord
     const p = hit, n = stringCount(), i = Math.max(0, Math.min(n - 1, Math.floor(p.x / 750 * n)));
     const near = Math.abs(p.x - stringX(i, n)) < GRAB_DIST;
     const state = { x: p.x, y: p.y, grab: near ? i : -1, down: true };
     pointers.set(ev.pointerId, state);
-    if (near) { const st = strings[i], top = opts.chords ? nutY() : 0; st.held = true; st.grab = Math.max(0.15, Math.min(0.85, (p.y - top) / (1000 - top))); st.pull = 0; st.amp = 0; }
+    if (near) { const st = strings[i], top = stripOnImage() ? nutY() : 0; st.held = true; st.grab = Math.max(0.15, Math.min(0.85, (p.y - top) / (1000 - top))); st.pull = 0; st.amp = 0; }
   }
   function stringsMove(ev, state) {
     const p = toPhoto(ev), n = stringCount();
-    if (opts.chords && p.y < CHORD_H && state.grab < 0) { state.x = p.x; return; }   // passing over the strip doesn't strum
+    if (stripOnImage() && p.y < CHORD_H && state.grab < 0) { state.x = p.x; return; }   // passing over the strip doesn't strum
     if (state.grab >= 0) {
       const st = strings[state.grab], pull = p.x - stringX(state.grab, n);
       if (Math.abs(pull) > SLIP) { pluckString(state.grab, 0.8); state.grab = -1; state.x = p.x; state.t = performance.now(); return; }   // pulled too far: it slips away and rings
