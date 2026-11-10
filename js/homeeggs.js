@@ -252,7 +252,7 @@
     if (inst().mode === 'keys') recordEvent(k);
   };
   window.shankRelease = function (k) { heldNotes.get(k)?.release(); heldNotes.delete(k); };
-  window.shankString = function (k, strength) { if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, 0.35 + 0.65 * strength)], eggMaster); recordEvent(k); };
+  window.shankString = function (k, strength) { if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, 0.12 + 0.58 * strength ** 1.3)], eggMaster); recordEvent(k); };
   window.shankChord = function (i) {                       // tap a chord or press its key to select it, again to release it
     const next = chordPick() === i ? null : i;
     state.chord[sound().name] = next;

@@ -425,10 +425,12 @@
     if (opts.chords && p.y < CHORD_H && state.grab < 0) { state.x = p.x; return; }   // passing over the strip doesn't strum
     if (state.grab >= 0) {
       const st = strings[state.grab], pull = p.x - stringX(state.grab, n);
-      if (Math.abs(pull) > SLIP) { pluckString(state.grab, Math.min(1, Math.abs(pull) / SLIP)); state.grab = -1; state.x = p.x; return; }   // pulled too far: it slips away and rings
+      if (Math.abs(pull) > SLIP) { pluckString(state.grab, 0.8); state.grab = -1; state.x = p.x; state.t = performance.now(); return; }   // pulled too far: it slips away and rings
       st.pull = pull;
     } else {
-      const dist = Math.abs(p.x - state.x), lo = Math.min(p.x, state.x), hi = Math.max(p.x, state.x), strength = Math.min(1, 0.25 + dist / 60);
+      const now = performance.now(), dist = Math.abs(p.x - state.x), lo = Math.min(p.x, state.x), hi = Math.max(p.x, state.x);
+      const speed = dist / Math.max(4, now - (state.t || now - 16)), strength = Math.min(1, 0.08 + 0.92 * (speed / 5) ** 0.8);   // a slow brush is soft, a fast strum is strong (photo px per ms)
+      state.t = now;
       for (let i = 0; i < n; i += 1) { const x = stringX(i, n); if (x > lo && x <= hi) pluckString(i, strength); }   // swept across this string
       state.x = p.x;
     }
@@ -436,7 +438,7 @@
   }
   function stringsUp(id) {
     const state = pointers.get(id);
-    if (state && state.grab >= 0) pluckString(state.grab, Math.min(1, 0.35 + Math.abs(strings[state.grab].pull) / SLIP));   // let go: it rings (a plain tap is a soft pluck)
+    if (state && state.grab >= 0) pluckString(state.grab, Math.min(1, 0.12 + 0.68 * Math.abs(strings[state.grab].pull) / SLIP));   // let go: it rings (a plain tap is a soft pluck)
     pointers.delete(id);
   }
   const blowReady = () => layout && layout.startsWith('blow-') && gridU > 0.9;

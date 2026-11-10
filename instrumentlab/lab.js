@@ -168,7 +168,7 @@
     oscs.forEach(({ o }) => o.stop(t + 0.4)); lfo.stop(t + 0.4);
     thereminVoice = null;
   }
-  window.shankString = (k, strength) => { hit(k, 0.35 + 0.65 * strength); recordEvent(k); };
+  window.shankString = (k, strength) => { hit(k, 0.12 + 0.58 * strength ** 1.3); recordEvent(k); };
   window.shankChord = i => {                              // tap a chord or press its key to select it, again for open strings
     const name = sound().name, next = chordPick() === i ? null : i;
     chordPicks[name] = next; store.set('chords', chordPicks);
