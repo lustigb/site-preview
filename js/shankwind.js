@@ -60,6 +60,7 @@
   Object.assign(box.style, { touchAction: 'pan-y', webkitTapHighlightColor: 'transparent',
                              userSelect: 'none', webkitUserSelect: 'none', webkitTouchCallout: 'none' });
   photo.draggable = false;
+  box.addEventListener('contextmenu', ev => ev.preventDefault());   // holding a note must not bring up Android's 'save image' menu
 
   const osc = SHANKS.map(() => ({ a: 0, v: 0, d: 0, dv: 0, down: false }));   // a, v: sideways swing; d, dv: how far it is pressed down, as a key
   let on = false, last = 0, still = 0, prev = null, trail = [], paused = false, mode = 'wind';
