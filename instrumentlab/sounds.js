@@ -102,7 +102,7 @@ window.LAB_INSTRUMENTS = [
       { name: 'Warm', filter: 1100, voice: [['triangle', 1, 1], ['sine', 0.5, 0.25]] },
       { name: 'Reed', filter: 1900, voice: [['sawtooth', 1, 0.45], ['square', 2, 0.08]] },
   ] },
-  { name: 'Drums', note: 'tap the pads', mode: 'pads', controls: [{ id: 'click', type: 'check', label: 'Metronome while looping' }, { id: 'bpm', type: 'range', label: 'Tempo (BPM)', min: 50, max: 220, step: 1 }, ECHO], sounds: ['Acoustic:acoustic', 'Rock:rock', 'Jazz brushes:jazz', '808:808', 'Trap:trap', 'Disco:disco', 'Lo-fi:lofi', 'Beatbox:beatbox'].map(text => {
+  { name: 'Drums', note: 'tap the pads', mode: 'pads', controls: [{ id: 'click', type: 'check', label: 'Metronome while looping' }, { id: 'bpm', type: 'range', label: 'Tempo (BPM)', min: 50, max: 220, step: 1 }, ECHO], sounds: ['Acoustic:acoustic', 'Rock:rock', 'Jazz brushes:jazz', 'Tight funk:funk', '808:808', 'Trap:trap', 'Disco:disco', 'Lo-fi:lofi', 'Hand drums:hand', 'Junkyard:junk', 'Chiptune:chip', 'Beatbox:beatbox'].map(text => {
       const [name, kit] = text.split(':');
       return { name, kit, play: s => s.egg({ kind: 'drum', v: s.v, kit, drum: ['kick', 'snare', 'hat', 'open', 'clap', 'tom', 'low', 'crash'][s.k - 1] }) };
   }) },

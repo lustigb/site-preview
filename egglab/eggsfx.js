@@ -467,15 +467,32 @@
     tone(ac, out, 'triangle', t, 190 * pitch, 95 * pitch, 0.04, 0.3 * v);
   }
   // Drums. name: kick, snare, hat, open, clap, tom, low, crash. Each kit is a recipe: kick [start Hz, end Hz, seconds, click], snare [tone Hz, noise Hz, seconds, noise level], hat [noise Hz, closed s, open s], tom [wave, seconds], crash [noise Hz, seconds]; metal: machine cymbals.
+  // The bus gives each kit its own room and character: lp / hp filters (Hz), drive (distortion 0..1), crush (fewer loudness steps), wet (room reverb).
   const KITS = {
-    acoustic: { kick: [150, 52, 0.24, 0.5], snare: [200, 1500, 0.2, 0.55], hat: [7500, 0.05, 0.34], tom: ['triangle', 0.24], crash: [4500, 1.2], clap: 0.18 },
-    rock: { kick: [180, 58, 0.2, 0.8], snare: [230, 1200, 0.24, 0.75], hat: [6500, 0.06, 0.42], tom: ['triangle', 0.32], crash: [3800, 1.6], clap: 0.2 },
-    jazz: { kick: [110, 55, 0.18, 0.15], snare: [160, 2600, 0.34, 0.3], hat: [9000, 0.04, 0.26], tom: ['sine', 0.3], crash: [6500, 1.8], clap: 0.12, soft: 0.65 },
-    808: { kick: [95, 42, 0.6, 0.3], snare: [250, 1800, 0.16, 0.6], hat: [7000, 0.05, 0.32], tom: ['sine', 0.4], crash: [5000, 1.1], clap: 0.2, metal: true },
-    trap: { kick: [80, 36, 0.85, 0.5], snare: [300, 2400, 0.12, 0.85], hat: [9500, 0.03, 0.2], tom: ['sine', 0.5], crash: [6000, 0.9], clap: 0.14, metal: true },
-    disco: { kick: [170, 50, 0.18, 1], snare: [220, 2000, 0.13, 0.7], hat: [8000, 0.04, 0.22], tom: ['triangle', 0.2], crash: [5500, 0.8], clap: 0.16, metal: true },
-    lofi: { kick: [120, 52, 0.16, 0.2], snare: [200, 900, 0.1, 0.5], hat: [4500, 0.03, 0.14], tom: ['triangle', 0.13], crash: [3500, 0.4], clap: 0.08 },
+    acoustic: { kick: [150, 52, 0.24, 0.5], snare: [200, 1500, 0.2, 0.55], hat: [7500, 0.05, 0.34], tom: ['triangle', 0.24], crash: [4500, 1.2], clap: 0.18, wet: 1.2 },
+    rock: { kick: [190, 60, 0.2, 1], snare: [240, 1100, 0.3, 0.85], hat: [6000, 0.07, 0.5], tom: ['triangle', 0.4], crash: [3200, 2], clap: 0.24, drive: 0.55, wet: 1.6, level: 0.62 },
+    jazz: { kick: [100, 56, 0.16, 0.08], snare: [150, 3200, 0.42, 0.22], hat: [10000, 0.05, 0.5], tom: ['sine', 0.34], crash: [7500, 2.4], clap: 0.1, soft: 0.6, lp: 7000, wet: 2.5, hatGain: 3 },
+    funk: { kick: [170, 70, 0.1, 1], snare: [320, 2200, 0.08, 0.8], hat: [9000, 0.025, 0.12], tom: ['triangle', 0.11], crash: [6000, 0.5], clap: 0.06, hp: 70 },
+    808: { kick: [95, 42, 0.75, 0.25], snare: [250, 1800, 0.16, 0.6], hat: [7000, 0.05, 0.32], tom: ['sine', 0.5], crash: [5000, 1.1], clap: 0.28, metal: true, drive: 0.25, wet: 1.5 },
+    trap: { kick: [75, 32, 1.1, 0.6], snare: [340, 2800, 0.1, 0.95], hat: [11000, 0.02, 0.14], tom: ['sine', 0.7], crash: [7000, 0.7], clap: 0.09, metal: true, drive: 0.5 },
+    disco: { kick: [210, 48, 0.17, 1.4], snare: [190, 2600, 0.15, 0.7], hat: [9000, 0.05, 0.3], tom: ['triangle', 0.18], crash: [6500, 0.8], clap: 0.22, metal: true, wet: 3, hatGain: 2.2 },
+    lofi: { kick: [120, 52, 0.16, 0.2], snare: [200, 900, 0.1, 0.5], hat: [3500, 0.03, 0.14], tom: ['triangle', 0.13], crash: [2800, 0.4], clap: 0.08, lp: 2100, drive: 0.35, crush: 9, hatGain: 2.4 },
   };
+  function kitBus(ac, out, K) {                           // the kit's own filter, distortion and room; everything for this hit goes through it
+    const input = ac.createGain();
+    let last = input;
+    const add = node => { last.connect(node); last = node; };
+    if (K.hp) { const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = K.hp; add(f); }
+    if (K.drive || K.crush) {
+      const curve = new Float32Array(1024);
+      for (let i = 0; i < 1024; i += 1) { let x = i / 511.5 - 1; if (K.drive) x = Math.tanh(x * (1 + K.drive * 8)) / Math.tanh(1 + K.drive * 8); if (K.crush) x = Math.round(x * K.crush) / K.crush; curve[i] = x; }
+      const w = ac.createWaveShaper(); w.curve = curve; add(w);
+    }
+    if (K.lp) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = K.lp; add(f); }
+    last.connect(out);
+    if (K.wet) { const c = ac.createConvolver(), g = ac.createGain(); c.buffer = room(ac); g.gain.value = K.wet; last.connect(c).connect(g).connect(out); }
+    return input;
+  }
   function metal(ac, out, t, dur, level, lowest) {        // six detuned square waves: the classic machine-cymbal sound
     const g = ac.createGain(), hp = ac.createBiquadFilter();
     hp.type = 'highpass'; hp.frequency.value = lowest;
@@ -486,24 +503,60 @@
   function drum(ac, out, t, v0, name, kit) {
     if (kit === 'beatbox') {                              // little mouth sounds
       const say2 = (dur, level, p, f) => voice(ac, out, t, dur, level * v0, p, f);
-      if (name === 'kick') say2(0.09, 0.9, [130, 95, 60], [[[300, 240, 180], 3, 1], [[800, 600, 400], 4, 0.3]]);
+      if (name === 'kick') say2(0.09, 3.2, [130, 95, 60], [[[300, 240, 180], 3, 1], [[800, 600, 400], 4, 0.3]]);
       if (name === 'snare') burst(ac, out, t, 'bandpass', 2300, 1, 0.13, 0.8 * v0);
       if (name === 'hat') burst(ac, out, t, 'highpass', 8000, 0.7, 0.04, 0.35 * v0);
       if (name === 'open') burst(ac, out, t, 'highpass', 6500, 0.7, 0.26, 0.3 * v0);
       if (name === 'clap') { burst(ac, out, t, 'bandpass', 1500, 1.2, 0.06, 0.8 * v0); burst(ac, out, t + 0.07, 'bandpass', 1300, 1.2, 0.06, 0.5 * v0); }
-      if (name === 'tom') say2(0.16, 0.8, [220, 260, 170], [[[700, 900, 600], 5, 1], [[1400, 1300, 1100], 6, 0.4]]);
-      if (name === 'low') say2(0.2, 0.8, [130, 160, 100], [[[500, 650, 420], 5, 1], [[1000, 1000, 800], 6, 0.4]]);
+      if (name === 'tom') say2(0.16, 3, [220, 260, 170], [[[700, 900, 600], 5, 1], [[1400, 1300, 1100], 6, 0.4]]);
+      if (name === 'low') say2(0.2, 3, [130, 160, 100], [[[500, 650, 420], 5, 1], [[1000, 1000, 800], 6, 0.4]]);
       if (name === 'crash') burst(ac, out, t, 'highpass', 3000, 0.7, 0.6, 0.4 * v0);
       return;
     }
-    const K = KITS[kit] || KITS.acoustic, v = v0 * (K.soft || 1), n = (type, hz, q, dur, level, at = t) => burst(ac, out, at, type, hz, q, dur, level);
-    if (name === 'kick') { const [f0, f1, dur, click] = K.kick; tone(ac, out, 'sine', t, f0, f1, dur, 1.0 * v); n('lowpass', 2200, 0.7, 0.012, 0.5 * click * v); }
-    if (name === 'snare') { const [hz, noiseHz, dur, level] = K.snare; tone(ac, out, 'triangle', t, hz, hz * 0.65, 0.1, 0.36 * v); n('highpass', noiseHz, 0.7, dur, level * v); }
-    if (name === 'hat') { if (K.metal) metal(ac, out, t, K.hat[1] + 0.02, 0.1 * v, K.hat[0]); else n('highpass', K.hat[0], 0.7, K.hat[1], 0.5 * v); }
-    if (name === 'open') { if (K.metal) metal(ac, out, t, K.hat[2], 0.09 * v, K.hat[0] - 500); else n('highpass', K.hat[0] - 500, 0.7, K.hat[2], 0.42 * v); }
+    if (kit === 'chip') {                                 // an old game console: square waves and crunchy noise
+      const q = (a, b, d, l, at = t) => tone(ac, out, 'square', at, a, b, d, l * v0);
+      if (name === 'kick') q(190, 48, 0.1, 0.5);
+      if (name === 'snare') { q(320, 170, 0.06, 0.3); burst(ac, out, t, 'bandpass', 3400, 0.6, 0.09, 0.8 * v0); }
+      if (name === 'hat') q(7200, 6800, 0.02, 0.3);
+      if (name === 'open') q(7200, 6000, 0.14, 0.25);
+      if (name === 'clap') [0, 0.03, 0.06].forEach(d => burst(ac, out, t + d, 'bandpass', 2300, 0.8, 0.025, 0.9 * v0));
+      if (name === 'tom') q(420, 190, 0.1, 0.35);
+      if (name === 'low') q(240, 90, 0.13, 0.4);
+      if (name === 'crash') { burst(ac, out, t, 'highpass', 2500, 0.7, 0.5, 0.45 * v0); q(1800, 900, 0.3, 0.06); }
+      return;
+    }
+    if (kit === 'junk') {                                 // pots, pans and a bucket
+      const clank = (hzs, d, l, at = t) => hzs.forEach((hz, i) => tone(ac, out, i % 2 ? 'square' : 'triangle', at, hz, hz * 0.97, d / (1 + i * 0.4), (l / (1 + i * 0.5)) * v0));
+      const bus = kitBus(ac, out, { wet: 3 });
+      if (name === 'kick') { tone(ac, bus, 'sine', t, 110, 62, 0.15, 0.95 * v0); burst(ac, bus, t, 'lowpass', 340, 1, 0.09, 1.4 * v0); }
+      if (name === 'snare') { clank([410, 870, 1330, 2100], 0.11, 0.22); burst(ac, bus, t, 'bandpass', 1900, 0.9, 0.1, 0.7 * v0); }
+      if (name === 'hat') clank([3100, 4700], 0.05, 0.28);
+      if (name === 'open') [0, 0.05, 0.1, 0.15].forEach((d, i) => clank([2700, 4300], 0.07, 0.25 / (1 + i * 0.4), t + d));
+      if (name === 'clap') [0, 0.04].forEach(d => clank([720, 1560, 2330], 0.05, 0.3, t + d));
+      if (name === 'tom') clank([430, 1040, 1720], 0.2, 0.2);
+      if (name === 'low') clank([230, 590, 980], 0.26, 0.24);
+      if (name === 'crash') { clank([620, 1370, 2410, 3530], 0.9, 0.11); burst(ac, bus, t, 'highpass', 2200, 0.7, 0.8, 0.3 * v0); }
+      return;
+    }
+    if (kit === 'hand') {                                 // hand drums: deep skin, sharp slaps, a pitch that rises
+      if (name === 'kick') tone(ac, out, 'sine', t, 110, 78, 0.3, 0.85 * v0);
+      if (name === 'snare') { tone(ac, out, 'triangle', t, 780, 620, 0.05, 0.42 * v0); burst(ac, out, t, 'bandpass', 2800, 1.6, 0.04, 0.6 * v0); }
+      if (name === 'hat') tone(ac, out, 'triangle', t, 1500, 1200, 0.03, 0.5 * v0);
+      if (name === 'open') burst(ac, out, t, 'bandpass', 1300, 1.4, 0.09, 1.5 * v0);
+      if (name === 'clap') { burst(ac, out, t, 'bandpass', 1000, 1, 0.07, 1.1 * v0); tone(ac, out, 'sine', t, 340, 240, 0.08, 0.3 * v0); }
+      if (name === 'tom') tone(ac, out, 'sine', t, 300, 430, 0.3, 0.6 * v0);
+      if (name === 'low') tone(ac, out, 'sine', t, 140, 230, 0.36, 0.7 * v0);
+      if (name === 'crash') { const f = ac.createBiquadFilter(), g = ac.createGain(), n2 = ac.createBufferSource(); n2.buffer = noise(ac); f.type = 'highpass'; f.frequency.value = 5000; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.32 * v0, t + 0.09); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3); n2.connect(f).connect(g).connect(out); n2.start(t, 0, 0.32); }   // a shaker
+      return;
+    }
+    const K = KITS[kit] || KITS.acoustic, v = v0 * (K.soft || 1) * (K.level || 1), hg = K.hatGain || 1, bus = kitBus(ac, out, K), n = (type, hz, q, dur, level, at = t) => burst(ac, bus, at, type, hz, q, dur, level);
+    if (name === 'kick') { const [f0, f1, dur, click] = K.kick; tone(ac, bus, 'sine', t, f0, f1, dur, 1.0 * v); n('lowpass', 2200, 0.7, 0.012, 0.5 * click * v); }
+    if (name === 'snare') { const [hz, noiseHz, dur, level] = K.snare; tone(ac, bus, 'triangle', t, hz, hz * 0.65, 0.1, 0.36 * v); n('highpass', noiseHz, 0.7, dur, level * v); }
+    if (name === 'hat') { if (K.metal) metal(ac, bus, t, K.hat[1] + 0.02, 0.1 * v * hg, K.hat[0]); else n('highpass', K.hat[0], 0.7, K.hat[1], 0.5 * v * hg); }
+    if (name === 'open') { if (K.metal) metal(ac, bus, t, K.hat[2], 0.09 * v * hg, K.hat[0] - 500); else n('highpass', K.hat[0] - 500, 0.7, K.hat[2], 0.42 * v * hg); }
     if (name === 'clap') { [0, 0.012, 0.024].forEach(d => n('bandpass', 1400, 1.2, 0.012, 1.1 * v, t + d)); n('bandpass', 1500, 1.1, K.clap, 1.15 * v, t + 0.036); }
-    if (name === 'tom' || name === 'low') { const f = name === 'tom' ? 220 : 130, [wave, dur] = K.tom; tone(ac, out, wave, t, f * 1.5, f, dur, 0.65 * v); n('lowpass', 2000, 0.7, 0.01, 0.25 * v); }
-    if (name === 'crash') { if (K.metal) metal(ac, out, t, K.crash[1], 0.11 * v, K.crash[0]); else n('highpass', K.crash[0], 0.7, K.crash[1], 0.5 * v); }
+    if (name === 'tom' || name === 'low') { const f = name === 'tom' ? 220 : 130, [wave, dur] = K.tom; tone(ac, bus, wave, t, f * 1.5, f, dur, 0.65 * v); n('lowpass', 2000, 0.7, 0.01, 0.25 * v); }
+    if (name === 'crash') { if (K.metal) metal(ac, bus, t, K.crash[1], 0.11 * v, K.crash[0]); else n('highpass', K.crash[0], 0.7, K.crash[1], 0.5 * v); }
   }
   function tweet(ac, out, t, v, pitch) {                  // one up-down chirp
     tone(ac, out, 'sine', t, 2500 * pitch, 3600 * pitch, 0.07, 0.16 * v);

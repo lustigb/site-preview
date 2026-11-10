@@ -162,7 +162,7 @@
       { name: 'Warm', filter: 1100, voice: [['triangle', 1, 1], ['sine', 0.5, 0.25]] },
       { name: 'Reed', filter: 1900, voice: [['sawtooth', 1, 0.45], ['square', 2, 0.08]] },
     ] },
-    { name: 'Drums', mode: 'pads', sounds: ['Acoustic:acoustic', 'Rock:rock', 'Jazz brushes:jazz', '808:808', 'Trap:trap', 'Disco:disco', 'Lo-fi:lofi', 'Beatbox:beatbox'].map(text => {
+    { name: 'Drums', mode: 'pads', sounds: ['Acoustic:acoustic', 'Rock:rock', 'Jazz brushes:jazz', 'Tight funk:funk', '808:808', 'Trap:trap', 'Disco:disco', 'Lo-fi:lofi', 'Hand drums:hand', 'Junkyard:junk', 'Chiptune:chip', 'Beatbox:beatbox'].map(text => {
       const [name, kit] = text.split(':');
       return { name, kit, hit: (k, v) => ({ kind: 'drum', v, kit, drum: ['kick', 'snare', 'hat', 'open', 'clap', 'tom', 'low', 'crash'][k - 1] }) };
     }) },
@@ -396,7 +396,9 @@
     wind?.whenFormed(() => {
       if (run !== demoRun || !audioReady()) return;
       if (quick) later(720, () => { demoNotes.forEach(n => n?.release?.()); demoNotes = []; });
-      if (isDrums()) {                                     // a little beat: kick, hat, snare, hat
+      if (isDrums() && quick === 'kit') {                  // a new kit: every drum in it, one at a time
+        [1, 2, 3, 4, 5, 6, 7, 8].forEach((i, n) => later(n * 230, () => { wind.showPad(i); window.EggSfx.play(eggAudio, [shankHit(i, 0.85)], eggMaster); }));
+      } else if (isDrums()) {                              // a little beat: kick, hat, snare, hat
         [1, 3, 2, 3].forEach((i, n) => later(n * 170 * g, () => { wind.showPad(i); window.EggSfx.play(eggAudio, [shankHit(i, 0.85)], eggMaster); }));
       } else if (isBlow()) {                               // a little tune, sliding from note to note
         [1, 3, 5, 8].forEach((k, i) => later(i * 190 * g, () => { wind.showBlow(k); if (i) moveBlow(k, 0.7, true); else startBlow(k, 0.7); }));
@@ -421,7 +423,7 @@
   function changed(text, quick) { stopTheremin(); stopBlow(); keysDown.length = 0; syncSequencer(); applyMode(); refreshInstrument(); say(text); demo(quick); }
   window.letterMenu = kind => {                            // the lists behind the s, e and c letters
     if (kind === 'instrument') return { items: INSTRUMENTS.map(x => x.name), current: state.instrument, pick: i => { state.instrument = i; changed(inst().name); } };
-    if (kind === 'sound') return { items: inst().sounds.map(x => x.name), current: inst().sounds.indexOf(sound()), pick: i => { state.sound[inst().name] = i; changed(sound().name, true); } };
+    if (kind === 'sound') return { items: inst().sounds.map(x => x.name), current: inst().sounds.indexOf(sound()), pick: i => { state.sound[inst().name] = i; changed(sound().name, 'kit'); } };
     if (isDrums()) return { items: SIGS.map(x => x.name), current: state.sig % SIGS.length, pick: i => { const was = loop.on; stopLoop(); state.sig = i; clearAllTracks(); if (was) startLoop(); changed(sig().name, true); } };
     if (isBlow()) return { items: MUSICAL_KEYS.map(x => x.name), current: MUSICAL_KEYS.indexOf(windKey()), pick: i => { state.windKey[sound().name] = MUSICAL_KEYS[i].name; changed(windKey().name, true); } };
     if (chordsOn()) return { items: CHORD_SETS.map(x => x.name), current: state.chordSet % CHORD_SETS.length, pick: i => { state.chordSet = i; state.chord[sound().name] = 0; changed(chordSet().name, true); } };
@@ -430,7 +432,7 @@
     return { items: MUSICAL_KEYS.map(x => x.name), current: state.key % MUSICAL_KEYS.length, pick: i => { state.key = i; changed(musicalKey().name, true); } };
   };
   window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
-  window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name, true); };
+  window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name, 'kit'); };
   window.nextMusicalKey = () => {
     if (isDrums()) { const was = loop.on; stopLoop(); state.sig = (state.sig + 1) % SIGS.length; clearAllTracks(); if (was) startLoop(); changed(sig().name, true); return; }
     if (isBlow()) { const i = MUSICAL_KEYS.indexOf(windKey()); state.windKey[sound().name] = MUSICAL_KEYS[(i + 1) % MUSICAL_KEYS.length].name; changed(windKey().name, true); return; }
@@ -641,6 +643,8 @@
     lastRowAdded = name; renderRows();
   }
   function clearAllTracks() { endClip(); tracks.forEach(t => { t.steps = Array.from({ length: sig().steps }, () => []); t.clips = []; }); renderRows(); }
+  const ruler = { name: 'beat', color: 'var(--ink, #1a1f1c)', steps: [], stepEls: [] };   // the top row's ticks and playhead
+  let lastSynced = null;
   const seq = document.createElement('div');
   document.querySelector('.doors').prepend(seq);          // on the line under the title; each new track pushes the page down a little
   const ROW_H = 30, seqBtn = 'border:0; background:var(--bg, #f3f5f0); padding:0; cursor:pointer; color:var(--ink, #1a1f1c); font:600 12px/1 var(--font-ui, system-ui, sans-serif); display:flex; align-items:center; justify-content:center; height:30px; flex:none;';
@@ -652,54 +656,76 @@
   };
   const button = (label, html, css, click) => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', label); b.innerHTML = html; b.style.cssText = seqBtn + css; b.addEventListener('click', click); return b; };
   function renderRows() {
-    seq.style.display = sequencerOpen && tracks.length ? 'block' : 'none';
+    seq.style.display = sequencerOpen ? 'block' : 'none';
     seq.style.marginTop = `${-(parseFloat(getComputedStyle(seq.parentElement).paddingTop) + ROW_H / 2)}px`;
     seq.style.marginBottom = '10px';
-    const rows = tracks.map((t, index) => {
-      const row = document.createElement('div');
-      row.style.cssText = `display:flex; align-items:center; gap:6px; height:${ROW_H}px; padding-right:40px; overflow:hidden; opacity:${t.muted ? 0.4 : 1}; transition:height .28s ease;`;
-      const left = document.createElement('div');
-      left.style.cssText = 'width:66px; flex:none; display:flex; align-items:center; gap:2px; height:30px;';
-      if (index === 0) left.append(button('Record', icon.rec(recording), 'width:30px;', () => toggleRecord()), button(loop.on ? 'Pause' : 'Play', loop.on ? icon.pause : icon.play, 'width:30px;', () => togglePlay()));   // record on the outside, so it can't be mistaken for a step's dot
-      else { left.textContent = t.name; left.style.color = t.color; left.style.font = '600 11px/1 var(--font-ui, system-ui, sans-serif)'; }
+    const stepCells = (t, clickable) => {
       const cells = document.createElement('div');
       cells.style.cssText = 'flex:1; display:flex; height:30px; min-width:0; position:relative;';
       t.stepEls = t.steps.map((_, step) => {
-        const b = document.createElement('button'), big = step % sig().beat === 0;
-        b.type = 'button'; b.setAttribute('aria-label', `${t.name} step ${step + 1}`);
-        b.style.cssText = 'flex:1; min-width:0; height:30px; border:0; background:transparent; padding:0; position:relative; cursor:pointer;';
+        const b = document.createElement(clickable ? 'button' : 'div'), big = step % sig().beat === 0;
+        if (clickable) { b.type = 'button'; b.setAttribute('aria-label', `${t.name} step ${step + 1}`); }
+        b.style.cssText = `flex:1; min-width:0; height:30px; border:0; background:transparent; padding:0; position:relative; ${clickable ? 'cursor:pointer;' : ''}`;
         b.innerHTML = `<span class="t" style="position:absolute; left:50%; top:50%; width:${big ? 2 : 1}px; height:${big ? 22 : 12}px; margin:${big ? -11 : -6}px 0 0 -1px; background:${t.color}; opacity:.55;"></span><span class="d" style="position:absolute; left:50%; top:50%; width:11px; height:11px; margin:-5.5px 0 0 -5.5px; border-radius:50%; background:${t.color}; display:${t.steps[step].length ? 'block' : 'none'};"></span>`;
-        b.addEventListener('click', () => { t.steps[step] = []; paintStep(t, step); });
+        if (clickable) b.addEventListener('click', () => { t.steps[step] = []; paintStep(t, step); });
         return b;
       });
-      cells.replaceChildren(...t.stepEls, ...t.clips.map(c => clipElement(t, c)));
-      const right = document.createElement('div');
-      right.style.cssText = 'flex:none; display:flex; align-items:center; gap:2px;';
-      if (index === 0) right.append(button('Clear', 'Clear', 'padding:0 5px;', () => clearCurrent()));
-      right.append(button(t.muted ? `Unmute ${t.name}` : `Mute ${t.name}`, icon.sound(t.muted), `width:26px; color:${t.color};`, () => { t.muted = !t.muted; renderRows(); }));
-      row.append(left, cells, right);
+      cells.replaceChildren(...t.stepEls, ...(t.clips || []).map(c => clipElement(t, c)));
+      return cells;
+    };
+    const rowBase = `display:flex; align-items:center; gap:6px; height:${ROW_H}px; padding-right:40px; overflow:hidden;`;
+    const leftBase = 'width:66px; flex:none; display:flex; align-items:center; gap:2px; height:30px;', rightBase = 'width:52px; flex:none; display:flex; align-items:center; justify-content:flex-end; gap:0;';
+    // The top row is just the controls and the beat, on the line under the title.
+    ruler.steps = Array.from({ length: sig().steps }, () => []);
+    const top = document.createElement('div');
+    top.style.cssText = rowBase;
+    const topLeft = document.createElement('div'), topRight = document.createElement('div');
+    topLeft.style.cssText = leftBase; topRight.style.cssText = rightBase;
+    topLeft.append(button('Record', icon.rec(recording), 'width:30px;', () => toggleRecord()), button(loop.on ? 'Pause' : 'Play', loop.on ? icon.pause : icon.play, 'width:30px;', () => togglePlay()));
+    topRight.append(button('Clear', 'Clear', 'padding:0 2px;', () => clearCurrent()));
+    top.append(topLeft, stepCells(ruler, false), topRight);
+    // Then one labeled line per instrument. Tap the name to go to that instrument.
+    const rows = tracks.map(t => {
+      const row = document.createElement('div');
+      row.style.cssText = `${rowBase} opacity:${t.muted ? 0.4 : 1}; transition:height .28s ease;`;
+      const left = document.createElement('div'), right = document.createElement('div');
+      left.style.cssText = leftBase; right.style.cssText = rightBase;
+      left.append(button(`Go to ${t.name}`, t.name, `width:66px; justify-content:flex-start; color:${t.color}; font:600 11px/1 var(--font-ui, system-ui, sans-serif);`, () => jumpTo(t.name)));
+      right.append(button(t.muted ? `Unmute ${t.name}` : `Mute ${t.name}`, icon.sound(t.muted), `width:26px; color:${t.color};`, () => { t.muted = !t.muted; renderRows(); }),
+                   button(`Remove ${t.name}`, '×', `width:26px; color:${t.color}; font:600 17px/1 var(--font-ui, system-ui, sans-serif);`, () => removeTrack(t)));
+      row.append(left, stepCells(t, true), right);
       if (t.name === lastRowAdded) { row.style.height = '0px'; requestAnimationFrame(() => requestAnimationFrame(() => { row.style.height = `${ROW_H}px`; })); }   // a new line slides open
       return row;
     });
     lastRowAdded = null;
-    seq.replaceChildren(...rows);
+    seq.replaceChildren(top, ...rows);
     if (playheadAt >= 0) setPlayhead(playheadAt);
   }
+  function removeTrack(t) {                               // takes the whole line away; it comes back when you record on that instrument again
+    if (activeClip && activeClip.track === t) activeClip = null;
+    tracks.splice(tracks.indexOf(t), 1);
+    renderRows();
+  }
+  function jumpTo(name) { state.instrument = INSTRUMENTS.findIndex(x => x.name === name); changed(name); }
   const paintStep = (t, step) => { if (t.stepEls[step]) t.stepEls[step].querySelector('.d').style.display = t.steps[step].length ? 'block' : 'none'; };
   function setPlayhead(step) {
-    tracks.forEach(t => {
+    [ruler, ...tracks].forEach(t => {
       if (playheadAt >= 0 && t.stepEls[playheadAt]) { const m = t.stepEls[playheadAt].querySelector('.t'); m.style.opacity = '.55'; m.style.background = t.color; m.style.transform = ''; }
       if (step >= 0 && t.stepEls[step]) { const m = t.stepEls[step].querySelector('.t'); m.style.opacity = '1'; m.style.background = 'var(--ink, #1a1f1c)'; m.style.transform = 'scaleX(2) scaleY(1.3)'; }
     });
     playheadAt = step;
   }
   function togglePlay() { window.unlockEggAudio(); if (loop.on) stopLoop(); else startLoop(); }
-  function toggleRecord() { window.unlockEggAudio(); if (recording) endClip(); recording = !recording; if (recording && !loop.on) { if (!startLoop()) recording = false; } else renderRows(); }
+  function toggleRecord() { window.unlockEggAudio(); if (recording) endClip(); recording = !recording; if (recording && canTrack() && !trackFor(inst().name)) makeTrack(inst().name); if (recording && !loop.on) { if (!startLoop()) recording = false; } else renderRows(); }
   function clearCurrent() {                                // Clear empties the current instrument's line
     const t = trackFor(inst().name) || tracks[0];
     if (t) { t.steps = Array.from({ length: sig().steps }, () => []); t.clips = []; renderRows(); say(`Cleared ${t.name}`); }
   }
-  function syncSequencer() { if (sequencerOpen && canTrack()) makeTrack(inst().name); else renderRows(); }
+  function syncSequencer() {                              // a line appears when you arrive on an instrument with the sequencer open, not on every small change
+    if (!sequencerOpen) lastSynced = null;
+    if (sequencerOpen && canTrack() && inst().name !== lastSynced) { lastSynced = inst().name; makeTrack(inst().name); } else renderRows();
+    if (sequencerOpen && !canTrack()) lastSynced = inst().name;
+  }
   window.toggleLoop = () => {                              // n opens and closes the sequencer; closing it pauses, and the lines are kept
     window.unlockEggAudio(); sequencerOpen = !sequencerOpen;
     if (!sequencerOpen) stopLoop();
