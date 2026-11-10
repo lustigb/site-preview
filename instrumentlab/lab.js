@@ -379,13 +379,14 @@
   }
   function makeTrack(name) {
     if (trackFor(name)) { renderRows(); return; }
-    tracks.push({ name, color: TRACK_COLORS[name], steps: Array.from({ length: sig().steps }, () => []), clips: [], muted: false, stepEls: [] });
+    const dark = parseInt(getComputedStyle(document.body).color.match(/\d+/)[0], 10) > 128;   // on a dark page the lines need lighter colors
+    tracks.push({ name, color: (dark ? { Drums: '#9aa6ff', Piano: '#fb923c', Strings: '#4ade80', Winds: '#a78bfa', Theremin: '#f472b6' } : TRACK_COLORS)[name], steps: Array.from({ length: sig().steps }, () => []), clips: [], muted: false, stepEls: [] });
     lastRowAdded = name; renderRows();
   }
   function clearAllTracks() { endClip(); tracks.forEach(t => { t.steps = Array.from({ length: sig().steps }, () => []); t.clips = []; }); renderRows(); }
   const seq = document.createElement('div');
   document.querySelector('.doors').prepend(seq);          // on the line under the title; each new track pushes the page down a little
-  const ROW_H = 30, seqBtn = 'border:0; background:var(--bg, #f3f5f0); padding:0; cursor:pointer; color:#1a1f1c; font:600 12px/1 var(--font-ui, system-ui, sans-serif); display:flex; align-items:center; justify-content:center; height:30px; flex:none;';
+  const ROW_H = 30, seqBtn = 'border:0; background:var(--bg, #f3f5f0); padding:0; cursor:pointer; color:var(--ink, #1a1f1c); font:600 12px/1 var(--font-ui, system-ui, sans-serif); display:flex; align-items:center; justify-content:center; height:30px; flex:none;';
   const icon = {
     play: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M4 2l10 6-10 6z"/></svg>',
     pause: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><rect x="3" y="2" width="3.6" height="12"/><rect x="9.4" y="2" width="3.6" height="12"/></svg>',
@@ -431,7 +432,7 @@
   function setPlayhead(step) {
     tracks.forEach(t => {
       if (playheadAt >= 0 && t.stepEls[playheadAt]) { const m = t.stepEls[playheadAt].querySelector('.t'); m.style.opacity = '.55'; m.style.background = t.color; m.style.transform = ''; }
-      if (step >= 0 && t.stepEls[step]) { const m = t.stepEls[step].querySelector('.t'); m.style.opacity = '1'; m.style.background = '#1a1f1c'; m.style.transform = 'scaleX(2) scaleY(1.3)'; }
+      if (step >= 0 && t.stepEls[step]) { const m = t.stepEls[step].querySelector('.t'); m.style.opacity = '1'; m.style.background = 'var(--ink, #1a1f1c)'; m.style.transform = 'scaleX(2) scaleY(1.3)'; }
     });
     playheadAt = step;
   }
@@ -592,7 +593,7 @@
     $('controls').replaceChildren(...nodes);
   }
   const keyLabel = document.createElement('div');         // which key the keyboard is in: the image's bottom left corner, as on the home page
-  keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:var(--ink, #1a1f1c); background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
+  keyLabel.style.cssText = 'position:absolute; left:7px; bottom:6px; z-index:3; pointer-events:none; font:500 11px/1 var(--font-ui, system-ui, sans-serif); color:#1a1f1c; background:#fff; padding:2px 4px; border-radius:3px;';   // white behind it, so a divider can't cut through the text
   document.getElementById('home-photo').parentElement.appendChild(keyLabel);
   function draw() {
     stopTheremin(); stopBlow(); keysDown.length = 0;

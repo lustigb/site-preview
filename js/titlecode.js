@@ -230,7 +230,7 @@
     const m = window.letterMenu?.(kind);
     if (!m || !m.items.length) return;
     const box = document.createElement("div"), r = el.getBoundingClientRect(), h = m.items.length * ITEM_H + 8;
-    box.style.cssText = `position:fixed; z-index:60; width:168px; box-sizing:border-box; padding:4px; background:#fff; border:1px solid var(--line,#cfd6cb); border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.2); left:${Math.max(8, Math.min(innerWidth - 176, r.left + r.width / 2 - 84))}px; top:${Math.max(8, r.top - h - 10)}px;`;
+    box.style.cssText = `position:fixed; z-index:60; width:168px; box-sizing:border-box; padding:4px; background:var(--bg,#fff); border:1px solid var(--line,#cfd6cb); border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.2); left:${Math.max(8, Math.min(innerWidth - 176, r.left + r.width / 2 - 84))}px; top:${Math.max(8, r.top - h - 10)}px;`;
     m.items.forEach((name, i) => {
       const b = document.createElement("button");
       b.type = "button"; b.textContent = name;
