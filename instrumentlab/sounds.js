@@ -66,7 +66,7 @@ window.LAB_INSTRUMENTS = [
       { id: 'chords', type: 'check', label: 'Chord strip', only: v => v.canChord },
       { id: 'hover', type: 'check', label: 'Strum by moving the mouse' }, ECHO,
   ], sounds: [                                            // count: strings, in order low to high from the left; ring: how long they visibly shake; tunings: pressed through with C
-      { name: 'Guitar', chords: true, count: 6, ring: 1.1, decay: 0.996, soft: 1, dur: 2.2, tunings: [
+      { name: 'Guitar', chords: true, count: 6, ring: 0.75, decay: 0.994, soft: 1, dur: 1.5, tunings: [
         { name: 'Standard', notes: [82.41, 110, 146.83, 196, 246.94, 329.63] }, { name: 'Drop D', notes: [73.42, 110, 146.83, 196, 246.94, 329.63] },
         { name: 'Open G', notes: [73.42, 98, 146.83, 196, 246.94, 293.66] }, { name: 'DADGAD', notes: [73.42, 110, 146.83, 196, 220, 293.66] },
       ] },

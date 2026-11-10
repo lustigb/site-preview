@@ -61,7 +61,9 @@
     tag.textContent = `🥚 Secret egg ${n} of ${total}`;
     tag.style.opacity = 1;
   }
-  const hideTag = () => { tag.style.opacity = 0; };
+  let tagKept = false;                                     // once you've changed something, the pill stays up and names the sound that's on
+  const placeTag = () => { if (tagKept && title) tag.style.top = (title.offsetTop + title.offsetHeight + 8 - (sequencerOpen ? Math.max(0, title.getBoundingClientRect().bottom + 8 + tag.offsetHeight + 1 - (seq.getBoundingClientRect().top + ROW_H / 2 - 11)) : 0)) + 'px'; };   // lifted just clear of the sequencer's top row when it's open
+  const hideTag = () => { if (tagKept) { placeTag(); tag.textContent = sound().name; tag.style.opacity = 1; } else tag.style.opacity = 0; };
 
   let eggAudio = null, eggMaster = null;                   // AudioContext, unlocked by a tap on a code letter, and the gain all egg sound goes through
   const MUTE_KEY = 'bs-eggs-muted';
@@ -137,7 +139,7 @@
       { name: 'Warm organ', hit: voice('organ'), hold: true },
     ] },
     { name: 'Strings', mode: 'strings', sounds: [          // count: strings, low to high from the left; tunings: stepped through with the second c
-      { name: 'Guitar', chords: true, count: 6, ring: 1.1, decay: 0.996, soft: 1, dur: 2.2, tunings: [
+      { name: 'Guitar', chords: true, count: 6, ring: 0.75, decay: 0.994, soft: 1, dur: 1.5, tunings: [
         { name: 'Standard', notes: [82.41, 110, 146.83, 196, 246.94, 329.63] }, { name: 'Drop D', notes: [73.42, 110, 146.83, 196, 246.94, 329.63] },
         { name: 'Open G', notes: [73.42, 98, 146.83, 196, 246.94, 293.66] }, { name: 'DADGAD', notes: [73.42, 110, 146.83, 196, 220, 293.66] },
       ] },
@@ -225,7 +227,7 @@
   }
   function applyMode() {                                   // tell the shanks how to be played; a keyboard also needs its black keys and dots for the current key
     const p = inst().keys ? realPiano() : null, guides = inst().mode === 'pad' && padKey() ? noteGuides(padKey(), 3) : null;
-    const strings = inst().mode === 'strings' ? { count: sound().count, ring: sound().ring, hoverStrum: true, chords: chordsOn() ? chordSet().chords.map(c => c.name) : null, chordsOutside: true, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {};
+    const strings = inst().mode === 'strings' ? { count: sound().count, ring: sound().ring, ringStop: sound().dur * 0.85, hoverStrum: true, chords: chordsOn() ? chordSet().chords.map(c => c.name) : null, chordsOutside: true, chordOn: chordPick() ?? -1, chordKeys: matchMedia('(hover: hover)').matches ? 'QWERASDF' : null } : {};
     window.shankWind?.setMode(inst().mode, p ? { ...inst().options, blackAt: p.blackAt, dots: p.dots } : { ...inst().options, guides, ...strings,
       ...(isBlow() ? { meterOutside: true, style: sound().style, thick: sound().thick || 110, valves: !!sound().valves, blowKeys: hoverDevice ? 'ASDFGHJK' : null, blowNotes: Array.from({ length: 8 }, (_, i) => noteName(keyHz(i + 1))) } : {}),
       ...(isDrums() ? { padNames: ['Kick', 'Snare', 'Hat', 'Open hat', 'Clap', 'Tom', 'Low tom', 'Crash'], padKeys: hoverDevice ? 'QWERASDF' : null } : {}) });
@@ -264,7 +266,7 @@
   ['pointerup', 'pointercancel'].forEach(type => breathBox.addEventListener(type, ev => { if (ev.pointerId === baseDrag) baseDrag = null; }));
   // Strings: the chord buttons sit in a column off the image's left edge, so the strings get the whole picture.
   const chordCol = document.createElement('div');
-  chordCol.style.cssText = 'position:absolute; right:100%; margin-right:6px; top:0; bottom:0; width:58px; display:none; flex-direction:column; gap:3px; z-index:3;';
+  chordCol.style.cssText = 'position:absolute; right:100%; margin-right:20px; top:0; bottom:0; width:min(58px, calc(50vw - 50% - 24px)); display:none; flex-direction:column; gap:3px; z-index:3;';
   box.appendChild(chordCol);
   const inkColor = 'var(--ink, #1a1f1c)';
   function paintChordColumn() {
@@ -305,7 +307,8 @@
   };
   window.shankRelease = function (k) { heldNotes.get(k)?.release(); heldNotes.delete(k); };
   window.shankString = function (k, strength) { if (audioReady()) window.EggSfx.play(eggAudio, [shankHit(k, 0.12 + 0.58 * strength ** 1.3)], eggMaster); recordEvent(k); };
-  window.shankChord = function (i) {                       // tap a chord or press its key to select it, again to release it
+  window.shankChord = function (i) {
+    stopDemo();                       // tap a chord or press its key to select it, again to release it
     const next = chordPick() === i ? null : i;
     state.chord[sound().name] = next;
    
@@ -380,63 +383,46 @@
   };
   let nameTimer = null;
   function say(text) {                                     // the pill under the title, briefly
-    tag.style.top = title ? (title.offsetTop + title.offsetHeight + 8) + 'px' : 'calc(100% + 6px)';
+    tagKept = true;
+    placeTag();
     tag.textContent = text;
     tag.style.opacity = 1;
     clearTimeout(nameTimer);
     nameTimer = setTimeout(() => { if (!busy) hideTag(); }, 1400);
   }
   // The little demo after a change: once the shanks have finished moving, a few notes are played on the new layout, and you see them played.
-  let demoRun = 0, demoNotes = [];
-  function demo(quick = false) {                           // quick: changing sound or key, so it's shorter and cut off sooner
-    if (!audioReady() || loop.on) return;
-    const run = ++demoRun, later = (ms, fn) => setTimeout(() => { if (run === demoRun) fn(); }, ms), wind = window.shankWind, g = quick ? 0.55 : 1;
-    demoNotes.forEach(n => n?.release?.()); demoNotes = [];   // a new demo cuts off the last one
-    const play = k => { const n = window.EggSfx.play(eggAudio, [shankHit(k, 0.7)], eggMaster); demoNotes.push(n); return n; };
-    wind?.whenFormed(() => {
-      if (run !== demoRun || !audioReady()) return;
-      if (quick) later(720, () => { demoNotes.forEach(n => n?.release?.()); demoNotes = []; });
-      if (isDrums() && quick === 'kit') {                  // a new kit: every drum in it, one at a time
-        [1, 2, 3, 4, 5, 6, 7, 8].forEach((i, n) => later(n * 230, () => { wind.showPad(i); window.EggSfx.play(eggAudio, [shankHit(i, 0.85)], eggMaster); }));
-      } else if (isDrums()) {                              // a little beat: kick, hat, snare, hat
-        [1, 3, 2, 3].forEach((i, n) => later(n * 170 * g, () => { wind.showPad(i); window.EggSfx.play(eggAudio, [shankHit(i, 0.85)], eggMaster); }));
-      } else if (isBlow()) {                               // a little tune, sliding from note to note
-        [1, 3, 5, 8].forEach((k, i) => later(i * 190 * g, () => { wind.showBlow(k); if (i) moveBlow(k, 0.7, true); else startBlow(k, 0.7); }));
-        later(4 * 190 * g, () => { stopBlow(); wind.showBlow(0); });
-      } else if (inst().mode === 'strings') {              // a strum, low to high
-        for (let i = 0; i < sound().count; i += 1) later(i * 60 * g, () => { wind.vibrate(i, 0.6); play(i + 1); });
-      } else if (inst().mode === 'pad') {                  // the target glides up the pitch
-        wind.showTarget(0.2, 0.3, true); startTheremin(0.2, 0.3);
-        [0.3, 0.45, 0.6, 0.75].forEach((x, i) => later(90 * g * (i + 1), () => { wind.showTarget(x, 0.3, true); moveTheremin(x, 0.3); }));
-        later(520 * g, () => { stopTheremin(); wind.showTarget(0.75, 0.3, false); });
-      } else if (inst().mode === 'keys') {                 // keys go down as they play
-        [1, 3, 5, 8].forEach((k, i) => later(i * 150 * g, () => {
-          wind.showPress(k, 130 * g);
-          const note = play(k);
-          if (sound().hold) later(170 * g, () => note.release());
-        }));
-      } else {                                             // the shanks give a little nudge
-        [1, 3, 5, 8].forEach((k, i) => later(i * 90 * g, () => { wind.showBump(k, i % 2 ? -1 : 1); play(k); }));
-      }
-    });
+  let demoRun = 0, demoNotes = [], demoHeld = null;
+  function stopDemo() { demoRun += 1; demoNotes.forEach(n => n?.release?.()); demoNotes = []; if (demoHeld) { demoHeld(); demoHeld = null; } }   // only the E letter plays a demo; anything else just cuts off one in progress
+  function demoTools(later) {
+    return { later, wind: window.shankWind, count: sound().count, sustained: !!sound().hold, scale: musicalKey(), range: 3, keyHz, startBlow, moveBlow, stopBlow, startTheremin, moveTheremin, stopTheremin, hold: fn => { demoHeld = fn; },
+      tone: (hz, v, k = 1, pitch) => { const n = window.EggSfx.play(eggAudio, [{ ms: 0, ...sound().hit(k, v, hz), ...(pitch ? { pitch } : {}) }], eggMaster); demoNotes.push(n); return n; },
+      chordHz: (i, k) => { const name = sound().name, was = state.chord[name]; state.chord[name] = i; const hz = keyHz(k); state.chord[name] = was; return hz; } };
   }
-  function changed(text, quick) { stopTheremin(); stopBlow(); keysDown.length = 0; syncSequencer(); applyMode(); refreshInstrument(); say(text); demo(quick); }
+  function demo() {                                        // changing sound with the E letter plays a little tune (see demosongs.js)
+    if (!audioReady() || loop.on) return;
+    stopDemo();
+    const run = demoRun, later = (ms, fn) => setTimeout(() => { if (run === demoRun) fn(); }, ms);
+    window.shankWind?.whenFormed(() => { if (run === demoRun && audioReady()) window.DemoSongs?.play(sound().name, inst().mode, demoTools(later)); });
+  }
+  box.addEventListener('pointerdown', stopDemo, true);   // playing it yourself stops the tune
+  addEventListener('keydown', ev => { if (!ev.repeat && !ev.metaKey && !ev.ctrlKey && 'qwerasdfghjk'.includes(ev.key.toLowerCase())) stopDemo(); }, true);
+  function changed(text, song) { stopTheremin(); stopBlow(); keysDown.length = 0; syncSequencer(); applyMode(); refreshInstrument(); say(text); if (song) demo(); else stopDemo(); }
   window.letterMenu = kind => {                            // the lists behind the s, e and c letters
     if (kind === 'instrument') return { items: INSTRUMENTS.map(x => x.name), current: state.instrument, pick: i => { state.instrument = i; changed(inst().name); } };
-    if (kind === 'sound') return { items: inst().sounds.map(x => x.name), current: inst().sounds.indexOf(sound()), pick: i => { state.sound[inst().name] = i; changed(sound().name, 'kit'); } };
-    if (isDrums()) return { items: SIGS.map(x => x.name), current: state.sig % SIGS.length, pick: i => { const was = loop.on; stopLoop(); state.sig = i; clearAllTracks(); if (was) startLoop(); changed(sig().name, true); } };
-    if (isBlow()) return { items: MUSICAL_KEYS.map(x => x.name), current: MUSICAL_KEYS.indexOf(windKey()), pick: i => { state.windKey[sound().name] = MUSICAL_KEYS[i].name; changed(windKey().name, true); } };
-    if (chordsOn()) return { items: CHORD_SETS.map(x => x.name), current: state.chordSet % CHORD_SETS.length, pick: i => { state.chordSet = i; state.chord[sound().name] = 0; changed(chordSet().name, true); } };
-    if (inst().mode === 'strings') return { items: sound().tunings.map(x => x.name), current: sound().tunings.indexOf(tuning()), pick: i => { state.tuning[sound().name] = i; changed(tuning().name, true); } };
-    if (inst().mode === 'pad') return { items: ['Free slide', ...MUSICAL_KEYS.map(x => x.name)], current: state.padKey + 1, pick: i => { state.padKey = i - 1; changed(padKey()?.name || 'Free slide', true); } };
-    return { items: MUSICAL_KEYS.map(x => x.name), current: state.key % MUSICAL_KEYS.length, pick: i => { state.key = i; changed(musicalKey().name, true); } };
+    if (kind === 'sound') return { items: inst().sounds.map(x => x.name), current: inst().sounds.indexOf(sound()), pick: i => { state.sound[inst().name] = i; changed(sound().name, true); } };
+    if (isDrums()) return { items: SIGS.map(x => x.name), current: state.sig % SIGS.length, pick: i => { const was = loop.on; stopLoop(); state.sig = i; clearAllTracks(); if (was) startLoop(); changed(sig().name); } };
+    if (isBlow()) return { items: MUSICAL_KEYS.map(x => x.name), current: MUSICAL_KEYS.indexOf(windKey()), pick: i => { state.windKey[sound().name] = MUSICAL_KEYS[i].name; changed(windKey().name); } };
+    if (chordsOn()) return { items: CHORD_SETS.map(x => x.name), current: state.chordSet % CHORD_SETS.length, pick: i => { state.chordSet = i; state.chord[sound().name] = 0; changed(chordSet().name); } };
+    if (inst().mode === 'strings') return { items: sound().tunings.map(x => x.name), current: sound().tunings.indexOf(tuning()), pick: i => { state.tuning[sound().name] = i; changed(tuning().name); } };
+    if (inst().mode === 'pad') return { items: ['Free slide', ...MUSICAL_KEYS.map(x => x.name)], current: state.padKey + 1, pick: i => { state.padKey = i - 1; changed(padKey()?.name || 'Free slide'); } };
+    return { items: MUSICAL_KEYS.map(x => x.name), current: state.key % MUSICAL_KEYS.length, pick: i => { state.key = i; changed(musicalKey().name); } };
   };
   window.nextInstrument = () => { state.instrument = (state.instrument + 1) % INSTRUMENTS.length; changed(inst().name); };
-  window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name, 'kit'); };
+  window.nextSound = () => { state.sound[inst().name] = ((state.sound[inst().name] || 0) + 1) % inst().sounds.length; changed(sound().name, true); };
   window.nextMusicalKey = () => {
-    if (isDrums()) { const was = loop.on; stopLoop(); state.sig = (state.sig + 1) % SIGS.length; clearAllTracks(); if (was) startLoop(); changed(sig().name, true); return; }
-    if (isBlow()) { const i = MUSICAL_KEYS.indexOf(windKey()); state.windKey[sound().name] = MUSICAL_KEYS[(i + 1) % MUSICAL_KEYS.length].name; changed(windKey().name, true); return; }
-    if (chordsOn()) { state.chordSet = (state.chordSet + 1) % CHORD_SETS.length; state.chord[sound().name] = 0; changed(chordSet().name, true); return; } if (inst().mode === 'strings') { state.tuning[sound().name] = ((state.tuning[sound().name] || 0) + 1) % sound().tunings.length; changed(tuning().name, true); return; } if (inst().mode === 'pad') { state.padKey = state.padKey + 1 >= MUSICAL_KEYS.length ? -1 : state.padKey + 1; changed(padKey()?.name || 'Free slide', true); return; } if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name, true); } };
+    if (isDrums()) { const was = loop.on; stopLoop(); state.sig = (state.sig + 1) % SIGS.length; clearAllTracks(); if (was) startLoop(); changed(sig().name); return; }
+    if (isBlow()) { const i = MUSICAL_KEYS.indexOf(windKey()); state.windKey[sound().name] = MUSICAL_KEYS[(i + 1) % MUSICAL_KEYS.length].name; changed(windKey().name); return; }
+    if (chordsOn()) { state.chordSet = (state.chordSet + 1) % CHORD_SETS.length; state.chord[sound().name] = 0; changed(chordSet().name); return; } if (inst().mode === 'strings') { state.tuning[sound().name] = ((state.tuning[sound().name] || 0) + 1) % sound().tunings.length; changed(tuning().name); return; } if (inst().mode === 'pad') { state.padKey = state.padKey + 1 >= MUSICAL_KEYS.length ? -1 : state.padKey + 1; changed(padKey()?.name || 'Free slide'); return; } if (inst().keys) { state.key = (state.key + 1) % MUSICAL_KEYS.length; changed(musicalKey().name); } };
   // Winds: one breath at a time. A held voice whose note glides when you slide, with a little air and a tone that opens up as you blow harder.
   let blowVoice = null;
   const blowHz = k => keyHz(k) * 2 ** (sound().octave || 0);
@@ -555,6 +541,7 @@
     }
   }
   function startLoop() {
+    stopDemo();
     if (!audioReady()) return false;
     Object.assign(loop, { on: true, nextAbs: 0, nextTime: eggAudio.currentTime + 0.1 });
     loop.timer = setInterval(schedule, 25);
@@ -659,6 +646,7 @@
     seq.style.display = sequencerOpen ? 'block' : 'none';
     seq.style.marginTop = `${-(parseFloat(getComputedStyle(seq.parentElement).paddingTop) + ROW_H / 2)}px`;
     seq.style.marginBottom = '10px';
+    placeTag();
     const stepCells = (t, clickable) => {
       const cells = document.createElement('div');
       cells.style.cssText = 'flex:1; display:flex; height:30px; min-width:0; position:relative;';

@@ -27,6 +27,7 @@
     { a: 0.0711, b: 535.9, tip: 891 }, { a: 0.0711, b: 615.8, tip: 879 },
   ];
   const SOLO_TOP = 60;                                      // solo images start 60 px above the photo
+  const STIFF_ANCHOR = 300, STIFF_POWER = 1.8;              // the Fidget shanks: how gradually they go from stiff at the top to whippy at the tip
   const ANCHOR = 700;                                       // the bend is anchored this far above the photo
   const OMEGA = 2 * Math.PI / 0.33, COUPLE = 0.25 * OMEGA ** 2, ZETA = 0.12;
   const onShank = (k, y) => SHANKS[k - 1].a * y + SHANKS[k - 1].b;
@@ -65,14 +66,14 @@
   const osc = SHANKS.map(() => ({ a: 0, v: 0, d: 0, dv: 0, down: false }));   // a, v: sideways swing; d, dv: how far it is pressed down, as a key
   let on = false, last = 0, still = 0, prev = null, trail = [], paused = false, mode = 'wind';
   const held = new Map();                                   // pointer id -> the shank it is pressing (several fingers at once are fine)
-  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null, count: 6, ring: 1.1, hoverStrum: true, guides: null, chords: null, chordOn: -1, chordKeys: null, style: 'tube', thick: 110, valves: false, blowKeys: null, blowNotes: null, padNames: null, padKeys: null, chordsOutside: false, meterOutside: false };
+  const DEFAULTS = { collide: false, gust: 1, tight: false, touchGap: 20, dip: 18, stiff: false, blackAt: [1, 2, 4, 5, 6], dots: null, count: 6, ring: 1.1, ringStop: 2, hoverStrum: true, guides: null, chords: null, chordOn: -1, chordKeys: null, style: 'tube', thick: 110, valves: false, blowKeys: null, blowNotes: null, padNames: null, padKeys: null, chordsOutside: false, meterOutside: false };
   let opts = { ...DEFAULTS };                               // see setMode
   const TIP_X = SHANKS.map((sh, i) => onShank(i + 1, sh.tip)), BOUNCE = 0.45;
   const touched = SHANKS.map(() => 0);
   const KEY_K = 900, KEY_C = 33;                            // the spring that moves a pressed key
 
   // How a shank bends: quadratic from its anchor far above the photo down to the tip.
-  const bend = (k, y) => { const A = opts.stiff ? SOLO_TOP : ANCHOR; return ((y + A) / (SHANKS[k - 1].tip + A)) ** 2; };   // stiff: clamped just above the photo, so the top barely moves
+  const bend = (k, y) => { const A = opts.stiff ? STIFF_ANCHOR : ANCHOR, power = opts.stiff ? STIFF_POWER : 2; return ((y + A) / (SHANKS[k - 1].tip + A)) ** power; };   // stiff: anchored closer in, so the shank softens gradually from a top that still moves a little
 
   let gridU = 0, layout = null, desired = null, fromLayout = null;   // gridU: 0 = where they started (their real places, or fromLayout), 1 = fully in the layout; layout: 'pad', 'piano', 'strings6', ... or null
   const BLACK_SRC = [1, 2, 4, 5, 6], BLACK_TOP = 46, BLACK_LEN = 540;   // the shanks whose pixels make the black keys; opts.blackAt says which dividers they sit on (they slide when it changes)
@@ -81,13 +82,14 @@
   const pad = { x: 375, y: 500, alpha: 0, down: false, id: null, demo: false };
   let quietUntil = 0;                                       // a demo nudging the shanks shouldn't set off extra sounds
   const GRID_S = 0.85, ease = u => u * u * (3 - 2 * u);
-  const strings = SHANKS.map(() => ({ pull: 0, grab: 0.5, held: false, amp: 0, phase: 0 }));   // pull: held out by a finger; amp: how hard it is ringing
+  const strings = SHANKS.map(() => ({ pull: 0, grab: 0.5, held: false, amp: 0, phase: 0, left: 0, life: 1 }));   // pull: held out by a finger; amp: how hard it is ringing; left, life: seconds until it must be still, so it stops with its sound
   const CHORD_H = 232, NUT_PLAIN = 44, stripOnImage = () => opts.chords && !opts.chordsOutside, nutY = () => (stripOnImage() ? CHORD_H + 22 : NUT_PLAIN), BRIDGE_Y = 956, stringCount = () => parseInt(layout.slice(7), 10);
   const stringX = (i, n) => 750 * (i + 0.5) / n;
+  const ringFor = (st, seconds) => { st.left = st.life = seconds; };
   function stringShape(k, u) {                              // how far string k is off its line at height u (0 = nut, 1 = bridge)
     const st = strings[k - 1];
     const held = st.held ? st.pull * (u < st.grab ? u / st.grab : (1 - u) / (1 - st.grab)) : 0;
-    return held + st.amp * Math.sin(Math.PI * u) * Math.sin(st.phase);
+    return held + st.amp * Math.min(1, st.left / (0.35 * st.life)) * Math.sin(Math.PI * u) * Math.sin(st.phase);
   }
   function gridPoint(k, y, lay = layout) {                  // where a point on this shank sits in that layout (photo px)
     if (lay === 'pads') {                                   // three dividers up, one across, and the four edges of the frame: eight pads
@@ -306,7 +308,7 @@
     gridU = Math.max(0, Math.min(1, gridU + (desired && desired === layout ? dt : -dt) / GRID_S));
     if (gridU === 1) fromLayout = null;
     if (gridU === 0 && !desired) { layout = null; fromLayout = null; }
-    strings.forEach((st, i) => { st.phase += dt * 2 * Math.PI * (11 + i * 1.5); st.amp *= Math.exp(-dt / opts.ring); if (st.amp < 0.15) st.amp = 0; });
+    strings.forEach((st, i) => { st.phase += dt * 2 * Math.PI * (11 + i * 1.5); st.amp *= Math.exp(-dt / opts.ring); st.left -= dt; if (st.amp < 0.15 || st.left <= 0) { st.amp = 0; st.left = 0; } });
     if (layout === 'piano') {                               // a pressed white key takes a faint shade of the shanks' own blue
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       osc.forEach((o, i) => { if (o.d > 0.5) { ctx.fillStyle = `rgba(22, 12, 118, ${0.16 * Math.min(1, o.d / opts.dip)})`; ctx.fillRect(i * 93.75, 0, 93.75, 1000); } });
@@ -371,7 +373,7 @@
     setChord(i) { opts.chordOn = i; },
     showPad(i) { hitPad(i); },
     showBlow(k, breath = 0.7) { blow.zone = k; blow.breath = breath; start(); },
-    vibrate(i, strength) { if (layout && layout.startsWith('strings') && strings[i]) { strings[i].amp = Math.max(strings[i].amp, 4 + 26 * strength); start(); } },
+    vibrate(i, strength) { if (layout && layout.startsWith('strings') && strings[i]) { strings[i].amp = Math.max(strings[i].amp, 4 + 26 * strength); ringFor(strings[i], opts.ringStop); start(); } },
     peek() { return osc.map(o => o.a); },                   // for test tools
     // options: collide = neighbouring tips hit each other and call window.shankTouch(k, speed); gust = how hard the mouse pushes; tight = ring once per push; touchGap = how close tips count as touching (photo px); dip = how far a key goes down (photo px); stiff = stiff at the top and whippy at the tip.
     setMode(m, options = {}) {
@@ -408,6 +410,7 @@
     const st = strings[i];
     const muted = opts.chords && opts.chordOn < 0;          // no chord held: a muted string barely moves
     st.held = false; st.pull = 0; st.amp = Math.max(st.amp, (4 + 26 * strength) * (muted ? 0.2 : 1)); st.phase = 0;
+    ringFor(st, muted ? 0.15 : opts.ringStop);
     window.shankString?.(i + 1, strength);
   }
   function stringsReady() { return layout && layout.startsWith('strings') && gridU > 0.9; }
@@ -534,8 +537,7 @@
         trail.push({ x: p.x, y: p.y, t: now });
         osc.forEach((o, i) => {
           const near = Math.exp(-(((p.x - onShank(i + 1, p.y)) / 70) ** 2));
-          const u = Math.max(0, Math.min(1, p.y / SHANKS[i].tip));
-          const leverage = opts.stiff ? u * u * (3 - u) / 2 : Math.max(0, (p.y + ANCHOR) / (SHANKS[i].tip + ANCHOR));   // stiff: a clamped beam, so pushing near the top moves the tip very little
+          const leverage = opts.stiff ? bend(i + 1, Math.max(0, p.y)) : Math.max(0, (p.y + ANCHOR) / (SHANKS[i].tip + ANCHOR));   // stiff: pushing near the top moves the tip less, on the same gradual curve as the bend
           o.v += vx * 0.2 * near * leverage * opts.gust;
         });
       }
