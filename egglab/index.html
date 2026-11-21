@@ -154,6 +154,7 @@
 
 <script src="art/custom.js"></script>
 <script src="pixelroll.js"></script>
+<script src="sitcom.js"></script>
 <script src="eggsfx.js"></script>
 <script src="pelican.js"></script>
 <script>
@@ -1523,6 +1524,33 @@ EGGS.pixelRoll = {
     }
   },
   render(t) { PixelRoll.draw(this.ctx, t / 1000, document.getElementById('photo')); },
+  exit() {
+    if (this.cv) this.cv.remove();
+    this.cv = null;
+    restorePhoto();
+  },
+};
+
+// ---- sitcomSpiral (egg 27): 8-bit sitcom opening that piles up too many cast cards, sours, then snaps back ----
+// Drawing and music live in sitcom.js (same pattern as pixelRoll). Lab-only music for now; home-page hookup later.
+EGGS.sitcomSpiral = {
+  label: 'sitcomSpiral', note: 'the photo pixelates into a cheerful 8-bit sitcom opening that has far too many cast members, then sours',
+  mode: 'scene', duration: Math.round((SitcomSpiral.IN + SitcomSpiral.SHOW + SitcomSpiral.OUT) * 1000),
+  sfx() { return [{ ms: 200, kind: 'digital', dur: 0.6, v: 0.3, rise: false }, { ms: (SitcomSpiral.IN + SitcomSpiral.SHOW) * 1000 + 100, kind: 'digital', dur: 0.6, v: 0.3, rise: true }]; },
+  enter() {
+    const cv = this.cv = document.createElement('canvas');
+    cv.width = SitcomSpiral.W; cv.height = SitcomSpiral.H;
+    cv.className = 'layer';
+    cv.style.cssText = 'display:block; image-rendering:pixelated;';
+    document.getElementById('stage').appendChild(cv);
+    this.ctx = cv.getContext('2d');
+    if (!PLAYER) {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      audio.resume();
+      SitcomSpiral.playMusic(audio, audio.currentTime + SitcomSpiral.IN);
+    }
+  },
+  render(t) { SitcomSpiral.draw(this.ctx, t / 1000, document.getElementById('photo')); },
   exit() {
     if (this.cv) this.cv.remove();
     this.cv = null;
